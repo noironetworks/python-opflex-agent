@@ -23,22 +23,23 @@ from opflexagent import constants
 LOG = log.getLogger(__name__)
 
 flat_opts = [
-    cfg.StrOpt('default_apic_network',
+    cfg.StrOpt('default_opflex_network',
                default='physnet1',
-               help=_("Default apic network for tenants."))
+               help=_("Default opflex network for tenants."))
 ]
 
-cfg.CONF.register_opts(flat_opts, "ml2_type_apic")
+cfg.CONF.register_opts(flat_opts, "ml2_type_opflex")
 
 
-class ApicTypeDriver(api.TypeDriver):
+class OpflexTypeDriver(api.TypeDriver):
 
     def __init__(self):
-        LOG.info(_("ML2 ApicTypeDriver initialization complete"))
-        self.default_apic_network = cfg.CONF.ml2_type_apic.default_apic_network
+        LOG.info(_("ML2 OpflexTypeDriver initialization complete"))
+        self.default_opflex_network = (cfg.CONF.ml2_type_opflex.
+                                       default_opflex_network)
 
     def get_type(self):
-        return constants.TYPE_APIC
+        return constants.TYPE_OPFLEX
 
     def initialize(self):
         pass
@@ -55,7 +56,7 @@ class ApicTypeDriver(api.TypeDriver):
         for key, value in segment.iteritems():
             if value and key not in [api.NETWORK_TYPE,
                                      api.PHYSICAL_NETWORK]:
-                msg = _("%s prohibited for apic provider network") % key
+                msg = _("%s prohibited for opflex provider network") % key
                 raise exc.InvalidInput(error_message=msg)
 
     def reserve_provider_segment(self, session, segment):
@@ -63,8 +64,8 @@ class ApicTypeDriver(api.TypeDriver):
         return segment
 
     def allocate_tenant_segment(self, session):
-        result = {api.NETWORK_TYPE: constants.TYPE_APIC}
-        result[api.PHYSICAL_NETWORK] = self.default_apic_network
+        result = {api.NETWORK_TYPE: constants.TYPE_OPFLEX}
+        result[api.PHYSICAL_NETWORK] = self.default_opflex_network
         return result
 
     def release_segment(self, session, segment):

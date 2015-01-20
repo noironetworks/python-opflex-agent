@@ -17,7 +17,7 @@ from neutron.openstack.common import log as logging
 
 LOG = logging.getLogger(__name__)
 
-TOPIC_GBP = 'gbp'
+TOPIC_OPFLEX = 'opflex'
 
 
 class AgentNotifierApi(n_rpc.RpcProxy):

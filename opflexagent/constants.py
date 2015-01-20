@@ -13,5 +13,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-AGENT_TYPE_APIC_OVS = 'APIC Open vSwitch agent'
-TYPE_APIC = 'apic'
+AGENT_TYPE_OPFLEX_OVS = 'OpFlex Open vSwitch agent'
+TYPE_OPFLEX = 'opflex'

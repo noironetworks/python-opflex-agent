@@ -43,7 +43,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.agent = self._initialize_agent()
         self.agent.mapping_to_file = mock.Mock()
         self.agent.mapping_cleanup = mock.Mock()
-        self.agent.apic_networks = ['phys_net']
+        self.agent.opflex_networks = ['phys_net']
         self.addCleanup(self._purge_endpoint_dir)
 
     def _purge_endpoint_dir(self):
@@ -101,7 +101,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                    'l2_policy_id': 'l2p_id',
                    'tenant_id': 'tenant_id',
                    'host': 'host1',
-                   'ptg_apic_tentant': 'apic_tenant',
+                   'ptg_tentant': 'apic_tenant',
                    'endpoint_group_name': 'epg_name',
                    'promiscuous_mode': False}
         pattern.update(**kwargs)
@@ -126,7 +126,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
         mapping = self._get_gbp_details()
         self.agent.of_rpc.get_gbp_details.return_value = mapping
         self.agent.provision_local_vlan = mock.Mock()
-        args = self._port_bound_args('apic')
+        args = self._port_bound_args('opflex')
         args['port'].gbp_details = mapping
         self.agent.port_bound(**args)
         self.agent.int_br.clear_db_attribute.assert_called_with(
@@ -140,7 +140,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.agent.of_rpc.get_gbp_details = mock.Mock()
         self.agent.of_rpc.get_gbp_details.return_value = None
         self.agent.provision_local_vlan = mock.Mock()
-        args = self._port_bound_args('apic')
+        args = self._port_bound_args('opflex')
         args['port'].gbp_details = None
         self.agent.port_bound(**args)
         self.assertFalse(self.agent.int_br.set_db_attribute.called)

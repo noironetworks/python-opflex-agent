@@ -38,10 +38,10 @@ gbp_opts = [
                default='/var/lib/opflex-agent-ovs/endpoints/',
                help=_("Directory where the EPG port mappings will be "
                       "stored.")),
-    cfg.ListOpt('apic_networks',
+    cfg.ListOpt('opflex_networks',
                 default=['*'],
                 help=_("List of the physical networks managed by this agent. "
-                       "Use * for binding any apic network to this agent"))
+                       "Use * for binding any opflex network to this agent"))
 ]
 cfg.CONF.register_opts(gbp_opts, "OPFLEX")
 
@@ -62,14 +62,14 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.epg_mapping_file = (kwargs['epg_mapping_dir'] +
                                  ('/' if separator != '/' else '') +
                                  FILE_NAME_FORMAT)
-        self.apic_networks = kwargs['apic_networks']
-        if self.apic_networks and self.apic_networks[0] == '*':
-            self.apic_networks = None
+        self.opflex_networks = kwargs['opflex_networks']
+        if self.opflex_networks and self.opflex_networks[0] == '*':
+            self.opflex_networks = None
         del kwargs['hybrid_mode']
         del kwargs['epg_mapping_dir']
-        del kwargs['apic_networks']
+        del kwargs['opflex_networks']
         super(GBPOvsAgent, self).__init__(**kwargs)
-        self.supported_pt_network_types = [ofcst.TYPE_APIC]
+        self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
         self.setup_pt_directory()
 
     def setup_pt_directory(self):
@@ -86,12 +86,12 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     LOG.debug(e.message)
 
     def setup_rpc(self):
-        self.agent_state['agent_type'] = ofcst.AGENT_TYPE_APIC_OVS
-        self.agent_state['configurations']['apic_networks'] = (
-            self.apic_networks)
+        self.agent_state['agent_type'] = ofcst.AGENT_TYPE_OPFLEX_OVS
+        self.agent_state['configurations']['opflex_networks'] = (
+            self.opflex_networks)
         super(GBPOvsAgent, self).setup_rpc()
         # Set GBP rpc API
-        self.of_rpc = GBPOvsPluginApi(rpc.TOPIC_GBP)
+        self.of_rpc = GBPOvsPluginApi(rpc.TOPIC_OPFLEX)
 
     def setup_integration_br(self):
         """Override parent setup integration bridge.
@@ -156,8 +156,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     port, net_uuid, network_type, physical_network,
                     segmentation_id, fixed_ips, device_owner, ovs_restarted)
         elif network_type in self.supported_pt_network_types:
-            if ((self.apic_networks is None) or
-                    (physical_network in self.apic_networks)):
+            if ((self.opflex_networks is None) or
+                    (physical_network in self.opflex_networks)):
                 # Port has to be untagged due to a opflex agent requirement
                 self.int_br.clear_db_attribute("Port", port.port_name, "tag")
                 self.mapping_to_file(port, mapping, [x['ip_address'] for x in
@@ -165,7 +165,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             else:
                 # PT cleanup may be needed
                 self.mapping_cleanup(port.vif_id)
-                LOG.error(_("Cannot provision APIC network for "
+                LOG.error(_("Cannot provision OPFLEX network for "
                             "net-id=%(net_uuid)s - no bridge for "
                             "physical_network %(physical_network)s"),
                           {'net_uuid': net_uuid,
@@ -188,7 +188,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         Converts the port mapping into file.
         """
         mapping_dict = {
-            "policy-space-name": mapping['ptg_apic_tentant'],
+            "policy-space-name": mapping['ptg_tentant'],
             "endpoint-group-name": mapping['endpoint_group_name'],
             "interface-name": port.port_name,
             "ip": ips,
@@ -278,7 +278,7 @@ def create_agent_config_map(conf):
     agent_config = ovs.create_agent_config_map(conf)
     agent_config['hybrid_mode'] = conf.OPFLEX.hybrid_mode
     agent_config['epg_mapping_dir'] = conf.OPFLEX.epg_mapping_dir
-    agent_config['apic_networks'] = conf.OPFLEX.apic_networks
+    agent_config['opflex_networks'] = conf.OPFLEX.opflex_networks
     # DVR not supported
     agent_config['enable_distributed_routing'] = False
     # ARP responder not supported
