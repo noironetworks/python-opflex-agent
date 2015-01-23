@@ -189,7 +189,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         """
         mapping_dict = {
             "policy-space-name": mapping['ptg_tentant'],
-            "endpoint-group-name": mapping['endpoint_group_name'],
+            "endpoint-group-name": (mapping['app_profile_name'] + "|" +
+                                    mapping['endpoint_group_name']),
             "interface-name": port.port_name,
             "ip": ips,
             "mac": port.vif_mac,
