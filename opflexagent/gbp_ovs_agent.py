@@ -89,6 +89,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.agent_state['agent_type'] = ofcst.AGENT_TYPE_OPFLEX_OVS
         self.agent_state['configurations']['opflex_networks'] = (
             self.opflex_networks)
+        self.agent_state['binary'] = 'opflex-ovs-agent'
         super(GBPOvsAgent, self).setup_rpc()
         # Set GBP rpc API
         self.of_rpc = GBPOvsPluginApi(rpc.TOPIC_OPFLEX)
