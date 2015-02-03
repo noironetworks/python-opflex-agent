@@ -16,6 +16,7 @@ import sys
 
 from neutron.agent.linux import ip_lib
 from neutron.common import config as common_config
+from neutron.common import constants as n_constants
 from neutron.common import utils as q_utils
 from neutron.openstack.common import log as logging
 from neutron.plugins.openvswitch.agent import ovs_neutron_agent as ovs
@@ -47,6 +48,7 @@ cfg.CONF.register_opts(gbp_opts, "OPFLEX")
 
 FILE_EXTENSION = "ep"
 FILE_NAME_FORMAT = "%s." + FILE_EXTENSION
+METADATA_DEFAULT_IP = '169.254.169.254'
 
 
 class GBPOvsPluginApi(rpc.GBPServerRpcApiMixin):
@@ -162,7 +164,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 # Port has to be untagged due to a opflex agent requirement
                 self.int_br.clear_db_attribute("Port", port.port_name, "tag")
                 self.mapping_to_file(port, mapping, [x['ip_address'] for x in
-                                                     fixed_ips])
+                                                     fixed_ips], device_owner)
             else:
                 # PT cleanup may be needed
                 self.mapping_cleanup(port.vif_id)
@@ -183,11 +185,13 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         # Delete epg mapping file
         self.mapping_cleanup(vif_id)
 
-    def mapping_to_file(self, port, mapping, ips):
+    def mapping_to_file(self, port, mapping, ips, device_owner):
         """Mapping to file.
 
         Converts the port mapping into file.
         """
+        if device_owner == n_constants.DEVICE_OWNER_DHCP:
+            ips.append(METADATA_DEFAULT_IP)
         mapping_dict = {
             "policy-space-name": mapping['ptg_tentant'],
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
