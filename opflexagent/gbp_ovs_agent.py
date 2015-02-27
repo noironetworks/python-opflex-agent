@@ -201,6 +201,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             "mac": port.vif_mac,
             "uuid": port.vif_id,
             "promiscuous-mode": mapping['promiscuous_mode']}
+        if 'vm-name' in mapping:
+            mapping_dict['attributes'] = {'vm-name': mapping['vm-name']}
         filename = self.epg_mapping_file % port.vif_id
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))

@@ -30,7 +30,7 @@ setuptools.setup(
     description="This neutron agent provides edge policy enforcement.",
     entry_points={
         'console_scripts': [
-            'opflex-ovs-agent = opflexagent.gbp_ovs_agent:main'],
+            'openstack-opflex-agent = opflexagent.gbp_ovs_agent:main'],
         'neutron.ml2.type_drivers': [
             'opflex = opflexagent.type_opflex:OpflexTypeDriver']
     }

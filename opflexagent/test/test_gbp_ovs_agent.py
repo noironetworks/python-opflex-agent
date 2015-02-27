@@ -118,7 +118,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                               {'subnet_id': 'id2',
                                'ip_address': '192.168.1.2'}],
                 'device_owner': 'compute:',
-                'ovs_restarted': True}
+                'ovs_restarted': True,
+                'vm-name': 'somename'}
 
     def test_port_bound(self):
         self.agent.int_br = mock.Mock()
