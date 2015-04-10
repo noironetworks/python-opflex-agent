@@ -101,7 +101,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                    'l2_policy_id': 'l2p_id',
                    'tenant_id': 'tenant_id',
                    'host': 'host1',
-                   'ptg_tentant': 'apic_tenant',
+                   'ptg_tenant': 'apic_tenant',
                    'endpoint_group_name': 'epg_name',
                    'promiscuous_mode': False,
                    'vm-name': 'somename'}
