@@ -20,7 +20,7 @@ import setuptools
 
 setuptools.setup(
     name="python-opflex-agent",
-    version="0.1.0",
+    version="1.0.0",
     packages=setuptools.find_packages(exclude=["*.tests", "*.tests.*",
                                                "tests.*", "tests"]),
     author="Cisco Systems, Inc.",
