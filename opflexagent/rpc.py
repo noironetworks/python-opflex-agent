@@ -13,68 +13,63 @@
 from neutron.common import log
 from neutron.common import rpc as n_rpc
 from neutron.common import topics
-from neutron.openstack.common import log as logging
+from oslo_log import log as logging
+import oslo_messaging
 
 LOG = logging.getLogger(__name__)
 
 TOPIC_OPFLEX = 'opflex'
 
 
-class AgentNotifierApi(n_rpc.RpcProxy):
+class AgentNotifierApi(object):
 
     BASE_RPC_API_VERSION = '1.1'
 
     def __init__(self, topic):
-        super(AgentNotifierApi, self).__init__(
-            topic=topic, default_version=self.BASE_RPC_API_VERSION)
+        target = oslo_messaging.Target(
+            topic=topic, version=self.BASE_RPC_API_VERSION)
+        self.client = n_rpc.get_client(target)
         self.topic_port_update = topics.get_topic_name(topic, topics.PORT,
                                                        topics.UPDATE)
 
     def port_update(self, context, port):
-        self.fanout_cast(context,
-                         self.make_msg('port_update',
-                                       port=port),
-                         topic=self.topic_port_update)
+        cctxt = self.client.prepare(fanout=True, topic=self.topic_port_update)
+        cctxt.cast(context, 'port_update', port=port)
 
 
-class GBPServerRpcApiMixin(n_rpc.RpcProxy):
+class GBPServerRpcApiMixin(object):
     """Agent-side RPC (stub) for agent-to-plugin interaction."""
 
     GBP_RPC_VERSION = "1.0"
 
     def __init__(self, topic):
-        super(GBPServerRpcApiMixin, self).__init__(
-            topic=topic, default_version=self.GBP_RPC_VERSION)
+        target = oslo_messaging.Target(
+                topic=topic, version=self.GBP_RPC_VERSION)
+        self.client = n_rpc.get_client(target)
 
     @log.log
     def get_gbp_details(self, context, agent_id, device=None, host=None):
-        return self.call(context,
-                         self.make_msg('get_gbp_details',
-                                       agent_id=agent_id,
-                                       device=device,
-                                       host=host),
-                         version=self.GBP_RPC_VERSION)
+        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
+        return cctxt.call(context, 'get_gbp_details', agent_id=agent_id,
+                          device=device, host=host)
 
     @log.log
     def get_gbp_details_list(self, context, agent_id, devices=None, host=None):
-        return self.call(context,
-                         self.make_msg('get_gbp_details_list',
-                                       agent_id=agent_id,
-                                       devices=devices,
-                                       host=host),
-                         version=self.GBP_RPC_VERSION)
+        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
+        return cctxt.call(context, 'get_gbp_details_list', agent_id=agent_id,
+                          devices=devices, host=host)
 
 
-class GBPServerRpcCallback(n_rpc.RpcCallback):
+class GBPServerRpcCallback(object):
     """Plugin-side RPC (implementation) for agent-to-plugin interaction."""
 
     # History
     #   1.0 Initial version
 
     RPC_API_VERSION = "1.0"
+    target = oslo_messaging.Target(version=RPC_API_VERSION)
 
     def __init__(self, gbp_driver):
-        super(GBPServerRpcCallback, self).__init__()
         self.gbp_driver = gbp_driver
 
     def get_gbp_details(self, context, **kwargs):

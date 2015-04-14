@@ -39,6 +39,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
         cfg.CONF.set_default('firewall_driver',
                              'neutron.agent.firewall.NoopFirewallDriver',
                              group='SECURITYGROUP')
+        cfg.CONF.set_default('quitting_rpc_timeout', 10, 'AGENT')
         self.ep_dir = EP_DIR % _uuid()
         self.agent = self._initialize_agent()
         self.agent.mapping_to_file = mock.Mock()
@@ -79,8 +80,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                        return_value='00:00:00:00:00:01'),
             mock.patch('neutron.agent.linux.utils.get_interface_mac',
                        return_value='00:00:00:00:00:01'),
-            mock.patch('neutron.agent.linux.ovs_lib.'
-                       'get_bridges'),
+            mock.patch('neutron.agent.linux.ovs_lib.BaseOVS.get_bridges'),
             mock.patch('neutron.openstack.common.loopingcall.'
                        'FixedIntervalLoopingCall',
                        new=MockFixedIntervalLoopingCall)):
@@ -103,7 +103,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                    'host': 'host1',
                    'ptg_tenant': 'apic_tenant',
                    'endpoint_group_name': 'epg_name',
-                   'promiscuous_mode': False}
+                   'promiscuous_mode': False,
+                   'vm-name': 'somename'}
         pattern.update(**kwargs)
         return pattern
 
@@ -118,8 +119,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                               {'subnet_id': 'id2',
                                'ip_address': '192.168.1.2'}],
                 'device_owner': 'compute:',
-                'ovs_restarted': True,
-                'vm-name': 'somename'}
+                'ovs_restarted': True}
 
     def test_port_bound(self):
         self.agent.int_br = mock.Mock()

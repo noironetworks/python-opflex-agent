@@ -1,6 +1,3 @@
-# Copyright (c) 2013 OpenStack Foundation
-# All Rights Reserved.
-#
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
 #    a copy of the License at
@@ -14,13 +11,13 @@
 #    under the License.
 
 from neutron.common import exceptions as exc
-from neutron.openstack.common import log
 from neutron.plugins.ml2 import driver_api as api
-from oslo.config import cfg
+from oslo_config import cfg
+from oslo_log import log as logging
 
 from opflexagent import constants
 
-LOG = log.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 flat_opts = [
     cfg.StrOpt('default_opflex_network',

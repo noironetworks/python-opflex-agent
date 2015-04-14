@@ -18,12 +18,12 @@ from neutron.agent.linux import ip_lib
 from neutron.common import config as common_config
 from neutron.common import constants as n_constants
 from neutron.common import utils as q_utils
-from neutron.openstack.common import log as logging
 from neutron.plugins.openvswitch.agent import ovs_neutron_agent as ovs
 from neutron.plugins.openvswitch.common import config  # noqa
 from neutron.plugins.openvswitch.common import constants
-from oslo.config import cfg
-from oslo.serialization import jsonutils
+from oslo_config import cfg
+from oslo_log import log as logging
+from oslo_serialization import jsonutils
 
 from opflexagent import constants as ofcst
 from opflexagent import rpc

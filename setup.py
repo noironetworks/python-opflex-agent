@@ -1,6 +1,3 @@
-# Copyright (c) 2014 Cisco Systems
-# All Rights Reserved.
-#
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
 #    not use this file except in compliance with the License. You may obtain
 #    a copy of the License at
@@ -20,7 +17,7 @@ import setuptools
 
 setuptools.setup(
     name="python-opflex-agent",
-    version="0.1.0",
+    version="2.0.0",
     packages=setuptools.find_packages(exclude=["*.tests", "*.tests.*",
                                                "tests.*", "tests"]),
     author="Cisco Systems, Inc.",
