@@ -193,7 +193,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         if device_owner == n_constants.DEVICE_OWNER_DHCP:
             ips.append(METADATA_DEFAULT_IP)
         mapping_dict = {
-            "policy-space-name": mapping['ptg_tentant'],
+            "policy-space-name": mapping['ptg_tenant'],
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                     mapping['endpoint_group_name']),
             "interface-name": port.port_name,
