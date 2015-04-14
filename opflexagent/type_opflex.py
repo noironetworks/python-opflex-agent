@@ -12,6 +12,7 @@
 
 from neutron.common import exceptions as exc
 from neutron.plugins.ml2 import driver_api as api
+from neutron.plugins.ml2.drivers import helpers
 from oslo_config import cfg
 from oslo_log import log as logging
 
@@ -28,7 +29,7 @@ flat_opts = [
 cfg.CONF.register_opts(flat_opts, "ml2_type_opflex")
 
 
-class OpflexTypeDriver(api.TypeDriver):
+class OpflexTypeDriver(helpers.BaseTypeDriver):
 
     def __init__(self):
         LOG.info(_("ML2 OpflexTypeDriver initialization complete"))
