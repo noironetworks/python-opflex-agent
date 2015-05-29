@@ -1,0 +1,81 @@
+%define opflex_agent neutron-opflex-agent.service
+
+Name:		neutron-opflex-agent
+Version:	@VERSION@
+Release:	@RELEASE@%{?dist}
+Summary:	Neutron agent for OpFlex based policy enforcement
+License:	ASL 2.0
+URL:		https://github.com/noironetworks/python-opflex-agent
+Source:		neutron-opflex-agent-%{version}.tar.gz
+BuildArch:	noarch
+BuildRequires:	python2-devel
+BuildRequires:	python-pbr
+BuildRequires:	python-setuptools
+Requires:	openstack-neutron >= 2014.2
+Requires:	openstack-neutron < 2014.3
+Requires(post): systemd-units
+Requires(preun): systemd-units
+Requires(postun): systemd-units
+
+%description
+Neutron agent that provides edge policy enforcement
+
+%prep
+%setup -qn neutron-opflex-agent-%{version}
+rm -f requirements.txt
+
+%build
+%{__python2} setup.py build
+
+%install
+%{__python2} setup.py install -O1 --install-data / --skip-build --root %{buildroot}
+# Remove unused files
+rm -rf %{buildroot}%{python2_sitelib}/opflexagent/test
+install -p -D -m 0644 rpm/%{opflex_agent} %{buildroot}/%{_unitdir}/%{opflex_agent}
+
+%pre
+getent group opflexep >/dev/null || groupadd -r opflexep
+usermod -a -G opflexep neutron
+
+%post
+%if 0%{?systemd_post:1}
+    %systemd_post %{opflex_agent}
+%else
+    if [ $1 -eq 1 ]; then
+        # Package install, not upgrade
+        /bin/systemctl daemon-reload >dev/null || :
+    fi
+%endif
+
+%preun
+%if 0%{?systemd_preun:1}
+    %systemd_preun %{opflex_agent}
+%else
+    if [ $1 -eq 0 ] ; then
+        # Package removal, not upgrade
+        /bin/systemctl --no-reload disable %{opflex_agent} >/dev/null 2>&1 || :
+        /bin/systemctl stop %{opflex_agent} >/dev/null 2>&1 || :
+    fi
+%endif
+
+%postun
+%if 0%{?systemd_postun_with_restart:1}
+    %systemd_postun_with_restart %{opflex_agent}
+%else
+    /bin/systemctl daemon-reload >/dev/null 2>&1 || :
+    if [ "$1" -ge "1" ] ; then
+        # Package upgrade, not uninstall
+        /bin/systemctl try-restart %{opflex_agent} >/dev/null 2>&1 || :
+    fi
+%endif
+
+%files
+%doc README.rst
+%{python2_sitelib}/opflexagent
+%{python2_sitelib}/neutron_opflex_agent-%%{version}*.egg-info
+%{_bindir}/neutron-opflex-agent
+%{_unitdir}/%{opflex_agent}
+
+%changelog
+* Mon May 18 2015 Amit Bose <bose@noironetworks.com> - 2015.1.0-1
+- [Placeholder]

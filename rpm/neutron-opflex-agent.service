@@ -1,0 +1,15 @@
+[Unit]
+Description=Neutron OpFlex Plugin Agent
+After=syslog.target network.target
+
+[Service]
+Type=simple
+User=neutron
+ExecStart=/usr/bin/neutron-opflex-agent --config-file /usr/share/neutron/neutron-dist.conf --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/plugins/openvswitch/ovs_neutron_plugin.ini --log-file /var/log/neutron/opflex-agent.log
+PrivateTmp=true
+KillMode=process
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
