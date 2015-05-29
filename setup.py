@@ -19,8 +19,8 @@ import setuptools
 
 
 setuptools.setup(
-    name="python-opflex-agent",
-    version="1.0.0",
+    name="neutron-opflex-agent",
+    version="2014.2.0",
     packages=setuptools.find_packages(exclude=["*.tests", "*.tests.*",
                                                "tests.*", "tests"]),
     author="Cisco Systems, Inc.",
@@ -30,7 +30,7 @@ setuptools.setup(
     description="This neutron agent provides edge policy enforcement.",
     entry_points={
         'console_scripts': [
-            'openstack-opflex-agent = opflexagent.gbp_ovs_agent:main'],
+            'neutron-opflex-agent = opflexagent.gbp_ovs_agent:main'],
         'neutron.ml2.type_drivers': [
             'opflex = opflexagent.type_opflex:OpflexTypeDriver']
     }
