@@ -1,0 +1,20 @@
+description "Neutron OpFlex Plugin Agent"
+
+start on runlevel [2345]
+stop on runlevel [!2345]
+
+respawn
+
+chdir /var/run
+
+pre-start script
+  mkdir -p /var/run/neutron
+  chown neutron:root /var/run/neutron
+end script
+
+exec start-stop-daemon --start --chuid neutron \
+  --exec /usr/bin/neutron-opflex-agent -- \
+  --config-file=/etc/neutron/neutron.conf \
+  --config-file=/etc/neutron/plugin.ini \
+  --log-file=/var/log/neutron/opflex-agent.log
+
