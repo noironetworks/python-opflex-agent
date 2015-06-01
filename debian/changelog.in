@@ -1,4 +1,4 @@
-neutron-opflex-agent (2014.2.0-1) trusty; urgency=low
+neutron-opflex-agent (@VERSION@-@REVISION@) trusty; urgency=low
 
   * [Placeholder]
 
