@@ -190,8 +190,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
 
         Converts the port mapping into file.
         """
-        if device_owner == n_constants.DEVICE_OWNER_DHCP:
-            ips.append(METADATA_DEFAULT_IP)
+        # if device_owner == n_constants.DEVICE_OWNER_DHCP:
+        #     ips.append(METADATA_DEFAULT_IP)
         mapping_dict = {
             "policy-space-name": mapping['ptg_tenant'],
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
@@ -321,3 +321,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
