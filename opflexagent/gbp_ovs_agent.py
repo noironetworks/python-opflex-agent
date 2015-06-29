@@ -210,8 +210,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     (physical_network in self.opflex_networks)):
                 # Port has to be untagged due to a opflex agent requirement
                 self.int_br.clear_db_attribute("Port", port.port_name, "tag")
-                self.mapping_to_file(port, mapping, [x['ip_address'] for x in
-                                                     fixed_ips], device_owner)
+                self.mapping_to_file(port, mapping, fixed_ips, device_owner)
             else:
                 # PT cleanup may be needed
                 self.mapping_cleanup(port.vif_id)
@@ -232,7 +231,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         # Delete epg mapping file
         self.mapping_cleanup(vif_id)
 
-    def mapping_to_file(self, port, mapping, ips, device_owner):
+    def mapping_to_file(self, port, mapping, fixed_ips, device_owner):
         """Mapping to file.
 
         Converts the port mapping into file.
@@ -240,22 +239,59 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         # Skip router-interface ports - they interfere with OVS pipeline
         if device_owner in [n_constants.DEVICE_OWNER_ROUTER_INTF]:
             return
-        ips_ext = []
-        if device_owner == n_constants.DEVICE_OWNER_DHCP:
-            ips_ext.append(METADATA_DEFAULT_IP)
+
         mapping_dict = {
             "policy-space-name": mapping['ptg_tenant'],
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                     mapping['endpoint_group_name']),
             "interface-name": port.port_name,
-            "ip": ips + ips_ext,
             "mac": port.vif_mac,
-            "uuid": port.vif_id,
-            "promiscuous-mode": mapping['promiscuous_mode']}
+            "promiscuous-mode": mapping['promiscuous_mode'],
+            "uuid": port.vif_id}
+
+        ips = [x['ip_address'] for x in fixed_ips]
+        ips_ext = []
+        if device_owner == n_constants.DEVICE_OWNER_DHCP:
+            ips_ext.append(METADATA_DEFAULT_IP)
+        else:
+            if (mapping.get('enable_dhcp_optimization', False) and
+               'subnets' in mapping):
+                    self._map_dhcp_info(fixed_ips, mapping['subnets'],
+                                        mapping_dict)
+        mapping_dict['ip'] = ips + ips_ext
+
         if 'vm-name' in mapping:
             mapping_dict['attributes'] = {'vm-name': mapping['vm-name']}
         self._fill_ip_mapping_info(port.vif_id, mapping, ips, mapping_dict)
         self._write_endpoint_file(port.vif_id, mapping_dict)
+
+    def _map_dhcp_info(self, fixed_ips, subnets, mapping_dict):
+        v4subnets = {k['id']: k for k in subnets
+                     if k['ip_version'] == 4 and k['enable_dhcp']}
+        v6subnets = {k['id']: k for k in subnets
+                     if k['ip_version'] == 6 and k['enable_dhcp']}
+
+        # REVISIT(amit): we use only the first fixed-ip for DHCP optimization
+        for fip in fixed_ips:
+            sn = v4subnets.get(fip['subnet_id'])
+            if not sn:
+                continue
+            dhcp4 = {'ip': fip['ip_address'],
+                     'routers': [sn['gateway_ip']],
+                     'dns-servers': sn['dns_nameservers'],
+                     'prefix-len': netaddr.IPNetwork(sn['cidr']).prefixlen}
+            dhcp4['static-routes'] = []
+            for hr in sn['host_routes']:
+                cidr = netaddr.IPNetwork(hr['destination'])
+                dhcp4['static-routes'].append(
+                    {'dest': str(cidr.network),
+                     'dest-prefix': cidr.prefixlen,
+                     'next-hop': hr['nexthop']})
+            mapping_dict['dhcp4'] = dhcp4
+            break
+        if len(v6subnets) > 0 and v6subnets[0]['dns_nameservers']:
+            mapping_dict['dhcp6'] = {
+                'dns-servers': v6subnets[0]['dns_nameservers']}
 
     def mapping_cleanup(self, vif_id):
         self._delete_endpoint_file(vif_id)
