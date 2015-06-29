@@ -134,7 +134,12 @@ class TestGbpOvsAgent(base.BaseTestCase):
             "Port", mock.ANY, "tag")
         self.assertFalse(self.agent.provision_local_vlan.called)
         self.agent.mapping_to_file.assert_called_with(
-            args['port'], mapping, ['192.168.0.2', '192.168.1.2'], 'compute:')
+            args['port'], mapping,
+            [{'subnet_id': 'id1',
+              'ip_address': '192.168.0.2'},
+             {'subnet_id': 'id2',
+              'ip_address': '192.168.1.2'}],
+            'compute:')
 
     def test_port_bound_no_mapping(self):
         self.agent.int_br = mock.Mock()
