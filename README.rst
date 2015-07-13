@@ -13,7 +13,7 @@ Using pip::
 
 easy_install::
 
-    easty_install python-opflex-agent
+    easy_install python-opflex-agent
 
 manually::
 
