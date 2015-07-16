@@ -10,6 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import netaddr
 import os
 import signal
 import sys
@@ -18,6 +19,8 @@ from neutron.agent.linux import ip_lib
 from neutron.common import config as common_config
 from neutron.common import constants as n_constants
 from neutron.common import utils as q_utils
+from neutron.openstack.common import log as logging
+from neutron.openstack.common import uuidutils
 from neutron.plugins.openvswitch.agent import ovs_neutron_agent as ovs
 from neutron.plugins.openvswitch.common import config  # noqa
 from neutron.plugins.openvswitch.common import constants
@@ -27,6 +30,7 @@ from oslo_serialization import jsonutils
 
 from opflexagent import constants as ofcst
 from opflexagent import rpc
+from opflexagent import snat_iptables_manager
 
 LOG = logging.getLogger(__name__)
 
@@ -42,7 +46,14 @@ gbp_opts = [
     cfg.ListOpt('opflex_networks',
                 default=['*'],
                 help=_("List of the physical networks managed by this agent. "
-                       "Use * for binding any opflex network to this agent"))
+                       "Use * for binding any opflex network to this agent")),
+    cfg.ListOpt('internal_floating_ip_pool',
+               default=['169.254.0.0/16'],
+               help=_("IP pool used for intermediate floating-IPs with SNAT")),
+    cfg.ListOpt('internal_floating_ip6_pool',
+               default=['fe80::/64'],
+               help=_("IPv6 pool used for intermediate floating-IPs "
+                      "with SNAT"))
 ]
 cfg.CONF.register_opts(gbp_opts, "OPFLEX")
 
@@ -53,6 +64,28 @@ METADATA_DEFAULT_IP = '169.254.169.254'
 
 class GBPOvsPluginApi(rpc.GBPServerRpcApiMixin):
     pass
+
+
+class ExtSegNextHopInfo(object):
+    def __init__(self, es_name):
+        self.es_name = es_name
+        self.ip_start = None
+        self.ip_end = None
+        self.ip_gateway = None
+        self.ip6_start = None
+        self.ip6_end = None
+        self.ip6_gateway = None
+        self.next_hop_iface = None
+        self.next_hop_mac = None
+
+    def __str__(self):
+        return "%s: ipv4 (%s-%s,%s), ipv6 (%s-%s,%s)" % (self.es_name,
+            self.ip_start, self.ip_end, self.ip_gateway,
+            self.ip6_start, self.ip6_end, self.ip6_gateway)
+
+    def is_valid(self):
+        return ((self.ip_start and self.ip_gateway) or
+                (self.ip6_start and self.ip6_gateway))
 
 
 class GBPOvsAgent(ovs.OVSNeutronAgent):
@@ -67,9 +100,21 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.opflex_networks = kwargs['opflex_networks']
         if self.opflex_networks and self.opflex_networks[0] == '*':
             self.opflex_networks = None
+        self.int_fip_pool = {
+            4: netaddr.IPSet(kwargs['internal_floating_ip_pool']),
+            6: netaddr.IPSet(kwargs['internal_floating_ip6_pool'])}
+        if METADATA_DEFAULT_IP in self.int_fip_pool[4]:
+            self.int_fip_pool[4].remove(METADATA_DEFAULT_IP)
+        self.int_fip_alloc = {4: {}, 6: {}}
+        self._load_es_next_hop_info(kwargs['external_segment'])
+        self.es_port_dict = {}
         del kwargs['hybrid_mode']
         del kwargs['epg_mapping_dir']
         del kwargs['opflex_networks']
+        del kwargs['internal_floating_ip_pool']
+        del kwargs['internal_floating_ip6_pool']
+        del kwargs['external_segment']
+
         super(GBPOvsAgent, self).__init__(**kwargs)
         self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
         self.setup_pt_directory()
@@ -86,6 +131,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     os.remove(os.path.join(directory, f))
                 except OSError as e:
                     LOG.debug(e.message)
+        self.snat_iptables.cleanup_snat_all()
 
     def setup_rpc(self):
         self.agent_state['agent_type'] = ofcst.AGENT_TYPE_OPFLEX_OVS
@@ -115,6 +161,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         # Add a canary flow to int_br to track OVS restarts
         self.int_br.add_flow(table=constants.CANARY_TABLE, priority=0,
                              actions="drop")
+        self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
+            self.int_br, self.root_helper)
 
     def setup_physical_bridges(self, bridge_mappings):
         """Override parent setup physical bridges.
@@ -190,30 +238,37 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
 
         Converts the port mapping into file.
         """
+<<<<<<< HEAD
         # if device_owner == n_constants.DEVICE_OWNER_DHCP:
         #     ips.append(METADATA_DEFAULT_IP)
+=======
+        # Skip router-interface ports - they interfere with OVS pipeline
+        if device_owner in [n_constants.DEVICE_OWNER_ROUTER_INTF]:
+            return
+        ips_ext = []
+        if device_owner == n_constants.DEVICE_OWNER_DHCP:
+            ips_ext.append(METADATA_DEFAULT_IP)
+>>>>>>> cd6a05b... Update endpoint file with IP-mapping information
         mapping_dict = {
             "policy-space-name": mapping['ptg_tenant'],
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                     mapping['endpoint_group_name']),
             "interface-name": port.port_name,
-            "ip": ips,
+            "ip": ips + ips_ext,
             "mac": port.vif_mac,
             "uuid": port.vif_id,
             "promiscuous-mode": mapping['promiscuous_mode']}
         if 'vm-name' in mapping:
             mapping_dict['attributes'] = {'vm-name': mapping['vm-name']}
-        filename = self.epg_mapping_file % port.vif_id
-        if not os.path.exists(os.path.dirname(filename)):
-            os.makedirs(os.path.dirname(filename))
-        with open(filename, 'w') as f:
-            jsonutils.dump(mapping_dict, f)
+        self._fill_ip_mapping_info(port.vif_id, mapping, ips, mapping_dict)
+        self._write_endpoint_file(port.vif_id, mapping_dict)
 
     def mapping_cleanup(self, vif_id):
-        try:
-            os.remove(self.epg_mapping_file % vif_id)
-        except OSError as e:
-            LOG.debug(e.message)
+        self._delete_endpoint_file(vif_id)
+        es = self._get_es_for_port(vif_id)
+        self._dissociate_port_from_es(vif_id, es)
+        self._release_int_fip(4, vif_id)
+        self._release_int_fip(6, vif_id)
 
     def treat_devices_added_or_updated(self, devices, ovs_restarted):
         # REVISIT(ivar): This method is copied from parent in order to inject
@@ -281,16 +336,199 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     self.port_dead(port)
         return skipped_devices
 
+    def _write_endpoint_file(self, port_id, mapping_dict):
+        filename = self.epg_mapping_file % port_id
+        if not os.path.exists(os.path.dirname(filename)):
+            os.makedirs(os.path.dirname(filename))
+        with open(filename, 'w') as f:
+            jsonutils.dump(mapping_dict, f)
+
+    def _delete_endpoint_file(self, port_id):
+        try:
+            os.remove(self.epg_mapping_file % port_id)
+        except OSError as e:
+            LOG.debug(e.message)
+
+    def _fill_ip_mapping_info(self, port_id, gbp_details, ips, mapping):
+        for fip in gbp_details.get('floating_ip', []):
+            fm = {'uuid': fip['id'],
+                  'mapped-ip': fip['fixed_ip_address'],
+                  'floating-ip': fip['floating_ip_address']}
+            if 'nat_epg_tenant' in fip:
+                fm['policy-space-name'] = fip['nat_epg_tenant']
+            if 'nat_epg_name' in fip:
+                fm['endpoint-group-name'] = (gbp_details['app_profile_name']
+                                             + "|" + fip['nat_epg_name'])
+            mapping.setdefault('ip-address-mapping', []).append(fm)
+
+        es_using_int_fip = {4: set(), 6: set()}
+        for ipm in gbp_details.get('ip_mapping', []):
+            if (not ips or not ipm.get('external_segment_name') or
+                not ipm.get('nat_epg_tenant') or
+                not ipm.get('nat_epg_name')):
+                continue
+            es = ipm['external_segment_name']
+            epg = gbp_details['app_profile_name'] + "|" + ipm['nat_epg_name']
+            ipm['nat_epg_name'] = epg
+            next_hop_if, next_hop_mac = self._get_next_hop_info_for_es(ipm)
+            if not next_hop_if or not next_hop_mac:
+                continue
+            for ip in ips:
+                ip_ver = netaddr.IPAddress(ip).version
+                fip = (self._get_int_fips(ip_ver, port_id).get(es) or
+                       self._alloc_int_fip(ip_ver, port_id, es))
+                es_using_int_fip[ip_ver].add(es)
+                ip_map = {'uuid': uuidutils.generate_uuid(),
+                          'mapped-ip': ip,
+                          'floating-ip': str(fip),
+                          'policy-space-name': ipm['nat_epg_tenant'],
+                          'endpoint-group-name': epg,
+                          'next-hop-if': next_hop_if,
+                          'next-hop-mac': next_hop_mac}
+                mapping.setdefault('ip-address-mapping', []).append(ip_map)
+        old_es = self._get_es_for_port(port_id)
+        new_es = es_using_int_fip[4] | es_using_int_fip[6]
+        self._associate_port_with_es(port_id, new_es)
+        self._dissociate_port_from_es(port_id, old_es - new_es)
+
+        for ip_ver in es_using_int_fip.keys():
+            for es in self._get_int_fips(ip_ver, port_id).keys():
+                if es not in es_using_int_fip[ip_ver]:
+                    self._release_int_fip(ip_ver, port_id, es)
+
+    def _get_int_fips(self, ip_ver, port_id):
+        return self.int_fip_alloc[ip_ver].get(port_id, {})
+
+    def _get_es_for_port(self, port_id):
+        """ Return ESs for which there is a internal FIP allocated """
+        es = set(self._get_int_fips(4, port_id).keys())
+        es.update(self._get_int_fips(6, port_id).keys())
+        return es
+
+    def _alloc_int_fip(self, ip_ver, port_id, es):
+        fip = self.int_fip_pool[ip_ver].__iter__().next()
+        self.int_fip_pool[ip_ver].remove(fip)
+        self.int_fip_alloc[ip_ver].setdefault(port_id, {})[es] = fip
+        return fip
+
+    def _release_int_fip(self, ip_ver, port_id, es=None):
+        if es:
+            fips = self.int_fip_alloc[ip_ver].get(port_id, {}).pop(es, None)
+            fips = (fips and [fips] or [])
+        else:
+            fips = self.int_fip_alloc[ip_ver].pop(port_id, {}).values()
+        for ip in fips:
+            self.int_fip_pool[ip_ver].add(ip)
+
+    def _get_next_hop_info_for_es(self, ipm):
+        es_name = ipm['external_segment_name']
+        nh = self.ext_seg_next_hop.get(es_name)
+        if not nh or not nh.is_valid():
+            return (None, None)
+        # create ep file for endpoint and snat tables
+        if not nh.next_hop_iface:
+            try:
+                (nh.next_hop_iface, nh.next_hop_mac) = (
+                    self.snat_iptables.setup_snat_for_es(es_name,
+                        nh.ip_start, nh.ip_end, nh.ip_gateway,
+                        nh.ip6_start, nh.ip6_end, nh.ip6_gateway))
+            except Exception as e:
+                LOG.error(_("Error while creating SNAT iptables for "
+                            "%{es}s: %{ex}s"),
+                          {'es': es_name, 'ex': e})
+            self._create_host_endpoint_file(ipm, nh)
+        return (nh.next_hop_iface, nh.next_hop_mac)
+
+    def _create_host_endpoint_file(self, ipm, nh):
+        ips = []
+        for s, e in [(nh.ip_start, nh.ip_end), (nh.ip6_start, nh.ip6_end)]:
+            if s:
+                ips.extend(list(netaddr.iter_iprange(s, e or s)))
+        ep_dict = {
+            "policy-space-name": ipm['nat_epg_tenant'],
+            "endpoint-group-name": ipm['nat_epg_name'],
+            "interface-name": nh.next_hop_iface,
+            "ip": [str(x) for x in ips],
+            "mac": nh.next_hop_mac,
+            "uuid": uuidutils.generate_uuid(),
+            "promiscuous-mode": True}
+        self._write_endpoint_file(nh.es_name, ep_dict)
+
+    def _associate_port_with_es(self, port_id, ess):
+        for es in ess:
+            self.es_port_dict.setdefault(es, set()).add(port_id)
+
+    def _dissociate_port_from_es(self, port_id, ess):
+        for es in ess:
+            if es not in self.es_port_dict:
+                continue
+            self.es_port_dict[es].discard(port_id)
+            if self.es_port_dict[es]:
+                continue
+            self.es_port_dict.pop(es)
+            if es in self.ext_seg_next_hop:
+                self.ext_seg_next_hop[es].next_hop_iface = None
+                self.ext_seg_next_hop[es].next_hop_mac = None
+            self._delete_endpoint_file(es)
+            try:
+                self.snat_iptables.cleanup_snat_for_es(es)
+            except Exception as e:
+                LOG.warn(_("Failed to remove SNAT iptables for "
+                           "%{es}s: %{ex}s"),
+                         {'es': es, 'ex': e})
+
+    def _load_es_next_hop_info(self, es_cfg):
+        def parse_range(val):
+            if val and val[0]:
+                ip = [x.strip() for x in val[0].split(',', 1)]
+                return (ip[0] or None,
+                        (len(ip) > 1 and ip[1]) and ip[1] or None)
+            return (None, None)
+
+        def parse_gateway(val):
+            return (val and '/' in val[0]) and val[0] or None
+
+        self.ext_seg_next_hop = {}
+        for es_name, es_info in es_cfg.iteritems():
+            nh = ExtSegNextHopInfo(es_name)
+            for key, value in es_info:
+                if key == 'ip_address_range':
+                    (nh.ip_start, nh.ip_end) = parse_range(value)
+                elif key == 'ip_gateway':
+                    nh.ip_gateway = parse_gateway(value)
+                elif key == 'ip6_address_range':
+                    (nh.ip6_start, nh.ip6_end) = parse_range(value)
+                elif key == 'ip6_gateway':
+                    nh.ip6_gateway = parse_gateway(value)
+            self.ext_seg_next_hop[es_name] = nh
+            LOG.debug(_("Found external segment: %s") % nh)
+
 
 def create_agent_config_map(conf):
     agent_config = ovs.create_agent_config_map(conf)
     agent_config['hybrid_mode'] = conf.OPFLEX.hybrid_mode
     agent_config['epg_mapping_dir'] = conf.OPFLEX.epg_mapping_dir
     agent_config['opflex_networks'] = conf.OPFLEX.opflex_networks
+    agent_config['internal_floating_ip_pool'] = (
+        conf.OPFLEX.internal_floating_ip_pool)
+    agent_config['internal_floating_ip6_pool'] = (
+        conf.OPFLEX.internal_floating_ip6_pool)
     # DVR not supported
     agent_config['enable_distributed_routing'] = False
     # ARP responder not supported
     agent_config['arp_responder'] = False
+
+    # read external-segment next-hop info
+    es_info = {}
+    multi_parser = cfg.MultiConfigParser()
+    multi_parser.read(conf.config_file)
+    for parsed_file in multi_parser.parsed:
+        for parsed_item in parsed_file.keys():
+            if parsed_item.startswith('opflex_external_segment:'):
+                es_name = parsed_item.split(':', 1)[1]
+                if es_name:
+                    es_info[es_name] = parsed_file[parsed_item].items()
+    agent_config['external_segment'] = es_info
     return agent_config
 
 
@@ -321,4 +559,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+<<<<<<< HEAD
 
+=======
+>>>>>>> cd6a05b... Update endpoint file with IP-mapping information
