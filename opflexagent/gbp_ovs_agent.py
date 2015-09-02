@@ -434,7 +434,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                         nh.ip6_start, nh.ip6_end, nh.ip6_gateway))
             except Exception as e:
                 LOG.error(_("Error while creating SNAT iptables for "
-                            "%{es}s: %{ex}s"),
+                            "%(es)s: %(ex)s"),
                           {'es': es_name, 'ex': e})
             self._create_host_endpoint_file(ipm, nh)
         return (nh.next_hop_iface, nh.next_hop_mac)
@@ -474,7 +474,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 self.snat_iptables.cleanup_snat_for_es(es)
             except Exception as e:
                 LOG.warn(_("Failed to remove SNAT iptables for "
-                           "%{es}s: %{ex}s"),
+                           "%(es)s: %(ex)s"),
                          {'es': es, 'ex': e})
 
     def _load_es_next_hop_info(self, es_cfg):
