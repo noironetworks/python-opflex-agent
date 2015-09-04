@@ -238,17 +238,12 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
 
         Converts the port mapping into file.
         """
-<<<<<<< HEAD
-        # if device_owner == n_constants.DEVICE_OWNER_DHCP:
-        #     ips.append(METADATA_DEFAULT_IP)
-=======
         # Skip router-interface ports - they interfere with OVS pipeline
         if device_owner in [n_constants.DEVICE_OWNER_ROUTER_INTF]:
             return
         ips_ext = []
-        if device_owner == n_constants.DEVICE_OWNER_DHCP:
-            ips_ext.append(METADATA_DEFAULT_IP)
->>>>>>> cd6a05b... Update endpoint file with IP-mapping information
+        # if device_owner == n_constants.DEVICE_OWNER_DHCP:
+        #     ips_ext.append(METADATA_DEFAULT_IP)
         mapping_dict = {
             "policy-space-name": mapping['ptg_tenant'],
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
@@ -559,7 +554,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-<<<<<<< HEAD
 
-=======
->>>>>>> cd6a05b... Update endpoint file with IP-mapping information
