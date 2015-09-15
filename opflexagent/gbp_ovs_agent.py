@@ -243,6 +243,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         ips_ext = []
         if device_owner == n_constants.DEVICE_OWNER_DHCP:
             ips_ext.append(METADATA_DEFAULT_IP)
+        ips_ext += mapping.get('extra_ips') or []
+
         mapping_dict = {
             "policy-space-name": mapping['ptg_tenant'],
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
