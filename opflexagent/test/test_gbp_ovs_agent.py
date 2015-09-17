@@ -83,7 +83,9 @@ class TestGbpOvsAgent(base.BaseTestCase):
             mock.patch('neutron.agent.linux.ovs_lib.BaseOVS.get_bridges'),
             mock.patch('neutron.openstack.common.loopingcall.'
                        'FixedIntervalLoopingCall',
-                       new=MockFixedIntervalLoopingCall)):
+                       new=MockFixedIntervalLoopingCall),
+            mock.patch('neutron.plugins.openvswitch.agent.ovs_neutron_agent.'
+                       'OVSNeutronAgent._report_state')):
             agent = gbp_ovs_agent.GBPOvsAgent(**kwargs)
             # set back to true because initial report state will succeed due
             # to mocked out RPC calls

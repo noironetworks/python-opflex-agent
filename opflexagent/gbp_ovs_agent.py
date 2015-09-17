@@ -19,7 +19,6 @@ from neutron.agent.linux import ip_lib
 from neutron.common import config as common_config
 from neutron.common import constants as n_constants
 from neutron.common import utils as q_utils
-from neutron.openstack.common import log as logging
 from neutron.openstack.common import uuidutils
 from neutron.plugins.openvswitch.agent import ovs_neutron_agent as ovs
 from neutron.plugins.openvswitch.common import config  # noqa
@@ -590,4 +589,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
