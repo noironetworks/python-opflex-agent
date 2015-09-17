@@ -42,7 +42,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
         cfg.CONF.set_default('quitting_rpc_timeout', 10, 'AGENT')
         self.ep_dir = EP_DIR % _uuid()
         self.agent = self._initialize_agent()
-        self.agent.mapping_to_file = mock.Mock()
+        self.agent._write_endpoint_file = mock.Mock()
         self.agent.mapping_cleanup = mock.Mock()
         self.agent.opflex_networks = ['phys_net']
         self.addCleanup(self._purge_endpoint_dir)
@@ -103,10 +103,12 @@ class TestGbpOvsAgent(base.BaseTestCase):
                    'l2_policy_id': 'l2p_id',
                    'tenant_id': 'tenant_id',
                    'host': 'host1',
+                   'app_profile_name': 'profile_name',
                    'ptg_tenant': 'apic_tenant',
                    'endpoint_group_name': 'epg_name',
                    'promiscuous_mode': False,
-                   'vm-name': 'somename'}
+                   'vm-name': 'somename',
+                   'extra_ips': ['192.169.8.1', '192.169.8.254']}
         pattern.update(**kwargs)
         return pattern
 
@@ -135,13 +137,18 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.agent.int_br.clear_db_attribute.assert_called_with(
             "Port", mock.ANY, "tag")
         self.assertFalse(self.agent.provision_local_vlan.called)
-        self.agent.mapping_to_file.assert_called_with(
-            args['port'], mapping,
-            [{'subnet_id': 'id1',
-              'ip_address': '192.168.0.2'},
-             {'subnet_id': 'id2',
-              'ip_address': '192.168.1.2'}],
-            'compute:')
+        self.agent._write_endpoint_file.assert_called_with(
+            args['port'].vif_id, {
+                "policy-space-name": mapping['ptg_tenant'],
+                "endpoint-group-name": (mapping['app_profile_name'] + "|" +
+                                        mapping['endpoint_group_name']),
+                "interface-name": args['port'].port_name,
+                "mac": args['port'].vif_mac,
+                "promiscuous-mode": mapping['promiscuous_mode'],
+                "uuid": args['port'].vif_id,
+                "attributes": {'vm-name': 'somename'},
+                "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
+                       '192.169.8.254']})
 
     def test_port_bound_no_mapping(self):
         self.agent.int_br = mock.Mock()
@@ -153,4 +160,4 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.agent.port_bound(**args)
         self.assertFalse(self.agent.int_br.set_db_attribute.called)
         self.assertFalse(self.agent.provision_local_vlan.called)
-        self.assertFalse(self.agent.mapping_to_file.called)
+        self.assertFalse(self.agent._write_endpoint_file.called)
