@@ -10,6 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import copy
 import netaddr
 import os
 import signal
@@ -285,11 +286,14 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             vrf_info = {
                 'domain-policy-space': mapping['vrf_tenant'],
                 'domain-name': mapping['vrf_name'],
-                'internal-subnets': list(set(mapping['vrf_subnets']))}
+                'internal-subnets': set(mapping['vrf_subnets'])}
             curr_vrf = self.vrf_dict.setdefault(
                 mapping['l3_policy_id'], {'info': {}, 'vifs': set()})
             if curr_vrf['info'] != vrf_info:
-                self._write_vrf_file(mapping['l3_policy_id'], vrf_info)
+                vrf_info_copy = copy.deepcopy(vrf_info)
+                vrf_info_copy['internal-subnets'] = sorted(list(
+                    vrf_info_copy['internal-subnets']))
+                self._write_vrf_file(mapping['l3_policy_id'], vrf_info_copy)
                 curr_vrf['info'] = vrf_info
             if vif_id:
                 curr_vrf['vifs'].add(vif_id)
