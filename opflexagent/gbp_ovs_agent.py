@@ -253,6 +253,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         # Skip router-interface ports - they interfere with OVS pipeline
         if device_owner in [n_constants.DEVICE_OWNER_ROUTER_INTF]:
             return
+        ips_ext = mapping.get('extra_ips') or []
 
         mapping_dict = {
             "policy-space-name": mapping['ptg_tenant'],
@@ -264,7 +265,6 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             "uuid": port.vif_id}
 
         ips = [x['ip_address'] for x in fixed_ips]
-        ips_ext = []
         if device_owner == n_constants.DEVICE_OWNER_DHCP:
             ips_ext.append(METADATA_DEFAULT_IP)
         else:
