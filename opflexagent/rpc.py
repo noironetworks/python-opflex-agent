@@ -29,12 +29,20 @@ class AgentNotifierApi(n_rpc.RpcProxy):
             topic=topic, default_version=self.BASE_RPC_API_VERSION)
         self.topic_port_update = topics.get_topic_name(topic, topics.PORT,
                                                        topics.UPDATE)
+        self.topic_subnet_update = topics.get_topic_name(topic, topics.SUBNET,
+                                                         topics.UPDATE)
 
     def port_update(self, context, port):
         self.fanout_cast(context,
                          self.make_msg('port_update',
                                        port=port),
                          topic=self.topic_port_update)
+
+    def subnet_update(self, context, subnet):
+        self.fanout_cast(context,
+                         self.make_msg('subnet_update',
+                                       subnet=subnet),
+                         topic=self.topic_subnet_update)
 
 
 class GBPServerRpcApiMixin(n_rpc.RpcProxy):
@@ -64,6 +72,24 @@ class GBPServerRpcApiMixin(n_rpc.RpcProxy):
                                        host=host),
                          version=self.GBP_RPC_VERSION)
 
+    @log.log
+    def get_vrf_details(self, context, agent_id, vrf_id=None, host=None):
+        return self.call(context,
+                         self.make_msg('get_vrf_details',
+                                       agent_id=agent_id,
+                                       vrf_id=vrf_id,
+                                       host=host),
+                         version=self.GBP_RPC_VERSION)
+
+    @log.log
+    def get_vrf_details_list(self, context, agent_id, vrf_ids=None, host=None):
+        return self.call(context,
+                         self.make_msg('get_vrf_details_list',
+                                       agent_id=agent_id,
+                                       vrf_ids=vrf_ids,
+                                       host=host),
+                         version=self.GBP_RPC_VERSION)
+
 
 class GBPServerRpcCallback(n_rpc.RpcCallback):
     """Plugin-side RPC (implementation) for agent-to-plugin interaction."""
@@ -88,4 +114,17 @@ class GBPServerRpcCallback(n_rpc.RpcCallback):
                 **kwargs
             )
             for device in kwargs.pop('devices', [])
+        ]
+
+    def get_vrf_details(self, context, **kwargs):
+        return self.gbp_driver.get_vrf_details(context, **kwargs)
+
+    def get_vrf_details_list(self, context, **kwargs):
+        return [
+            self.get_vrf_details(
+                context,
+                vrf_id=vrf_id,
+                **kwargs
+            )
+            for vrf_id in kwargs.pop('vrf_ids', [])
         ]
