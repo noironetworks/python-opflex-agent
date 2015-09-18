@@ -17,8 +17,10 @@ import signal
 import sys
 
 from neutron.agent.linux import ip_lib
+from neutron.agent import rpc as agent_rpc
 from neutron.common import config as common_config
 from neutron.common import constants as n_constants
+from neutron.common import topics
 from neutron.common import utils as q_utils
 from neutron.openstack.common import uuidutils
 from neutron.plugins.openvswitch.agent import ovs_neutron_agent as ovs
@@ -117,6 +119,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.es_port_dict = {}
         self.vrf_dict = {}
         self.vif_to_vrf = {}
+        self.updated_vrf = set()
+        self.backup_updated_vrf = set()
         del kwargs['hybrid_mode']
         del kwargs['epg_mapping_dir']
         del kwargs['opflex_networks']
@@ -155,6 +159,42 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         super(GBPOvsAgent, self).setup_rpc()
         # Set GBP rpc API
         self.of_rpc = GBPOvsPluginApi(rpc.TOPIC_OPFLEX)
+
+        # Need to override the current RPC callbacks to add subnet related RPC
+        consumers = [[topics.PORT, topics.UPDATE],
+                     [topics.NETWORK, topics.DELETE],
+                     [constants.TUNNEL, topics.UPDATE],
+                     [constants.TUNNEL, topics.DELETE],
+                     [topics.SECURITY_GROUP, topics.UPDATE],
+                     [topics.DVR, topics.UPDATE],
+                     [topics.SUBNET, topics.UPDATE]]
+        if self.l2_pop:
+            consumers.append([topics.L2POPULATION,
+                              topics.UPDATE, cfg.CONF.host])
+        self.connection = agent_rpc.create_consumers(
+            self.endpoints, self.topic, consumers, start_listening=False)
+
+    def subnet_update(self, context, subnet):
+        self.updated_vrf.add(subnet['tenant_id'])
+        LOG.debug("subnet_update message processed for subnet %s",
+                  subnet['id'])
+
+    def _agent_has_updates(self, polling_manager):
+        return (self.updated_vrf or
+                super(GBPOvsAgent, self)._agent_has_updates(polling_manager))
+
+    def _port_info_has_changes(self, port_info):
+        return (port_info.get('vrf_updated') or
+                super(GBPOvsAgent, self)._port_info_has_changes(port_info))
+
+    def scan_ports(self, registered_ports, updated_ports=None):
+        port_info = super(GBPOvsAgent, self).scan_ports(registered_ports,
+                                                        updated_ports)
+        self.backup_updated_vrf = self.updated_vrf
+        self.updated_vrf = set()
+        port_info['vrf_updated'] = self.backup_updated_vrf & set(
+            self.vrf_dict.keys())
+        return port_info
 
     def setup_integration_br(self):
         """Override parent setup integration bridge.
@@ -342,6 +382,23 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 del self.vrf_dict[vrf_id]
                 # No more endpoints for this VRF here
                 self._delete_vrf_file(vrf_id)
+
+    def process_network_ports(self, port_info, ovs_restarted):
+        res = super(GBPOvsAgent, self).process_network_ports(port_info,
+                                                             ovs_restarted)
+        if 'vrf_updated' in port_info:
+            try:
+                vrf_details_list = self.of_rpc.get_vrf_details_list(
+                    self.context, self.agent_id, port_info['vrf_updated'],
+                    cfg.CONF.host)
+                for details in vrf_details_list:
+                    self.vrf_info_to_file(details)
+            except Exception as e:
+                LOG.error("VRF update failed because of %s", e.message)
+                if self.backup_updated_vrf:
+                    self.updated_vrf = self.backup_updated_vrf
+                raise
+        return res
 
     def treat_devices_added_or_updated(self, devices, ovs_restarted):
         # REVISIT(ivar): This method is copied from parent in order to inject

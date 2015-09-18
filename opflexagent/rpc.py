@@ -31,10 +31,17 @@ class AgentNotifierApi(object):
         self.client = n_rpc.get_client(target)
         self.topic_port_update = topics.get_topic_name(topic, topics.PORT,
                                                        topics.UPDATE)
+        self.topic_subnet_update = topics.get_topic_name(topic, topics.SUBNET,
+                                                         topics.UPDATE)
 
     def port_update(self, context, port):
         cctxt = self.client.prepare(fanout=True, topic=self.topic_port_update)
         cctxt.cast(context, 'port_update', port=port)
+
+    def subnet_update(self, context, subnet):
+        cctxt = self.client.prepare(fanout=True,
+                                    topic=self.topic_subnet_update)
+        cctxt.cast(context, 'subnet_update', subnet=subnet)
 
 
 class GBPServerRpcApiMixin(object):
@@ -58,6 +65,18 @@ class GBPServerRpcApiMixin(object):
         cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
         return cctxt.call(context, 'get_gbp_details_list', agent_id=agent_id,
                           devices=devices, host=host)
+
+    @log.log
+    def get_vrf_details(self, context, agent_id, vrf_id=None, host=None):
+        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
+        return cctxt.call(context, 'get_vrf_details', agent_id=agent_id,
+                          vrf_id=vrf_id, host=host)
+
+    @log.log
+    def get_vrf_details_list(self, context, agent_id, vrf_ids=None, host=None):
+        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
+        return cctxt.call(context, 'get_vrf_details_list', agent_id=agent_id,
+                          vrf_ids=vrf_ids, host=host)
 
 
 class GBPServerRpcCallback(object):
@@ -83,4 +102,17 @@ class GBPServerRpcCallback(object):
                 **kwargs
             )
             for device in kwargs.pop('devices', [])
+        ]
+
+    def get_vrf_details(self, context, **kwargs):
+        return self.gbp_driver.get_vrf_details(context, **kwargs)
+
+    def get_vrf_details_list(self, context, **kwargs):
+        return [
+            self.get_vrf_details(
+                context,
+                vrf_id=vrf_id,
+                **kwargs
+            )
+            for vrf_id in kwargs.pop('vrf_ids', [])
         ]

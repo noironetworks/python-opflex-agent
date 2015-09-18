@@ -47,7 +47,14 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.agent._delete_endpoint_file = mock.Mock()
         self.agent._delete_vrf_file = mock.Mock()
         self.agent.opflex_networks = ['phys_net']
+        self.agent.int_br = mock.Mock()
+        self.agent.int_br.get_vif_port_set = mock.Mock(return_value=set())
+        self.agent.provision_local_vlan = mock.Mock()
+        self.agent.of_rpc.get_gbp_details = mock.Mock()
         self.addCleanup(self._purge_endpoint_dir)
+        self.addCleanup(self.agent.provision_local_vlan.reset_mock)
+        self.addCleanup(self.agent.int_br.reset_mock)
+        self.addCleanup(self.agent.of_rpc.get_gbp_details)
 
     def _purge_endpoint_dir(self):
         try:
@@ -133,10 +140,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
 
     def test_port_bound(self):
         self.agent.int_br = mock.Mock()
-        self.agent.of_rpc.get_gbp_details = mock.Mock()
         mapping = self._get_gbp_details()
         self.agent.of_rpc.get_gbp_details.return_value = mapping
-        self.agent.provision_local_vlan = mock.Mock()
         args = self._port_bound_args('opflex')
         args['port'].gbp_details = mapping
         self.agent.port_bound(**args)
@@ -197,8 +202,6 @@ class TestGbpOvsAgent(base.BaseTestCase):
     def test_port_unbound_delete_vrf_file(self):
         # Bind 2 ports on same VRF
         self.agent.int_br = mock.Mock()
-        self.agent.of_rpc.get_gbp_details = mock.Mock()
-        self.agent.provision_local_vlan = mock.Mock()
 
         # Port 1
         mapping = self._get_gbp_details()
@@ -237,12 +240,85 @@ class TestGbpOvsAgent(base.BaseTestCase):
 
     def test_port_bound_no_mapping(self):
         self.agent.int_br = mock.Mock()
-        self.agent.of_rpc.get_gbp_details = mock.Mock()
         self.agent.of_rpc.get_gbp_details.return_value = None
-        self.agent.provision_local_vlan = mock.Mock()
         args = self._port_bound_args('opflex')
         args['port'].gbp_details = None
         self.agent.port_bound(**args)
         self.assertFalse(self.agent.int_br.set_db_attribute.called)
         self.assertFalse(self.agent.provision_local_vlan.called)
         self.assertFalse(self.agent._write_endpoint_file.called)
+
+    def test_subnet_update(self):
+        fake_sub = {'tenant_id': 'tenant-id', 'id': 'someid'}
+        self.agent.subnet_update(mock.Mock(), fake_sub)
+        self.assertEqual(set(['tenant-id']), self.agent.updated_vrf)
+
+    def test_subnet_has_updates(self):
+        fake_sub = {'tenant_id': 'tenant-id', 'id': 'someid'}
+        polling_manager = mock.Mock()
+        polling_manager.is_polling_required = False
+        self.agent.sg_agent.firewall_refresh_needed = mock.Mock(
+            return_value=False)
+        self.assertFalse(self.agent._agent_has_updates(polling_manager))
+        self.agent.subnet_update(mock.Mock(), fake_sub)
+        self.assertTrue(self.agent._agent_has_updates(polling_manager))
+
+    def test_scan_ports(self):
+        fake_sub1 = {'tenant_id': 'tenant-id', 'id': 'someid'}
+        fake_sub2 = {'tenant_id': 'tenant-id-2', 'id': 'someid'}
+        self.agent.subnet_update(mock.Mock(), fake_sub1)
+        self.agent.subnet_update(mock.Mock(), fake_sub2)
+        port_info = self.agent.scan_ports(set())
+        # Empty since no tenant is server by this agent ATM
+        self.assertEqual(set(), port_info['vrf_updated'])
+        # Update list emptied
+        self.assertEqual(set(), self.agent.updated_vrf)
+        self.assertEqual(set(['tenant-id', 'tenant-id-2']),
+                         self.agent.backup_updated_vrf)
+
+        # Bind port for tenant-id
+        mapping = self._get_gbp_details(l3_policy_id='tenant-id')
+        self.agent.of_rpc.get_gbp_details.return_value = mapping
+        args = self._port_bound_args('opflex')
+        args['port'].gbp_details = mapping
+        self.agent.port_bound(**args)
+        self.agent.subnet_update(mock.Mock(), fake_sub1)
+        self.agent.subnet_update(mock.Mock(), fake_sub2)
+
+        port_info = self.agent.scan_ports(set())
+        # Port info will have tenant-id to be served
+        self.assertEqual(set(['tenant-id']), port_info['vrf_updated'])
+        # Update list emptied
+        self.assertEqual(set(), self.agent.updated_vrf)
+        self.assertEqual(set(['tenant-id', 'tenant-id-2']),
+                         self.agent.backup_updated_vrf)
+
+    def test_process_network_ports(self):
+        fake_sub = {'tenant_id': 'tenant-id', 'id': 'someid'}
+
+        mapping = self._get_gbp_details(l3_policy_id='tenant-id')
+        self.agent.of_rpc.get_gbp_details.return_value = mapping
+        self.agent.of_rpc.get_vrf_details_list = mock.Mock(
+            return_value=[{'l3_policy_id': 'tenant-id',
+                           'vrf_tenant': mapping['vrf_tenant'],
+                           'vrf_name': mapping['vrf_name'],
+                           'vrf_subnets': mapping['vrf_subnets'] +
+                           ['1.1.1.0/24']}])
+
+        args = self._port_bound_args('opflex')
+        args['port'].gbp_details = mapping
+        self.agent.port_bound(**args)
+        self.agent._write_vrf_file.reset_mock()
+        self.agent.subnet_update(mock.Mock(), fake_sub)
+
+        port_info = self.agent.scan_ports(set())
+        self.agent.process_network_ports(port_info, False)
+        self.agent.of_rpc.get_vrf_details_list.assert_called_once_with(
+            mock.ANY, mock.ANY, set(['tenant-id']), mock.ANY)
+        self.agent._write_vrf_file.assert_called_once_with(
+            'tenant-id', {
+                "domain-policy-space": mapping['vrf_tenant'],
+                "domain-name": mapping['vrf_name'],
+                "internal-subnets": sorted(['192.168.0.0/16',
+                                            '192.169.0.0/16',
+                                            '1.1.1.0/24'])})
