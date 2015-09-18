@@ -268,7 +268,6 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             "uuid": port.vif_id}
 
         ips = [x['ip_address'] for x in fixed_ips]
-        ips_ext = []
         if device_owner == n_constants.DEVICE_OWNER_DHCP:
             ips_ext.append(METADATA_DEFAULT_IP)
         else:
