@@ -43,7 +43,9 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.ep_dir = EP_DIR % _uuid()
         self.agent = self._initialize_agent()
         self.agent._write_endpoint_file = mock.Mock()
-        self.agent.mapping_cleanup = mock.Mock()
+        self.agent._write_vrf_file = mock.Mock()
+        self.agent._delete_endpoint_file = mock.Mock()
+        self.agent._delete_vrf_file = mock.Mock()
         self.agent.opflex_networks = ['phys_net']
         self.addCleanup(self._purge_endpoint_dir)
 
@@ -101,6 +103,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                    'segmentation_id': None,
                    'network_type': None,
                    'l2_policy_id': 'l2p_id',
+                   'l3_policy_id': 'l3p_id',
                    'tenant_id': 'tenant_id',
                    'host': 'host1',
                    'app_profile_name': 'profile_name',
@@ -108,7 +111,10 @@ class TestGbpOvsAgent(base.BaseTestCase):
                    'endpoint_group_name': 'epg_name',
                    'promiscuous_mode': False,
                    'vm-name': 'somename',
-                   'extra_ips': ['192.169.8.1', '192.169.8.254']}
+                   'extra_ips': ['192.169.8.1', '192.169.8.254'],
+                   'vrf_name': 'name_of_l3p',
+                   'vrf_tenant': 'apic_tenant',
+                   'vrf_subnets': ['192.168.0.0/16', '192.169.0.0/16']}
         pattern.update(**kwargs)
         return pattern
 
@@ -149,6 +155,82 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 "attributes": {'vm-name': 'somename'},
                 "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
                        '192.169.8.254']})
+        self.agent._write_vrf_file.assert_called_once_with(
+            'l3p_id', {
+                "domain-policy-space": 'apic_tenant',
+                "domain-name": 'name_of_l3p',
+                "internal-subnets": set(['192.168.0.0/16', '192.169.0.0/16'])})
+
+        self.agent._write_vrf_file.reset_mock()
+
+        # Bind another port for the same L3P, VRF file is not written
+        args = self._port_bound_args('opflex')
+        args['port'].gbp_details = mapping
+        self.agent.port_bound(**args)
+        self.assertFalse(self.agent._write_vrf_file.called)
+        self.agent._write_vrf_file.reset_mock()
+
+        # Bind another port on a different L3P, new VRF file added
+        args = self._port_bound_args('opflex')
+        args['port'].gbp_details = self._get_gbp_details(l3_policy_id='newid')
+        self.agent.port_bound(**args)
+        self.agent._write_vrf_file.assert_called_once_with(
+            'newid', {
+                "domain-policy-space": 'apic_tenant',
+                "domain-name": 'name_of_l3p',
+                "internal-subnets": set(['192.168.0.0/16', '192.169.0.0/16'])})
+        self.agent._write_vrf_file.reset_mock()
+
+        # Bind another port on a same L3P, but subnets changed
+        args = self._port_bound_args('opflex')
+        args['port'].gbp_details = self._get_gbp_details(
+            l3_policy_id='newid', vrf_subnets=['192.170.0.0/16'])
+        self.agent.port_bound(**args)
+        self.agent._write_vrf_file.assert_called_once_with(
+            'newid', {
+                "domain-policy-space": 'apic_tenant',
+                "domain-name": 'name_of_l3p',
+                "internal-subnets": set(['192.170.0.0/16'])})
+
+    def test_port_unbound_delete_vrf_file(self):
+        # Bind 2 ports on same VRF
+        self.agent.int_br = mock.Mock()
+        self.agent.of_rpc.get_gbp_details = mock.Mock()
+        self.agent.provision_local_vlan = mock.Mock()
+
+        # Port 1
+        mapping = self._get_gbp_details()
+        self.agent.of_rpc.get_gbp_details.return_value = mapping
+        args_1 = self._port_bound_args('opflex')
+        args_1['port'].gbp_details = mapping
+        self.agent.port_bound(**args_1)
+
+        # Port 2
+        args_2 = self._port_bound_args('opflex')
+        args_2['port'].gbp_details = mapping
+        self.agent.port_bound(**args_2)
+
+        self.agent._delete_vrf_file.reset_mock()
+        self.agent.port_unbound(args_1['port'].vif_id)
+        # VRF file not deleted
+        self.assertFalse(self.agent._delete_vrf_file.called)
+
+        self.agent._delete_vrf_file.reset_mock()
+        self.agent.port_unbound(args_2['port'].vif_id)
+        # VRF file deleted
+        self.agent._delete_vrf_file.assert_called_once_with('l3p_id')
+
+        self.agent._write_vrf_file.reset_mock()
+        # At this point, creation of a new port on that VRF will recreate the
+        # file
+        args_3 = self._port_bound_args('opflex')
+        args_3['port'].gbp_details = mapping
+        self.agent.port_bound(**args_3)
+        self.agent._write_vrf_file.assert_called_once_with(
+            'l3p_id', {
+                "domain-policy-space": 'apic_tenant',
+                "domain-name": 'name_of_l3p',
+                "internal-subnets": set(['192.168.0.0/16', '192.169.0.0/16'])})
 
     def test_port_bound_no_mapping(self):
         self.agent.int_br = mock.Mock()

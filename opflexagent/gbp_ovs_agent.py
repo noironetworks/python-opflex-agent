@@ -58,6 +58,8 @@ cfg.CONF.register_opts(gbp_opts, "OPFLEX")
 
 FILE_EXTENSION = "ep"
 FILE_NAME_FORMAT = "%s." + FILE_EXTENSION
+VRF_FILE_EXTENSION = "rdconfig"
+VRF_FILE_NAME_FORMAT = "%s." + VRF_FILE_EXTENSION
 METADATA_DEFAULT_IP = '169.254.169.254'
 
 
@@ -96,6 +98,11 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.epg_mapping_file = (kwargs['epg_mapping_dir'] +
                                  ('/' if separator != '/' else '') +
                                  FILE_NAME_FORMAT)
+        self.vrf_mapping_file = (kwargs['epg_mapping_dir'] +
+                                 ('/' if separator != '/' else '') +
+                                 VRF_FILE_NAME_FORMAT)
+        self.file_formats = [self.epg_mapping_file,
+                             self.vrf_mapping_file]
         self.opflex_networks = kwargs['opflex_networks']
         if self.opflex_networks and self.opflex_networks[0] == '*':
             self.opflex_networks = None
@@ -107,6 +114,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.int_fip_alloc = {4: {}, 6: {}}
         self._load_es_next_hop_info(kwargs['external_segment'])
         self.es_port_dict = {}
+        self.vrf_dict = {}
+        self.vif_to_vrf = {}
         del kwargs['hybrid_mode']
         del kwargs['epg_mapping_dir']
         del kwargs['opflex_networks']
@@ -119,18 +128,23 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.setup_pt_directory()
 
     def setup_pt_directory(self):
-        directory = os.path.dirname(self.epg_mapping_file)
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-            return
-        # Remove all existing EPs mapping
-        for f in os.listdir(directory):
-            if f.endswith('.' + FILE_EXTENSION):
-                try:
-                    os.remove(os.path.join(directory, f))
-                except OSError as e:
-                    LOG.debug(e.message)
-        self.snat_iptables.cleanup_snat_all()
+        created = False
+        for file_format in self.file_formats:
+            directory = os.path.dirname(file_format)
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+                created = True
+                continue
+            # Remove all existing EPs mapping
+            for f in os.listdir(directory):
+                if f.endswith('.' + FILE_EXTENSION) or f.endswith(
+                        '.' + VRF_FILE_EXTENSION):
+                    try:
+                        os.remove(os.path.join(directory, f))
+                    except OSError as e:
+                        LOG.debug(e.message)
+        if not created:
+            self.snat_iptables.cleanup_snat_all()
 
     def setup_rpc(self):
         self.agent_state['agent_type'] = ofcst.AGENT_TYPE_OPFLEX_OVS
@@ -263,6 +277,22 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             mapping_dict['attributes'] = {'vm-name': mapping['vm-name']}
         self._fill_ip_mapping_info(port.vif_id, mapping, ips, mapping_dict)
         self._write_endpoint_file(port.vif_id, mapping_dict)
+        self.vrf_info_to_file(mapping, vif_id=port.vif_id)
+
+    def vrf_info_to_file(self, mapping, vif_id=None):
+        if 'vrf_subnets' in mapping:
+            vrf_info = {
+                'domain-policy-space': mapping['vrf_tenant'],
+                'domain-name': mapping['vrf_name'],
+                'internal-subnets': set(mapping['vrf_subnets'])}
+            curr_vrf = self.vrf_dict.setdefault(
+                mapping['l3_policy_id'], {'info': {}, 'vifs': set()})
+            if curr_vrf['info'] != vrf_info:
+                self._write_vrf_file(mapping['l3_policy_id'], vrf_info)
+                curr_vrf['info'] = vrf_info
+            if vif_id:
+                curr_vrf['vifs'].add(vif_id)
+                self.vif_to_vrf[vif_id] = mapping['l3_policy_id']
 
     def _map_dhcp_info(self, fixed_ips, subnets, mapping_dict):
         v4subnets = {k['id']: k for k in subnets
@@ -293,11 +323,21 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 'dns-servers': v6subnets[0]['dns_nameservers']}
 
     def mapping_cleanup(self, vif_id):
+        LOG.debug('Cleaning mapping for vif id %s', vif_id)
         self._delete_endpoint_file(vif_id)
         es = self._get_es_for_port(vif_id)
         self._dissociate_port_from_es(vif_id, es)
         self._release_int_fip(4, vif_id)
         self._release_int_fip(6, vif_id)
+        vrf_id = self.vif_to_vrf.get(vif_id)
+        vrf = self.vrf_dict.get(vrf_id)
+        if vrf:
+            del self.vif_to_vrf[vif_id]
+            vrf['vifs'].discard(vif_id)
+            if not vrf['vifs']:
+                del self.vrf_dict[vrf_id]
+                # No more endpoints for this VRF here
+                self._delete_vrf_file(vrf_id)
 
     def treat_devices_added_or_updated(self, devices, ovs_restarted):
         # REVISIT(ivar): This method is copied from parent in order to inject
@@ -366,15 +406,27 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         return skipped_devices
 
     def _write_endpoint_file(self, port_id, mapping_dict):
-        filename = self.epg_mapping_file % port_id
+        return self._write_file(port_id, mapping_dict, self.epg_mapping_file)
+
+    def _delete_endpoint_file(self, port_id):
+        return self._delete_file(port_id, self.epg_mapping_file)
+
+    def _write_vrf_file(self, vrf_id, mapping_dict):
+        return self._write_file(vrf_id, mapping_dict, self.vrf_mapping_file)
+
+    def _delete_vrf_file(self, vrf_id):
+        return self._delete_file(vrf_id, self.vrf_mapping_file)
+
+    def _write_file(self, port_id, mapping_dict, file_format):
+        filename = file_format % port_id
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
         with open(filename, 'w') as f:
             jsonutils.dump(mapping_dict, f)
 
-    def _delete_endpoint_file(self, port_id):
+    def _delete_file(self, port_id, file_format):
         try:
-            os.remove(self.epg_mapping_file % port_id)
+            os.remove(file_format % port_id)
         except OSError as e:
             LOG.debug(e.message)
 
