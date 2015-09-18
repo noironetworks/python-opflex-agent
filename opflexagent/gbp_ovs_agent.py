@@ -285,7 +285,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             vrf_info = {
                 'domain-policy-space': mapping['vrf_tenant'],
                 'domain-name': mapping['vrf_name'],
-                'internal-subnets': set(mapping['vrf_subnets'])}
+                'internal-subnets': list(set(mapping['vrf_subnets']))}
             curr_vrf = self.vrf_dict.setdefault(
                 mapping['l3_policy_id'], {'info': {}, 'vifs': set()})
             if curr_vrf['info'] != vrf_info:
