@@ -157,7 +157,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
             'l3p_id', {
                 "domain-policy-space": 'apic_tenant',
                 "domain-name": 'name_of_l3p',
-                "internal-subnets": set(['192.168.0.0/16', '192.169.0.0/16'])})
+                "internal-subnets": sorted(['192.168.0.0/16',
+                                            '192.169.0.0/16'])})
 
         self.agent._write_vrf_file.reset_mock()
 
@@ -176,7 +177,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
             'newid', {
                 "domain-policy-space": 'apic_tenant',
                 "domain-name": 'name_of_l3p',
-                "internal-subnets": set(['192.168.0.0/16', '192.169.0.0/16'])})
+                "internal-subnets": sorted(['192.168.0.0/16',
+                                            '192.169.0.0/16'])})
         self.agent._write_vrf_file.reset_mock()
 
         # Bind another port on a same L3P, but subnets changed
@@ -188,7 +190,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
             'newid', {
                 "domain-policy-space": 'apic_tenant',
                 "domain-name": 'name_of_l3p',
-                "internal-subnets": set(['192.170.0.0/16'])})
+                "internal-subnets": sorted(['192.170.0.0/16'])})
 
     def test_port_unbound_delete_vrf_file(self):
         # Bind 2 ports on same VRF
@@ -228,7 +230,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
             'l3p_id', {
                 "domain-policy-space": 'apic_tenant',
                 "domain-name": 'name_of_l3p',
-                "internal-subnets": set(['192.168.0.0/16', '192.169.0.0/16'])})
+                "internal-subnets": sorted(['192.168.0.0/16',
+                                            '192.169.0.0/16'])})
 
     def test_port_bound_no_mapping(self):
         self.agent.int_br = mock.Mock()
