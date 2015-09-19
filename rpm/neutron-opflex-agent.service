@@ -1,6 +1,8 @@
 [Unit]
 Description=Neutron OpFlex Plugin Agent
-After=syslog.target network.target
+After=syslog.target network.target agent-ovs.service
+Wants=agent-ovs.service
+Before=openstack-nova-compute.service
 
 [Service]
 Type=simple
