@@ -387,7 +387,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
     def process_network_ports(self, port_info, ovs_restarted):
         res = super(GBPOvsAgent, self).process_network_ports(port_info,
                                                              ovs_restarted)
-        if 'vrf_updated' in port_info:
+        if port_info.get('vrf_updated'):
             try:
                 vrf_details_list = self.of_rpc.get_vrf_details_list(
                     self.context, self.agent_id, port_info['vrf_updated'],
