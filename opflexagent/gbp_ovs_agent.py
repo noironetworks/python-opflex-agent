@@ -307,7 +307,17 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
 
         ips = [x['ip_address'] for x in fixed_ips]
         if device_owner == n_constants.DEVICE_OWNER_DHCP:
-            ips_ext.append(METADATA_DEFAULT_IP)
+            mapping_dict['virtual-ip'] = {
+                'ip': METADATA_DEFAULT_IP,
+                'mac': port.vif_mac,
+            }
+            # vm-name, if specified in mappings, will override this
+            mapping_dict['attributes'] = {'vm-name': (
+                'dhcp|' +
+                mapping['ptg_tenant'] + '|' +
+                mapping['app_profile_name'] + '|' +
+                mapping['endpoint_group_name'])
+            }
         else:
             if (mapping.get('enable_dhcp_optimization', False) and
                'subnets' in mapping):
@@ -588,13 +598,22 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             if s:
                 ips.extend(list(netaddr.iter_iprange(s, e or s)))
         ep_dict = {
+            "attributes": {
+                "vm-name": (
+                    "snat|" +
+                    cfg.CONF.host + "|" +
+                    ipm["nat_epg_tenant"] + "|" +
+                    ipm["nat_epg_name"]
+                )
+            },
             "policy-space-name": ipm['nat_epg_tenant'],
             "endpoint-group-name": ipm['nat_epg_name'],
             "interface-name": nh.next_hop_iface,
             "ip": [str(x) for x in ips],
             "mac": nh.next_hop_mac,
             "uuid": uuidutils.generate_uuid(),
-            "promiscuous-mode": True}
+            "promiscuous-mode": True,
+        }
         self._write_endpoint_file(nh.es_name, ep_dict)
 
     def _associate_port_with_es(self, port_id, ess):
