@@ -510,7 +510,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             if 'nat_epg_tenant' in fip:
                 fm['policy-space-name'] = fip['nat_epg_tenant']
             if 'nat_epg_name' in fip:
-                fm['endpoint-group-name'] = (gbp_details['nat_epg_app_profile']
+                fm['endpoint-group-name'] = (fip['nat_epg_app_profile']
                                              + "|" + fip['nat_epg_name'])
             mapping.setdefault('ip-address-mapping', []).append(fm)
 
@@ -521,7 +521,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 not ipm.get('nat_epg_name')):
                 continue
             es = ipm['external_segment_name']
-            epg = (gbp_details['nat_epg_app_profile'] + "|" +
+            epg = (ipm['nat_epg_app_profile'] + "|" +
                    ipm['nat_epg_name'])
             ipm['nat_epg_name'] = epg
             next_hop_if, next_hop_mac = self._get_next_hop_info_for_es(ipm)
