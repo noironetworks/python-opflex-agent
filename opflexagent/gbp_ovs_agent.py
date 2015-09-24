@@ -319,16 +319,13 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                                     mapping['endpoint_group_name']),
             "interface-name": port.port_name,
             "mac": port.vif_mac,
-            "promiscuous-mode": mapping['promiscuous_mode'],
+            "promiscuous-mode": mapping.get('promiscuous_mode') or False,
             "uuid": port.vif_id,
             'neutron-network': net_uuid}
 
         ips = [x['ip_address'] for x in fixed_ips]
+        virtual_ips = []
         if device_owner == n_constants.DEVICE_OWNER_DHCP:
-            mapping_dict['virtual-ip'] = {
-                'ip': METADATA_DEFAULT_IP,
-                'mac': port.vif_mac,
-            }
             # vm-name, if specified in mappings, will override this
             mapping_dict['attributes'] = {'vm-name': (
                 'dhcp|' +
@@ -341,7 +338,14 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                'subnets' in mapping):
                     self._map_dhcp_info(fixed_ips, mapping['subnets'],
                                         mapping_dict)
+        for aap in mapping.get('allowed_address_pairs', []):
+            if aap.get('ip_address'):
+                virtual_ips.append(
+                    {'ip': aap['ip_address'],
+                     'mac': aap.get('mac_address', port.vif_mac)})
         mapping_dict['ip'] = ips + ips_ext
+        if virtual_ips:
+            mapping_dict['virtual-ip'] = virtual_ips
 
         if 'vm-name' in mapping:
             mapping_dict['attributes'] = {'vm-name': mapping['vm-name']}
