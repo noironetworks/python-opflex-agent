@@ -11,8 +11,8 @@ BuildArch:	noarch
 BuildRequires:	python2-devel
 BuildRequires:	python-pbr
 BuildRequires:	python-setuptools
-Requires:	openstack-neutron >= 2014.2
-Requires:	openstack-neutron < 2014.3
+Requires:	openstack-neutron >= 2015.1
+Requires:	openstack-neutron < 2015.2
 Requires(post): systemd-units
 Requires(preun): systemd-units
 Requires(postun): systemd-units
