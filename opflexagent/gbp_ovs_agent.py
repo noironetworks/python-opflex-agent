@@ -16,6 +16,7 @@ import os
 import signal
 import sys
 
+from neutron.agent.common import config
 from neutron.agent.linux import ip_lib
 from neutron.agent import rpc as agent_rpc
 from neutron.common import config as common_config
@@ -24,7 +25,6 @@ from neutron.common import topics
 from neutron.common import utils as q_utils
 from neutron.openstack.common import uuidutils
 from neutron.plugins.openvswitch.agent import ovs_neutron_agent as ovs
-from neutron.plugins.openvswitch.common import config  # noqa
 from neutron.plugins.openvswitch.common import constants
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -121,12 +121,14 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.vif_to_vrf = {}
         self.updated_vrf = set()
         self.backup_updated_vrf = set()
+        self.root_helper = kwargs['root_helper']
         del kwargs['hybrid_mode']
         del kwargs['epg_mapping_dir']
         del kwargs['opflex_networks']
         del kwargs['internal_floating_ip_pool']
         del kwargs['internal_floating_ip6_pool']
         del kwargs['external_segment']
+        del kwargs['root_helper']
 
         super(GBPOvsAgent, self).__init__(**kwargs)
         self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
@@ -700,6 +702,7 @@ def create_agent_config_map(conf):
 
 def main():
     cfg.CONF.register_opts(ip_lib.OPTS)
+    config.register_root_helper(cfg.CONF)
     common_config.init(sys.argv[1:])
     common_config.setup_logging()
     q_utils.log_opt_values(LOG)
@@ -707,19 +710,24 @@ def main():
     try:
         agent_config = create_agent_config_map(cfg.CONF)
     except ValueError as e:
-        LOG.error(_('%s Agent terminated!'), e)
+        LOG.error(_LE('%s Agent terminated!'), e)
         sys.exit(1)
 
-    is_xen_compute_host = 'rootwrap-xen-dom0' in agent_config['root_helper']
+    is_xen_compute_host = 'rootwrap-xen-dom0' in cfg.CONF.AGENT.root_helper
     if is_xen_compute_host:
         # Force ip_lib to always use the root helper to ensure that ip
         # commands target xen dom0 rather than domU.
         cfg.CONF.set_default('ip_lib_force_root', True)
-    agent = GBPOvsAgent(**agent_config)
+    try:
+        agent = GBPOvsAgent(root_helper=cfg.CONF.AGENT.root_helper,
+                            **agent_config)
+    except RuntimeError as e:
+        LOG.error(_LE("%s Agent terminated!"), e)
+        sys.exit(1)
     signal.signal(signal.SIGTERM, agent._handle_sigterm)
 
     # Start everything.
-    LOG.info(_("Agent initialized successfully, now running... "))
+    LOG.info(_LI("Agent initialized successfully, now running... "))
     agent.daemon_loop()
 
 
