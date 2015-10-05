@@ -156,6 +156,9 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 "promiscuous-mode": mapping['promiscuous_mode'],
                 "uuid": args['port'].vif_id,
                 "attributes": {'vm-name': 'somename'},
+                "neutron-network": "net_id",
+                "domain-policy-space": 'apic_tenant',
+                "domain-name": 'name_of_l3p',
                 "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
                        '192.169.8.254']})
         self.agent._write_vrf_file.assert_called_once_with(
