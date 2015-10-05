@@ -267,7 +267,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     (physical_network in self.opflex_networks)):
                 # Port has to be untagged due to a opflex agent requirement
                 self.int_br.clear_db_attribute("Port", port.port_name, "tag")
-                self.mapping_to_file(port, mapping, fixed_ips, device_owner)
+                self.mapping_to_file(port, net_uuid, mapping, fixed_ips,
+                                     device_owner)
             else:
                 # PT cleanup may be needed
                 self.mapping_cleanup(port.vif_id)
@@ -288,7 +289,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         # Delete epg mapping file
         self.mapping_cleanup(vif_id)
 
-    def mapping_to_file(self, port, mapping, fixed_ips, device_owner):
+    def mapping_to_file(self, port, net_uuid, mapping, fixed_ips,
+                        device_owner):
         """Mapping to file.
 
         Converts the port mapping into file.
@@ -305,7 +307,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             "interface-name": port.port_name,
             "mac": port.vif_mac,
             "promiscuous-mode": mapping['promiscuous_mode'],
-            "uuid": port.vif_id}
+            "uuid": port.vif_id,
+            'neutron-network': net_uuid}
 
         ips = [x['ip_address'] for x in fixed_ips]
         if device_owner == n_constants.DEVICE_OWNER_DHCP:
@@ -329,6 +332,10 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
 
         if 'vm-name' in mapping:
             mapping_dict['attributes'] = {'vm-name': mapping['vm-name']}
+        if 'vrf_name' in mapping:
+            mapping_dict['domain-policy-space'] = mapping['vrf_tenant']
+            mapping_dict['domain-name'] = mapping['vrf_name']
+
         self._fill_ip_mapping_info(port.vif_id, mapping, ips, mapping_dict)
         self._write_endpoint_file(port.vif_id, mapping_dict)
         self.vrf_info_to_file(mapping, vif_id=port.vif_id)
