@@ -19,6 +19,7 @@ sys.modules["apicapi"] = mock.Mock()
 import contextlib
 from opflexagent import gbp_ovs_agent
 
+from neutron.agent.dhcp import config as dhcp_config
 from neutron.openstack.common import uuidutils
 from neutron.tests import base
 from oslo.config import cfg
@@ -31,6 +32,7 @@ EP_DIR = '.%s_endpoints/'
 class TestGbpOvsAgent(base.BaseTestCase):
 
     def setUp(self):
+        cfg.CONF.register_opts(dhcp_config.DHCP_OPTS)
         super(TestGbpOvsAgent, self).setUp()
         notifier_p = mock.patch(NOTIFIER)
         notifier_cls = notifier_p.start()
