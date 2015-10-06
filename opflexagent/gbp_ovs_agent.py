@@ -16,6 +16,7 @@ import os
 import signal
 import sys
 
+from neutron.agent.linux import dhcp
 from neutron.agent.linux import ip_lib
 from neutron.agent import rpc as agent_rpc
 from neutron.common import config as common_config
@@ -121,12 +122,14 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.vif_to_vrf = {}
         self.updated_vrf = set()
         self.backup_updated_vrf = set()
+        self.dhcp_domain = kwargs['dhcp_domain']
         del kwargs['hybrid_mode']
         del kwargs['epg_mapping_dir']
         del kwargs['opflex_networks']
         del kwargs['internal_floating_ip_pool']
         del kwargs['internal_floating_ip6_pool']
         del kwargs['external_segment']
+        del kwargs['dhcp_domain']
 
         super(GBPOvsAgent, self).__init__(**kwargs)
         self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
@@ -370,6 +373,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             dhcp4 = {'ip': fip['ip_address'],
                      'routers': [sn['gateway_ip']],
                      'dns-servers': sn['dns_nameservers'],
+                     'domain': self.dhcp_domain,
                      'prefix-len': netaddr.IPNetwork(sn['cidr']).prefixlen}
             dhcp4['static-routes'] = []
             for hr in sn['host_routes']:
@@ -378,6 +382,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     {'dest': str(cidr.network),
                      'dest-prefix': cidr.prefixlen,
                      'next-hop': hr['nexthop']})
+            if 'dhcp_server_ips' in sn:
+                dhcp4['server-ip'] = sn['dhcp_server_ips'][0]
             mapping_dict['dhcp4'] = dhcp4
             break
         if len(v6subnets) > 0 and v6subnets[0]['dns_nameservers']:
@@ -702,11 +708,13 @@ def create_agent_config_map(conf):
                 if es_name:
                     es_info[es_name] = parsed_file[parsed_item].items()
     agent_config['external_segment'] = es_info
+    agent_config['dhcp_domain'] = conf.dhcp_domain
     return agent_config
 
 
 def main():
     cfg.CONF.register_opts(ip_lib.OPTS)
+    cfg.CONF.register_opts(dhcp.OPTS)
     common_config.init(sys.argv[1:])
     common_config.setup_logging()
     q_utils.log_opt_values(LOG)
