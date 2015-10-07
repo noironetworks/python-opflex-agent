@@ -299,6 +299,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         Converts the port mapping into file.
         """
         # Skip router-interface ports - they interfere with OVS pipeline
+
+        fixed_ips = mapping.get('fixed_ips') or fixed_ips
         if device_owner in [n_constants.DEVICE_OWNER_ROUTER_INTF]:
             return
         ips_ext = mapping.get('extra_ips') or []
