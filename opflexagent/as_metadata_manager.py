@@ -329,7 +329,7 @@ class StateWatcher(FileWatcher):
         # nnetwork = alloc["neutron-network"]
         asvc = {
             "uuid": alloc["uuid"],
-            "interface-name": SVC_OVS_PORT,
+            "interface-name": SVC_NS_PORT,
             "service-mac": self.svc_ovs_port_mac,
             "neutron-network": alloc["uuid"],
             "domain-policy-space": alloc["domain-policy-space"],
@@ -526,7 +526,7 @@ nocleanup = false
 strip_ansi = false
 
 [program:metadata-agent]
-command=/usr/bin/neutron-metadata-agent --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/metadata_agent.ini --config-dir /etc/neutron/metadata-agent.ini --log-file /var/log/neutron/metadata-agent.log
+command=/usr/bin/neutron-metadata-agent --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/metadata_agent.ini --config-dir /etc/neutron/metadata_agent.ini --log-file /var/log/neutron/metadata-agent.log
 exitcodes=0,2
 startsecs=10
 startretries=3
