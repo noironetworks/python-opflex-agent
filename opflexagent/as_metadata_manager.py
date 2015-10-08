@@ -329,7 +329,7 @@ class StateWatcher(FileWatcher):
         # nnetwork = alloc["neutron-network"]
         asvc = {
             "uuid": alloc["uuid"],
-            "interface-name": SVC_NS_PORT,
+            "interface-name": SVC_OVS_PORT,
             "service-mac": self.svc_ovs_port_mac,
             "neutron-network": alloc["uuid"],
             "domain-policy-space": alloc["domain-policy-space"],
