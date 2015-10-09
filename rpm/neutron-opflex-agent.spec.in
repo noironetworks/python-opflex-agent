@@ -13,6 +13,8 @@ BuildRequires:	python-pbr
 BuildRequires:	python-setuptools
 Requires:	openstack-neutron >= 2015.1
 Requires:	openstack-neutron < 2015.2
+Requires:   python-inotify
+Requires:   supervisor
 Requires(post): systemd-units
 Requires(preun): systemd-units
 Requires(postun): systemd-units

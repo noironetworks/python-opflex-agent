@@ -31,6 +31,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
 
+from opflexagent import as_metadata_manager
 from opflexagent import constants as ofcst
 from opflexagent import rpc
 from opflexagent import snat_iptables_manager
@@ -45,6 +46,14 @@ gbp_opts = [
     cfg.StrOpt('epg_mapping_dir',
                default='/var/lib/opflex-agent-ovs/endpoints/',
                help=_("Directory where the EPG port mappings will be "
+                      "stored.")),
+    cfg.StrOpt('as_mapping_dir',
+               default='/var/lib/opflex-agent-ovs/services/',
+               help=_("Directory where the anycast svc mappings will be "
+                      "stored.")),
+    cfg.StrOpt('opflex_agent_dir',
+               default='/var/lib/neutron/opflex_agent',
+               help=_("Directory where the opflex agent state will be "
                       "stored.")),
     cfg.ListOpt('opflex_networks',
                 default=['*'],
@@ -116,6 +125,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         if METADATA_DEFAULT_IP in self.int_fip_pool[4]:
             self.int_fip_pool[4].remove(METADATA_DEFAULT_IP)
         self.int_fip_alloc = {4: {}, 6: {}}
+        self.metadata_mgr = as_metadata_manager.AsMetadataManager(LOG)
         self._load_es_next_hop_info(kwargs['external_segment'])
         self.es_port_dict = {}
         self.vrf_dict = {}
@@ -344,6 +354,10 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self._fill_ip_mapping_info(port.vif_id, mapping, ips, mapping_dict)
         self._write_endpoint_file(port.vif_id, mapping_dict)
         self.vrf_info_to_file(mapping, vif_id=port.vif_id)
+        if mapping.get('enable_metadata_optimization', False):
+            self.metadata_mgr.ensure_initialized()
+        else:
+            self.metadata_mgr.ensure_terminated()
 
     def vrf_info_to_file(self, mapping, vif_id=None):
         if 'vrf_subnets' in mapping:
