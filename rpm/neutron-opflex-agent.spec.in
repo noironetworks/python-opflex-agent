@@ -76,6 +76,8 @@ usermod -a -G opflexep neutron
 %{python2_sitelib}/opflexagent
 %{python2_sitelib}/neutron_opflex_agent-%%{version}*.egg-info
 %{_bindir}/neutron-opflex-agent
+%{_bindir}/opflex-metadata-ep-watcher
+%{_bindir}/opflex-metadata-state-watcher
 %{_unitdir}/%{opflex_agent}
 
 %changelog
