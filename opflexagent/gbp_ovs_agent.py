@@ -22,6 +22,7 @@ from neutron.agent.linux import ip_lib
 from neutron.agent import rpc as agent_rpc
 from neutron.common import config as common_config
 from neutron.common import constants as n_constants
+from neutron.common import eventlet_utils
 from neutron.common import topics
 from neutron.common import utils as q_utils
 from neutron.openstack.common import uuidutils
@@ -36,6 +37,7 @@ from opflexagent import constants as ofcst
 from opflexagent import rpc
 from opflexagent import snat_iptables_manager
 
+eventlet_utils.monkey_patch()
 LOG = logging.getLogger(__name__)
 
 gbp_opts = [
@@ -741,7 +743,7 @@ def main():
     try:
         agent_config = create_agent_config_map(cfg.CONF)
     except ValueError as e:
-        LOG.error(_LE('%s Agent terminated!'), e)
+        LOG.error(_('%s Agent terminated!'), e)
         sys.exit(1)
 
     is_xen_compute_host = 'rootwrap-xen-dom0' in cfg.CONF.AGENT.root_helper
@@ -753,12 +755,12 @@ def main():
         agent = GBPOvsAgent(root_helper=cfg.CONF.AGENT.root_helper,
                             **agent_config)
     except RuntimeError as e:
-        LOG.error(_LE("%s Agent terminated!"), e)
+        LOG.error(_("%s Agent terminated!"), e)
         sys.exit(1)
     signal.signal(signal.SIGTERM, agent._handle_sigterm)
 
     # Start everything.
-    LOG.info(_LI("Agent initialized successfully, now running... "))
+    LOG.info(_("Agent initialized successfully, now running... "))
     agent.daemon_loop()
 
 
