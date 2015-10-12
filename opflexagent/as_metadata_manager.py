@@ -24,7 +24,7 @@ from neutron.common import utils
 from neutron.openstack.common import log as logging
 from neutron.plugins.openvswitch.common import config as ovs_config  # noqa
 from oslo.config import cfg
-from oslo_serialization import jsonutils
+from oslo.serialization import jsonutils
 
 LOG = logging.getLogger(__name__)
 
