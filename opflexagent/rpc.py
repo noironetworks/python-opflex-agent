@@ -78,6 +78,16 @@ class GBPServerRpcApiMixin(object):
         return cctxt.call(context, 'get_vrf_details_list', agent_id=agent_id,
                           vrf_ids=vrf_ids, host=host)
 
+    @log.log
+    def ip_address_owner_update(self, context, agent_id, ip_owner_info,
+                                host=None):
+        self.fanout_cast(context,
+                         self.make_msg('ip_address_owner_update',
+                                       agent_id=agent_id,
+                                       ip_owner_info=ip_owner_info,
+                                       host=host),
+                         version=self.GBP_RPC_VERSION)
+
 
 class GBPServerRpcCallback(object):
     """Plugin-side RPC (implementation) for agent-to-plugin interaction."""
@@ -116,3 +126,6 @@ class GBPServerRpcCallback(object):
             )
             for vrf_id in kwargs.pop('vrf_ids', [])
         ]
+
+    def ip_address_owner_update(self, context, **kwargs):
+        self.gbp_driver.ip_address_owner_update(context, **kwargs)
