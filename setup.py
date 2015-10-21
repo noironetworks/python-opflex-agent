@@ -27,11 +27,14 @@ setuptools.setup(
     description="This neutron agent provides edge policy enforcement.",
     entry_points={
         'console_scripts': [
-            'neutron-opflex-agent = opflexagent.gbp_ovs_agent:main',
+            'neutron-opflex-agent = '
+                'opflexagent.gbp_ovs_agent:main',
             'opflex-metadata-ep-watcher = '
                 'opflexagent.as_metadata_manager:ep_watcher_main',
             'opflex-metadata-state-watcher = '
                 'opflexagent.as_metadata_manager:state_watcher_main',
+            'opflex-notify-agent = '
+                'opflexagent.opflex_notify:main',
         ],
         'neutron.ml2.type_drivers': [
             'opflex = opflexagent.type_opflex:OpflexTypeDriver',
