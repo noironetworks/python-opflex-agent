@@ -322,7 +322,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                     mapping['endpoint_group_name']),
             "interface-name": port.port_name,
-            "mac": port.vif_mac,
+            "mac": mapping.get('mac_address') or port.vif_mac,
             "promiscuous-mode": mapping.get('promiscuous_mode') or False,
             "uuid": port.vif_id,
             'neutron-network': net_uuid}
