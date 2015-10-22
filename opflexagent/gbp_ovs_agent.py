@@ -35,6 +35,7 @@ from oslo_serialization import jsonutils
 from opflexagent import as_metadata_manager
 from opflexagent import constants as ofcst
 from opflexagent import rpc
+from opflexagent import snat_iptables_manager
 
 eventlet_utils.monkey_patch()
 LOG = logging.getLogger(__name__)
@@ -105,7 +106,7 @@ class ExtSegNextHopInfo(object):
 
 class GBPOvsAgent(ovs.OVSNeutronAgent):
 
-    def __init__(self, **kwargs):
+    def __init__(self, root_helper=None, **kwargs):
         self.hybrid_mode = kwargs['hybrid_mode']
         separator = (kwargs['epg_mapping_dir'][-1] if
                      kwargs['epg_mapping_dir'] else '')
@@ -134,6 +135,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.updated_vrf = set()
         self.backup_updated_vrf = set()
         self.dhcp_domain = kwargs['dhcp_domain']
+        self.root_helper = root_helper
         del kwargs['hybrid_mode']
         del kwargs['epg_mapping_dir']
         del kwargs['opflex_networks']
@@ -229,6 +231,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         # Add a canary flow to int_br to track OVS restarts
         self.int_br.add_flow(table=constants.CANARY_TABLE, priority=0,
                              actions="drop")
+        self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
+            self.int_br, self.root_helper)
 
     def setup_physical_bridges(self, bridge_mappings):
         """Override parent setup physical bridges.
@@ -826,7 +830,8 @@ def main():
         # commands target xen dom0 rather than domU.
         cfg.CONF.set_default('ip_lib_force_root', True)
     try:
-        agent = GBPOvsAgent(**agent_config)
+        agent = GBPOvsAgent(root_helper=cfg.CONF.AGENT.root_helper,
+                            **agent_config)
     except RuntimeError as e:
         LOG.error(_("%s Agent terminated!"), e)
         sys.exit(1)
