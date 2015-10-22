@@ -181,14 +181,16 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 "neutron-network": "net_id",
                 "domain-policy-space": 'apic_tenant',
                 "domain-name": 'name_of_l3p',
-                # 192.168.1.2 is not owned, won't be in the EP file
-                "ip": ['192.168.0.2', '192.169.8.1', '192.169.8.254'],
+                "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
+                       '192.169.8.254'],
                 # FIP mapping will be in the file
                 "ip-address-mapping": [{
                     'uuid': '1', 'mapped-ip': '192.168.0.2',
                     'floating-ip': '172.10.0.1',
                     'endpoint-group-name': 'profile_name|nat-epg-name',
-                    'policy-space-name': 'nat-epg-tenant'}]})
+                    'policy-space-name': 'nat-epg-tenant'},
+                    {'uuid': '2', 'mapped-ip': '192.168.1.2',
+                     'floating-ip': '172.10.0.2'}]})
 
         self.agent._write_vrf_file.assert_called_once_with(
             'l3p_id', {
