@@ -35,7 +35,6 @@ from opflexagent import as_metadata_manager
 from opflexagent import constants as ofcst
 from opflexagent import opflex_notify
 from opflexagent import rpc
-from opflexagent import snat_iptables_manager
 
 LOG = logging.getLogger(__name__)
 
@@ -277,15 +276,60 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     port, net_uuid, network_type, physical_network,
                     segmentation_id, fixed_ips, device_owner, ovs_restarted)
         elif network_type in self.supported_pt_network_types:
+            # PT cleanup is needed before writing the new endpoint files
+            self.mapping_cleanup(port.vif_id, cleanup_vrf=False)
             if ((self.opflex_networks is None) or
                     (physical_network in self.opflex_networks)):
                 # Port has to be untagged due to a opflex agent requirement
                 self.int_br.clear_db_attribute("Port", port.port_name, "tag")
-                self.mapping_to_file(port, net_uuid, mapping, fixed_ips,
+                # Multiple files will be created based on how many MAC
+                # addresses are owned by the specific port.
+                mapping_copy = copy.deepcopy(mapping)
+                mac_active_aap = {}
+                mapping_copy['allowed_address_pairs'] = []
+                mapping_copy['floating_ip'] = []
+                fip_by_fixed = {}
+                # Prepare FIPs by fixed_ip
+                for fip in mapping.get('floating_ip', []):
+                    fip_by_fixed.setdefault(
+                        fip['fixed_ip_address'], []).append(fip)
+                for aap in mapping.get('allowed_address_pairs', []):
+                    if aap.get('active'):
+                        if not aap.get('mac_address'):
+                            # Should go with the MAIN mac address EP file
+                            mapping_copy['allowed_address_pairs'].append(aap)
+                            # Also set the right floating IPs
+                            mapping_copy['floating_ip'].extend(
+                                fip_by_fixed.get(aap['ip_address'], []))
+                        else:
+                            # Store for future processing
+                            mac_active_aap.setdefault(
+                                aap['mac_address'], []).append(aap)
+                # Create mapping file for base MAC address
+                self.mapping_to_file(port, net_uuid, mapping_copy, fixed_ips,
                                      device_owner)
+                # Reset for AAP EP files
+                mapping_copy['allowed_address_pairs'] = []
+                mapping_copy['fixed_ips'] = []
+                mapping_copy['extra_ips'] = []
+                mapping_copy['subnets'] = []
+                mapping_copy['enable_dhcp_optimization'] = False
+                mapping_copy['enable_metadata_optimization'] = False
+                # Map to file based on the active AAP with a MAC address
+                for mac, aaps in mac_active_aap:
+                    # Replace the MAC address with the new one
+                    mapping_copy['mac_address'] = mac
+                    # Extend the FIP list based on the allowed IPs
+                    mapping_copy['floating_ip'] = []
+                    mapping_copy['ip-address-mapping'] = []
+                    for aap in aaps:
+                        mapping_copy['floating_ip'].extend(fip_by_fixed.get(
+                            aap['ip_address'], []))
+                    # For this mac, set all the allowed address pairs.
+                    mapping_copy['allowed_address_pairs'] = aaps
+                    self.mapping_to_file(port, net_uuid, mapping_copy, None,
+                                         device_owner)
             else:
-                # PT cleanup may be needed
-                self.mapping_cleanup(port.vif_id)
                 LOG.error(_("Cannot provision OPFLEX network for "
                             "net-id=%(net_uuid)s - no bridge for "
                             "physical_network %(physical_network)s"),
@@ -315,18 +359,24 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         if device_owner in [n_constants.DEVICE_OWNER_ROUTER_INTF]:
             return
         ips_ext = mapping.get('extra_ips') or []
-
+        mac = mapping.get('mac_address') or port.vif_mac
         mapping_dict = {
             "policy-space-name": mapping['ptg_tenant'],
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                     mapping['endpoint_group_name']),
             "interface-name": port.port_name,
-            "mac": mapping.get('mac_address') or port.vif_mac,
+            "mac": mac,
             "promiscuous-mode": mapping.get('promiscuous_mode') or False,
             "uuid": port.vif_id,
             'neutron-network': net_uuid}
 
-        ips = [x['ip_address'] for x in fixed_ips]
+        # Allocated IPs should be filtered by ownership.
+        if 'owned_addresses' in mapping:
+            ips = [x['ip_address'] for x in fixed_ips if
+                   x['ip_address'] in mapping['owned_addresses']]
+        else:
+            ips = [x['ip_address'] for x in fixed_ips]
+
         virtual_ips = []
         if device_owner == n_constants.DEVICE_OWNER_DHCP:
             # vm-name, if specified in mappings, will override this
@@ -357,7 +407,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             mapping_dict['domain-name'] = mapping['vrf_name']
 
         self._fill_ip_mapping_info(port.vif_id, mapping, ips, mapping_dict)
-        self._write_endpoint_file(port.vif_id, mapping_dict)
+        # Create one file per MAC address.
+        self._write_endpoint_file(port.vif_id + '_' + mac, mapping_dict)
         self.vrf_info_to_file(mapping, vif_id=port.vif_id)
         if mapping.get('enable_metadata_optimization', False):
             self.metadata_mgr.ensure_initialized()
@@ -413,16 +464,16 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             mapping_dict['dhcp6'] = {
                 'dns-servers': v6subnets[0]['dns_nameservers']}
 
-    def mapping_cleanup(self, vif_id):
+    def mapping_cleanup(self, vif_id, cleanup_vrf=True):
         LOG.debug('Cleaning mapping for vif id %s', vif_id)
-        self._delete_endpoint_file(vif_id)
+        self._delete_endpoint_files(vif_id)
         es = self._get_es_for_port(vif_id)
         self._dissociate_port_from_es(vif_id, es)
         self._release_int_fip(4, vif_id)
         self._release_int_fip(6, vif_id)
         vrf_id = self.vif_to_vrf.get(vif_id)
         vrf = self.vrf_dict.get(vrf_id)
-        if vrf:
+        if vrf and cleanup_vrf:
             del self.vif_to_vrf[vif_id]
             vrf['vifs'].discard(vif_id)
             if not vrf['vifs']:
@@ -518,6 +569,17 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
 
     def _delete_endpoint_file(self, port_id):
         return self._delete_file(port_id, self.epg_mapping_file)
+
+    def _delete_endpoint_files(self, port_id):
+        # Delete all files for this specific port_id
+        directory = os.path.dirname(self.epg_mapping_file)
+        # Remove all existing EPs mapping for port_id
+        for f in os.listdir(directory):
+            if f.endswith('.' + FILE_EXTENSION) and port_id in f:
+                try:
+                    os.remove(os.path.join(directory, f))
+                except OSError as e:
+                    LOG.exception(e)
 
     def _write_vrf_file(self, vrf_id, mapping_dict):
         return self._write_file(vrf_id, mapping_dict, self.vrf_mapping_file)
