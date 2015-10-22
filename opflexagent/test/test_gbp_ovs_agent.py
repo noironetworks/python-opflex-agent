@@ -121,7 +121,22 @@ class TestGbpOvsAgent(base.BaseTestCase):
                    'extra_ips': ['192.169.8.1', '192.169.8.254'],
                    'vrf_name': 'name_of_l3p',
                    'vrf_tenant': 'apic_tenant',
-                   'vrf_subnets': ['192.168.0.0/16', '192.169.0.0/16']}
+                   'vrf_subnets': ['192.168.0.0/16', '192.169.0.0/16'],
+                   'floating_ip': [{'id': '1',
+                                    'floating_ip_address': '172.10.0.1',
+                                    'floating_network_id': 'ext_net',
+                                    'router_id': 'ext_rout',
+                                    'port_id': 'port_id',
+                                    'fixed_ip_address': '192.168.0.2',
+                                    'nat_epg_tenant': 'nat-epg-tenant',
+                                    'nat_epg_name': 'nat-epg-name'},
+                                   {'id': '2',
+                                    'floating_ip_address': '172.10.0.2',
+                                    'floating_network_id': 'ext_net',
+                                    'router_id': 'ext_rout',
+                                    'port_id': 'port_id',
+                                    'fixed_ip_address': '192.168.1.2'}],
+                   'owned_addresses': ['192.168.0.2']}
         pattern.update(**kwargs)
         return pattern
 
@@ -163,8 +178,15 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 "neutron-network": "net_id",
                 "domain-policy-space": 'apic_tenant',
                 "domain-name": 'name_of_l3p',
-                "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
-                       '192.169.8.254']})
+                # 192.168.1.2 is not owned, won't be in the EP file
+                "ip": ['192.168.0.2', '192.169.8.1', '192.169.8.254'],
+                # FIP mapping will be in the file
+                "ip-address-mapping": [{
+                    'uuid': '1', 'mapped-ip': '192.168.0.2',
+                    'floating-ip': '172.10.0.1',
+                    'endpoint-group-name': 'profile_name|nat-epg-name',
+                    'policy-space-name': 'nat-epg-tenant'}]})
+
         self.agent._write_vrf_file.assert_called_once_with(
             'l3p_id', {
                 "domain-policy-space": 'apic_tenant',

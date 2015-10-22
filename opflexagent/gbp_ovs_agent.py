@@ -289,13 +289,25 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 mapping_copy['allowed_address_pairs'] = []
                 mapping_copy['floating_ip'] = []
                 fip_by_fixed = {}
+                original_mac = mapping.get('mac_address') or port.vif_mac
                 # Prepare FIPs by fixed_ip
                 for fip in mapping.get('floating_ip', []):
                     fip_by_fixed.setdefault(
                         fip['fixed_ip_address'], []).append(fip)
+                # For the main MAC, set floating IP collection to all those
+                # FIPs pointing to the active Port fixed ips.
+                for fixed in fixed_ips:
+                    if fixed['ip_address'] in mapping.get(
+                            'owned_addresses', [fixed['ip_address']]):
+                        mapping_copy['floating_ip'].extend(
+                            fip_by_fixed.get(fixed['ip_address'], []))
+
+                # For the main MAC EP, set al the AAP with no mac address or
+                # MAC address equal to the original MAC.
                 for aap in mapping.get('allowed_address_pairs', []):
                     if aap.get('active'):
-                        if not aap.get('mac_address'):
+                        if not aap.get('mac_address') or aap.get(
+                                'mac_address') == original_mac:
                             # Should go with the MAIN mac address EP file
                             mapping_copy['allowed_address_pairs'].append(aap)
                             # Also set the right floating IPs
@@ -327,7 +339,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                             aap['ip_address'], []))
                     # For this mac, set all the allowed address pairs.
                     mapping_copy['allowed_address_pairs'] = aaps
-                    self.mapping_to_file(port, net_uuid, mapping_copy, None,
+                    self.mapping_to_file(port, net_uuid, mapping_copy, [],
                                          device_owner)
             else:
                 LOG.error(_("Cannot provision OPFLEX network for "
