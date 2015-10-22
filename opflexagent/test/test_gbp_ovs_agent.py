@@ -129,7 +129,9 @@ class TestGbpOvsAgent(base.BaseTestCase):
         return pattern
 
     def _port_bound_args(self, net_type='net_type'):
-        return {'port': mock.Mock(),
+        port = mock.Mock()
+        port.vif_id = uuidutils.generate_uuid()
+        return {'port': port,
                 'net_uuid': 'net_id',
                 'network_type': net_type,
                 'physical_network': 'phys_net',
@@ -152,12 +154,12 @@ class TestGbpOvsAgent(base.BaseTestCase):
             "Port", mock.ANY, "tag")
         self.assertFalse(self.agent.provision_local_vlan.called)
         self.agent._write_endpoint_file.assert_called_with(
-            args['port'].vif_id, {
+            args['port'].vif_id + '_' + mapping['mac_address'], {
                 "policy-space-name": mapping['ptg_tenant'],
                 "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                         mapping['endpoint_group_name']),
                 "interface-name": args['port'].port_name,
-                "mac": args['port'].vif_mac,
+                "mac": mapping['mac_address'],
                 "promiscuous-mode": mapping['promiscuous_mode'],
                 "uuid": args['port'].vif_id,
                 "attributes": {'vm-name': 'somename'},
