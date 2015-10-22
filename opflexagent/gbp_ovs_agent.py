@@ -134,7 +134,6 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.vif_to_vrf = {}
         self.updated_vrf = set()
         self.backup_updated_vrf = set()
-        self.root_helper = kwargs['root_helper']
         self.dhcp_domain = kwargs['dhcp_domain']
         del kwargs['hybrid_mode']
         del kwargs['epg_mapping_dir']
@@ -142,7 +141,6 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         del kwargs['internal_floating_ip_pool']
         del kwargs['internal_floating_ip6_pool']
         del kwargs['external_segment']
-        del kwargs['root_helper']
         del kwargs['dhcp_domain']
 
         super(GBPOvsAgent, self).__init__(**kwargs)
@@ -232,8 +230,6 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         # Add a canary flow to int_br to track OVS restarts
         self.int_br.add_flow(table=constants.CANARY_TABLE, priority=0,
                              actions="drop")
-        self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
-            self.int_br, self.root_helper)
 
     def setup_physical_bridges(self, bridge_mappings):
         """Override parent setup physical bridges.
@@ -756,8 +752,7 @@ def main():
         # commands target xen dom0 rather than domU.
         cfg.CONF.set_default('ip_lib_force_root', True)
     try:
-        agent = GBPOvsAgent(root_helper=cfg.CONF.AGENT.root_helper,
-                            **agent_config)
+        agent = GBPOvsAgent(**agent_config)
     except RuntimeError as e:
         LOG.error(_("%s Agent terminated!"), e)
         sys.exit(1)

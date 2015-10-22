@@ -15,6 +15,7 @@ import sys
 
 import mock
 sys.modules["apicapi"] = mock.Mock()
+sys.modules["pyinotify"] = mock.Mock()
 
 import contextlib
 from opflexagent import gbp_ovs_agent
