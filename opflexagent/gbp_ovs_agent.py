@@ -297,10 +297,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 # For the main MAC, set floating IP collection to all those
                 # FIPs pointing to the active Port fixed ips.
                 for fixed in fixed_ips:
-                    if fixed['ip_address'] in mapping.get(
-                            'owned_addresses', [fixed['ip_address']]):
-                        mapping_copy['floating_ip'].extend(
-                            fip_by_fixed.get(fixed['ip_address'], []))
+                    mapping_copy['floating_ip'].extend(
+                        fip_by_fixed.get(fixed['ip_address'], []))
 
                 # For the main MAC EP, set al the AAP with no mac address or
                 # MAC address equal to the original MAC.
@@ -382,12 +380,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             "uuid": port.vif_id,
             'neutron-network': net_uuid}
 
-        # Allocated IPs should be filtered by ownership.
-        if 'owned_addresses' in mapping:
-            ips = [x['ip_address'] for x in fixed_ips if
-                   x['ip_address'] in mapping['owned_addresses']]
-        else:
-            ips = [x['ip_address'] for x in fixed_ips]
+        ips = [x['ip_address'] for x in fixed_ips]
 
         virtual_ips = []
         if device_owner == n_constants.DEVICE_OWNER_DHCP:
