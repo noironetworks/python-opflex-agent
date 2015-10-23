@@ -33,6 +33,7 @@ from oslo.serialization import jsonutils
 
 from opflexagent import as_metadata_manager
 from opflexagent import constants as ofcst
+from opflexagent import opflex_notify
 from opflexagent import rpc
 from opflexagent import snat_iptables_manager
 
@@ -117,7 +118,6 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.file_formats = [self.epg_mapping_file,
                              self.vrf_mapping_file]
         self.opflex_networks = kwargs['opflex_networks']
-        self.metadata_mgr = as_metadata_manager.AsMetadataManager(LOG)
         if self.opflex_networks and self.opflex_networks[0] == '*':
             self.opflex_networks = None
         self.int_fip_pool = {
@@ -140,6 +140,9 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         del kwargs['internal_floating_ip6_pool']
         del kwargs['external_segment']
         del kwargs['dhcp_domain']
+
+        self.notify_worker = opflex_notify.worker()
+        self.metadata_mgr = as_metadata_manager.AsMetadataManager(LOG)
 
         super(GBPOvsAgent, self).__init__(**kwargs)
         self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
