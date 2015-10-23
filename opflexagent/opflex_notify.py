@@ -23,8 +23,7 @@ from neutron.common import config
 from neutron.common import utils
 from neutron import context
 from neutron.openstack.common import log as logging
-from opflexagent import gbp_ovs_agent as gbp_agent
-from opflexagent import rpc
+import opflexagent
 from oslo.config import cfg
 
 
@@ -38,7 +37,8 @@ class OpflexNotifyAgent(object):
         self.agent_id = 'opflex-notify-agent-%s' % self.host
         self.context = context.get_admin_context_without_session()
         self.sockname = OPFLEX_NOTIFY_SOCKNAME
-        self.of_rpc = gbp_agent.GBPOvsPluginApi(rpc.TOPIC_OPFLEX)
+        self.of_rpc = opflexagent.gbp_ovs_agent.GBPOvsPluginApi(
+            opflexagent.rpc.TOPIC_OPFLEX)
 
     def _handle(self, uuids, mac, addr):
         LOG.debug('Handle: endpoint(s): {}, mac: {}, addr: {}'.
