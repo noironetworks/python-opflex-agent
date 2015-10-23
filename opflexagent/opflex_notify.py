@@ -12,6 +12,7 @@
 #    under the License.
 
 import json
+import multiprocessing
 import os.path
 import socket
 import struct
@@ -142,6 +143,8 @@ class OpflexNotifyAgent(object):
         sys.exit(0)
 
     def run(self):
+        """Infinite loop which catches all exception, exits on ^C"""
+
         while True:
             try:
                 client = self._connect()
@@ -164,9 +167,36 @@ class OpflexNotifyAgent(object):
                 LOG.error('Run: {}'.format(e))
 
 
+def worker(initconfig=False, daemon=True):
+    class OpflexNotifyWorker(multiprocessing.Process):
+        def __init__(self):
+            self.agent = None
+            super(OpflexNotifyWorker, self).__init__()
+
+        def run(self):
+            self.agent = OpflexNotifyAgent()
+            self.agent.run()
+            return
+
+    worker = None
+    try:
+        if initconfig:
+            config.init(sys.argv[1:])
+            config.setup_logging()
+            utils.log_opt_values(LOG)
+
+        worker = OpflexNotifyWorker()
+        worker.daemon = daemon
+        worker.start()
+    except Exception as e:
+        LOG.error('Worker Initalization: {}'.format(e))
+    return worker
+
+
 def main():
-    config.init(sys.argv[1:])
-    config.setup_logging()
-    utils.log_opt_values(LOG)
-    agent = OpflexNotifyAgent()
-    agent.run()
+    worker(initconfig=True, daemon=False)
+    return
+
+
+if __name__ == "__main__":
+    main()
