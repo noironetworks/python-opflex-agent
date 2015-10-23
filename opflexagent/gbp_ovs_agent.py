@@ -34,6 +34,7 @@ from oslo_serialization import jsonutils
 
 from opflexagent import as_metadata_manager
 from opflexagent import constants as ofcst
+from opflexagent import opflex_notify
 from opflexagent import rpc
 from opflexagent import snat_iptables_manager
 
@@ -127,7 +128,6 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         if METADATA_DEFAULT_IP in self.int_fip_pool[4]:
             self.int_fip_pool[4].remove(METADATA_DEFAULT_IP)
         self.int_fip_alloc = {4: {}, 6: {}}
-        self.metadata_mgr = as_metadata_manager.AsMetadataManager(LOG)
         self._load_es_next_hop_info(kwargs['external_segment'])
         self.es_port_dict = {}
         self.vrf_dict = {}
@@ -144,6 +144,9 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         del kwargs['external_segment']
         del kwargs['root_helper']
         del kwargs['dhcp_domain']
+
+        self.notify_worker = opflex_notify.worker()
+        self.metadata_mgr = as_metadata_manager.AsMetadataManager(LOG)
 
         super(GBPOvsAgent, self).__init__(**kwargs)
         self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
