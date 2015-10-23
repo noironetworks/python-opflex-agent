@@ -326,7 +326,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 mapping_copy['enable_dhcp_optimization'] = False
                 mapping_copy['enable_metadata_optimization'] = False
                 # Map to file based on the active AAP with a MAC address
-                for mac, aaps in mac_active_aap:
+                for mac, aaps in mac_active_aap.iteritems():
                     # Replace the MAC address with the new one
                     mapping_copy['mac_address'] = mac
                     # Extend the FIP list based on the allowed IPs
@@ -400,10 +400,11 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             if aap.get('ip_address'):
                 virtual_ips.append(
                     {'ip': aap['ip_address'],
-                     'mac': aap.get('mac_address', port.vif_mac)})
+                     'mac': aap.get('mac_address', mac)})
         mapping_dict['ip'] = ips + ips_ext
         if virtual_ips:
-            mapping_dict['virtual-ip'] = virtual_ips
+            mapping_dict['virtual-ip'] = sorted(virtual_ips,
+                                                key=lambda x: x['ip'])
 
         if 'vm-name' in mapping:
             mapping_dict['attributes'] = {'vm-name': mapping['vm-name']}
