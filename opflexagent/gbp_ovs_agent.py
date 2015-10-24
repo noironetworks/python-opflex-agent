@@ -285,7 +285,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 # Multiple files will be created based on how many MAC
                 # addresses are owned by the specific port.
                 mapping_copy = copy.deepcopy(mapping)
-                mac_active_aap = {}
+                mac_aap_map = {}
                 mapping_copy['allowed_address_pairs'] = []
                 mapping_copy['floating_ip'] = []
                 fip_by_fixed = {}
@@ -295,7 +295,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     fip_by_fixed.setdefault(
                         fip['fixed_ip_address'], []).append(fip)
                 # For the main MAC, set floating IP collection to all those
-                # FIPs pointing to the active Port fixed ips.
+                # FIPs pointing to the Port fixed ips.
                 for fixed in fixed_ips:
                     mapping_copy['floating_ip'].extend(
                         fip_by_fixed.get(fixed['ip_address'], []))
@@ -303,18 +303,17 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 # For the main MAC EP, set al the AAP with no mac address or
                 # MAC address equal to the original MAC.
                 for aap in mapping.get('allowed_address_pairs', []):
-                    if aap.get('active'):
-                        if not aap.get('mac_address') or aap.get(
-                                'mac_address') == original_mac:
-                            # Should go with the MAIN mac address EP file
-                            mapping_copy['allowed_address_pairs'].append(aap)
-                            # Also set the right floating IPs
-                            mapping_copy['floating_ip'].extend(
-                                fip_by_fixed.get(aap['ip_address'], []))
-                        else:
-                            # Store for future processing
-                            mac_active_aap.setdefault(
-                                aap['mac_address'], []).append(aap)
+                    if not aap.get('mac_address') or aap.get(
+                            'mac_address') == original_mac:
+                        # Should go with the MAIN mac address EP file
+                        mapping_copy['allowed_address_pairs'].append(aap)
+                        # Also set the right floating IPs
+                        mapping_copy['floating_ip'].extend(
+                            fip_by_fixed.get(aap['ip_address'], []))
+                    else:
+                        # Store for future processing
+                        mac_aap_map.setdefault(
+                            aap['mac_address'], []).append(aap)
                 # Create mapping file for base MAC address
                 self.mapping_to_file(port, net_uuid, mapping_copy, fixed_ips,
                                      device_owner)
@@ -325,13 +324,12 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 mapping_copy['subnets'] = []
                 mapping_copy['enable_dhcp_optimization'] = False
                 mapping_copy['enable_metadata_optimization'] = False
-                # Map to file based on the active AAP with a MAC address
-                for mac, aaps in mac_active_aap.iteritems():
+                # Map to file based on the AAP with a MAC address
+                for mac, aaps in mac_aap_map.iteritems():
                     # Replace the MAC address with the new one
                     mapping_copy['mac_address'] = mac
                     # Extend the FIP list based on the allowed IPs
                     mapping_copy['floating_ip'] = []
-                    mapping_copy['ip-address-mapping'] = []
                     for aap in aaps:
                         mapping_copy['floating_ip'].extend(fip_by_fixed.get(
                             aap['ip_address'], []))
