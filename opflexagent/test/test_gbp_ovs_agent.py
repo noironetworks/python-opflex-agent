@@ -281,14 +281,19 @@ class TestGbpOvsAgent(base.BaseTestCase):
             {'id': '4', 'floating_ip_address': '172.10.0.4',
              'floating_network_id': 'ext_net',
              'router_id': 'ext_rout', 'port_id': 'port_id',
-             'fixed_ip_address': '192.169.0.2'}])
+             'fixed_ip_address': '192.169.0.2'},
+            # For non-active no MAC specified address
+            {'id': '5', 'floating_ip_address': '172.10.0.5',
+             'floating_network_id': 'ext_net',
+             'router_id': 'ext_rout', 'port_id': 'port_id',
+             'fixed_ip_address': '192.169.0.3'}])
         self.agent.of_rpc.get_gbp_details.return_value = mapping
         args = self._port_bound_args('opflex')
         args['port'].gbp_details = mapping
         self.agent.port_bound(**args)
 
         # Build expected calls.
-        # Only 2 calls are expected, one for unique active MAC (BB:BB and main)
+        # 3 calls are expected, one for unique MAC (AA:AA, BB:BB and main)
         expected_calls = [
             # First call, the main EP file is created.
             mock.call(
@@ -313,9 +318,16 @@ class TestGbpOvsAgent(base.BaseTestCase):
                         'endpoint-group-name': 'profile_name|nat-epg-name',
                         'policy-space-name': 'nat-epg-tenant'},
                         {'uuid': '2', 'mapped-ip': '192.168.1.2',
-                         'floating-ip': '172.10.0.2'}],
-                    # Set the proper allowed address pairs
-                    'virtual-ip': [{'ip': '192.169.0.4',
+                         'floating-ip': '172.10.0.2'},
+                        {'uuid': '5', 'mapped-ip': '192.169.0.3',
+                         'floating-ip': '172.10.0.5'}],
+                    # Set the proper allowed address pairs (both active and non
+                    # active with the main MAC address)
+                    'virtual-ip': [{'ip': '192.169.0.3',
+                                    'mac': 'aa:bb:cc:00:11:22'},
+                                   {'ip': '192.169.0.4',
+                                    'mac': 'aa:bb:cc:00:11:22'},
+                                   {'ip': '192.169.0.5',
                                     'mac': 'aa:bb:cc:00:11:22'},
                                    {'ip': '192.169.0.6',
                                     'mac': 'aa:bb:cc:00:11:22'}]}),
@@ -342,8 +354,31 @@ class TestGbpOvsAgent(base.BaseTestCase):
                          'floating-ip': '172.10.0.4'}],
                     # Set the proper allowed address pairs with MAC BB:BB
                     'virtual-ip': [{'ip': '192.169.0.2', 'mac': 'BB:BB'},
-                                   {'ip': '192.169.0.7', 'mac': 'BB:BB'}]})
-            ]
+                                   {'ip': '192.169.0.7', 'mac': 'BB:BB'}]}),
+            # Third call for MAC address AA:AA
+            mock.call(
+                args['port'].vif_id + '_' + 'AA:AA', {
+                    "policy-space-name": mapping['ptg_tenant'],
+                    "endpoint-group-name": (mapping['app_profile_name'] + "|" +
+                                            mapping['endpoint_group_name']),
+                    "interface-name": args['port'].port_name,
+                    # mac is AA:AA
+                    "mac": 'AA:AA',
+                    "promiscuous-mode": mapping['promiscuous_mode'],
+                    "uuid": args['port'].vif_id,
+                    "attributes": {'vm-name': 'somename'},
+                    "neutron-network": "net_id",
+                    "domain-policy-space": 'apic_tenant',
+                    "domain-name": 'name_of_l3p',
+                    # No main IP address
+                    "ip": [],
+                    # Only FIP number 3 here
+                    "ip-address-mapping": [
+                        {'uuid': '3', 'mapped-ip': '192.169.0.1',
+                         'floating-ip': '172.10.0.3'}],
+                    # Set the proper allowed address pairs with MAC BB:BB
+                    'virtual-ip': [{'ip': '192.169.0.1', 'mac': 'AA:AA'}]})
+        ]
         self._check_call_list(expected_calls,
                               self.agent._write_endpoint_file.call_args_list)
 
