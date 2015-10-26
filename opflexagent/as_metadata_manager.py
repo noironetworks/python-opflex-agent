@@ -423,15 +423,23 @@ class StateWatcher(FileWatcher):
     def proxyconfig(self, alloc):
         nnetwork = alloc["neutron-network"]
         ipaddr = alloc["next-hop-ip"]
-        proxystr = """[program:apic-proxy-%s]
-command=/sbin/ip netns exec of-svc /usr/bin/python /usr/bin/apic-ns-metadata-proxy --pid_file=/var/lib/neutron/external/pids/%s.pid --metadata_proxy_socket=/var/lib/neutron/metadata_proxy --network_id=%s --state_path=/var/lib/neutron --metadata_host %s --metadata_port=80 --log-file=proxy-%s.log --log-dir=/var/log/neutron
-exitcodes=0,2
-startsecs=10
-startretries=3
-stopwaitsecs=10
-stdout_logfile=NONE
-stderr_logfile=NONE
-""" % (nnetwork, nnetwork, nnetwork, ipaddr, nnetwork[:8])  # noqa
+        proxystr = "\n".join([
+            "[program:apic-proxy-%s]" % nnetwork,
+            "command=/sbin/ip netns exec of-svc "
+            "/usr/bin/apic-ns-metadata-proxy "
+            "--metadata_proxy_socket=/var/lib/neutron/metadata_proxy "
+            "--state_path=/var/lib/neutron "
+            "--pid_file=/var/lib/neutron/external/pids/%s.pid "
+            "--network_id=%s --metadata_host %s --metadata_port=80 "
+            " --log-dir=/var/log/neutron --log-file=proxy-%s.log" % (
+                nnetwork, nnetwork, ipaddr, nnetwork[:8]),
+            "exitcodes=0,2",
+            "startsecs=10",
+            "startretries=3",
+            "stopwaitsecs=10",
+            "stdout_logfile=NONE",
+            "stderr_logfile=NONE",
+        ])
         return proxystr
 
 
@@ -553,60 +561,72 @@ class AsMetadataManager(object):
                     (SVC_NS, SVC_NS_PORT))
 
     def init_supervisor(self):
-        config_str = """[rpcinterface:supervisor]
-supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
-
-[unix_http_server]
-file=/var/run/md-svc-supervisor.sock
-
-[supervisorctl]
-serverurl=unix:///var/run/md-svc-supervisor.sock
-
-[supervisord]
-identifier = md-svc-supervisor
-pidfile = /var/run/md-svc-supervisor.pid
-logfile = /var/log/neutron/metadata-supervisor.log
-logfile_maxbytes = 10MB
-logfile_backups = 3
-loglevel = debug
-childlogdir = /var/log/neutron
-umask = 022
-minfds = 1024
-minprocs = 200
-nodaemon = false
-nocleanup = false
-strip_ansi = false
-
-[program:metadata-agent]
-command=/usr/bin/neutron-metadata-agent --config-file /etc/neutron/neutron.conf --config-file /etc/neutron/metadata_agent.ini --config-dir /etc/neutron/metadata_agent.ini --log-file /var/log/neutron/metadata-agent.log
-exitcodes=0,2
-startsecs=10
-startretries=3
-stopwaitsecs=10
-stdout_logfile=NONE
-stderr_logfile=NONE
-
-[program:metadata-ep-watcher]
-command=/usr/bin/opflex-metadata-ep-watcher --config-file /etc/neutron/neutron.conf --log-file /var/log/neutron/metadata-ep-watcher.log
-exitcodes=0,2
-startsecs=10
-startretries=3
-stopwaitsecs=10
-stdout_logfile=NONE
-stderr_logfile=NONE
-
-[program:metadata-state-watcher]
-command=/usr/bin/opflex-metadata-state-watcher --config-file /etc/neutron/neutron.conf --log-file /var/log/neutron/metadata-state-watcher.log
-exitcodes=0,2
-startsecs=10
-startretries=3
-stopwaitsecs=10
-stdout_logfile=NONE
-stderr_logfile=NONE
-
-[include]
-files = %s/*.proxy
-""" % MD_DIR  # noqa
+        config_str = "\n".join([
+            "[rpcinterface:supervisor]",
+            "supervisor.rpcinterface_factory = "
+            "supervisor.rpcinterface:make_main_rpcinterface",
+            "",
+            "[unix_http_server]",
+            "file = /var/run/md-svc-supervisor.sock",
+            "",
+            "[supervisorctl]",
+            "serverurl = unix:///var/run/md-svc-supervisor.sock",
+            "prompt = md-svc",
+            "",
+            "[supervisord]",
+            "identifier = md-svc-supervisor",
+            "pidfile = /var/run/md-svc-supervisor.pid",
+            "logfile = /var/log/neutron/metadata-supervisor.log",
+            "logfile_maxbytes = 10MB",
+            "logfile_backups = 3",
+            "loglevel = debug",
+            "childlogdir = /var/log/neutron",
+            "umask = 022",
+            "minfds = 1024",
+            "minprocs = 200",
+            "nodaemon = false",
+            "nocleanup = false",
+            "strip_ansi = false",
+            "",
+            "[program:metadata-agent]",
+            "command=/usr/bin/neutron-metadata-agent "
+            "--config-file /etc/neutron/neutron.conf "
+            "--config-file /etc/neutron/metadata_agent.ini "
+            "--log-file /var/log/neutron/metadata-agent.log",
+            "exitcodes=0,2",
+            "startsecs=10",
+            "startretries=3",
+            "stopwaitsecs=10",
+            "stdout_logfile=NONE",
+            "stderr_logfile=NONE",
+            "",
+            "[program:metadata-ep-watcher]",
+            "command=/usr/bin/opflex-metadata-ep-watcher "
+            "--config-file /etc/neutron/neutron.conf "
+            "--config-file /etc/neutron/plugins/ml2/ml2_conf_cisco.ini "
+            "--log-file /var/log/neutron/metadata-ep-watcher.log",
+            "exitcodes=0,2",
+            "startsecs=10",
+            "startretries=3",
+            "stopwaitsecs=10",
+            "stdout_logfile=NONE",
+            "stderr_logfile=NONE",
+            "",
+            "[program:metadata-state-watcher]",
+            "command=/usr/bin/opflex-metadata-state-watcher "
+            "--config-file /etc/neutron/neutron.conf "
+            "--config-file /etc/neutron/plugins/ml2/ml2_conf_cisco.ini "
+            "--log-file /var/log/neutron/metadata-state-watcher.log",
+            "exitcodes=0,2",
+            "startsecs=10",
+            "startretries=3",
+            "stopwaitsecs=10",
+            "stdout_logfile=NONE",
+            "stderr_logfile=NONE",
+            "",
+            "[include]",
+            "files = %s/*.proxy" % MD_DIR,
+        ])
         config_file = "%s/%s" % (MD_DIR, MD_SUP_FILE_NAME)
         self.write_file(config_file, config_str)
 
