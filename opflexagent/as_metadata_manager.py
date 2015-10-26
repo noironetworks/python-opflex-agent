@@ -15,6 +15,7 @@ import multiprocessing
 import netaddr
 import os
 import pyinotify
+import Queue
 import signal
 import subprocess
 import sys
@@ -27,6 +28,21 @@ from oslo_log import log as logging
 from oslo_serialization import jsonutils
 
 LOG = logging.getLogger(__name__)
+
+gbp_opts = [
+    cfg.StrOpt('epg_mapping_dir',
+               default='/var/lib/opflex-agent-ovs/endpoints/',
+               help=_("Directory where the EPG port mappings will be "
+                      "stored.")),
+    cfg.StrOpt('as_mapping_dir',
+               default='/var/lib/opflex-agent-ovs/services/',
+               help=_("Directory where the anycast svc mappings will be "
+                      "stored.")),
+    cfg.StrOpt('opflex_agent_dir',
+               default='/var/lib/neutron/opflex_agent',
+               help=_("Directory where the opflex agent state will be "
+                      "stored.")),
+]
 
 EP_FILE_EXTENSION = "ep"
 AS_FILE_EXTENSION = "as"
@@ -60,28 +76,52 @@ class FileProcessor(object):
         self.eventq = eventq
         self.processfn = processfn
 
-    def scanfile(self, action, filename):
-        if all(not filename.endswith(ext) for ext in self.extensions):
-            return
-        LOG.debug("FileProcessor: processing %s '%s'" % (action, filename))
-        return self.processfn(action, filename)
+    def scanfiles(self, files):
+        LOG.debug("FileProcessor: processing files: %s" % files)
+        relevant_files = []
+        for (action, filename) in files:
+            if all(not filename.endswith(ext) for ext in self.extensions):
+                continue
+            relevant_files.append((action, filename))
+        LOG.debug("FileProcessor: relevant files %s" % relevant_files)
+        return self.processfn(relevant_files)
 
     def scan(self):
         LOG.debug("FileProcessor: initial scan")
+        files = []
         for filename in os.listdir(self.watchdir):
-            self.scanfile("update", filename)
+            files.append(("update", filename))
+        self.scanfiles(files)
         return
 
     def run(self):
         self.scan()
         try:
-            for event in iter(self.eventq.get, EOQ):
-                LOG.debug("FileProcessor: event: %s" % event)
-                action = "update"
-                if event.maskname == "IN_DELETE" or \
-                    event.maskname == "IN_MOVED_FROM":
-                    action = "delete"
-                self.scanfile(action, event.pathname)
+            connected = True
+            while connected:
+                files = []
+                event = self.eventq.get()
+                while event is not None:
+                    # drain all events in queue and batch them
+                    LOG.debug("FileProcessor: event: %s" % event)
+                    if event == EOQ:
+                        connected = False
+                        event = None
+                        break
+
+                    action = "update"
+                    if event.maskname == "IN_DELETE" or \
+                        event.maskname == "IN_MOVED_FROM":
+                        action = "delete"
+                    files.append((action, event.pathname))
+
+                    try:
+                        event = self.eventq.get_nowait()
+                    except Queue.Empty as e:
+                        event = None
+                if files:
+                    # process the batch
+                    self.scanfiles(files)
         except KeyboardInterrupt:
             pass
         except Exception as e:
@@ -132,10 +172,10 @@ class FileWatcher(object):
         LOG.debug("FileWatcher: %s: event: %s" % (self.name, event))
         self.eventq.put(event)
 
-    def process(self, action, filename):
+    def process(self, files):
         # Override in child class
-        LOG.debug("FileWatcher: %s: process %s: %s" % (
-            self.name, action, filename))
+        LOG.debug("FileWatcher: %s: process: %s" % (
+            self.name, files))
 
     def terminate(self, signum, frame):
         self.eventq.put(EOQ)
@@ -162,6 +202,18 @@ class FileWatcher(object):
         return True
 
 
+class TmpWatcher(FileWatcher):
+    """Class for integration testing"""
+    def __init__(self):
+        filedir = "/tmp"
+        extensions = EP_FILE_EXTENSION
+        super(TmpWatcher, self).__init__(
+            filedir, extensions, name="ep-watcher")
+
+    def process(self, files):
+        LOG.debug("TmpWatcher files: %s" % files)
+
+
 class EpWatcher(FileWatcher):
     def __init__(self):
         filedir = cfg.CONF.OPFLEX.epg_mapping_dir
@@ -175,8 +227,8 @@ class EpWatcher(FileWatcher):
             return i
         return None
 
-    def process(self, action, filename):
-        LOG.debug("EP file: %s: %s" % (action, filename))
+    def process(self, files):
+        LOG.debug("EP files: %s" % files)
 
         ipallocfile = STATE_FILE_NAME_FORMAT % STATE_IPADDR_ALLLOC
         ipallocfile = "%s/%s" % (MD_DIR, ipallocfile)
@@ -254,8 +306,8 @@ class StateWatcher(FileWatcher):
         super(StateWatcher, self).__init__(
             filedir, extensions, name="state-watcher")
 
-    def process(self, action, filename):
-        LOG.debug("State Event: %s: %s" % (action, filename))
+    def process(self, files):
+        LOG.debug("State Event: %s" % files)
 
         curr_alloc = {}
         ipallocfile = STATE_FILE_NAME_FORMAT % STATE_IPADDR_ALLLOC
@@ -561,11 +613,15 @@ files = %s/*.proxy
 
 def init_env():
     # importing ovs_config got OVS registered
-    from opflexagent import gbp_ovs_agent as gbp
-    cfg.CONF.register_opts(gbp.gbp_opts, "OPFLEX")
+    cfg.CONF.register_opts(gbp_opts, "OPFLEX")
     common_config.init(sys.argv[1:])
     common_config.setup_logging()
     utils.log_opt_values(LOG)
+
+
+def tmp_watcher_main():
+    init_env()
+    TmpWatcher().run()
 
 
 def ep_watcher_main():
@@ -576,3 +632,7 @@ def ep_watcher_main():
 def state_watcher_main():
     init_env()
     StateWatcher().run()
+
+
+if __name__ == "__main__":
+    tmp_watcher_main()
