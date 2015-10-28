@@ -208,7 +208,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 "domain-policy-space": 'apic_tenant',
                 "domain-name": 'name_of_l3p',
                 "internal-subnets": sorted(['192.168.0.0/16',
-                                            '192.169.0.0/16'])})
+                                            '192.169.0.0/16',
+                                            '169.254.0.0/16'])})
 
         self.agent._write_vrf_file.reset_mock()
 
@@ -228,7 +229,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 "domain-policy-space": 'apic_tenant',
                 "domain-name": 'name_of_l3p',
                 "internal-subnets": sorted(['192.168.0.0/16',
-                                            '192.169.0.0/16'])})
+                                            '192.169.0.0/16',
+                                            '169.254.0.0/16'])})
         self.agent._write_vrf_file.reset_mock()
 
         # Bind another port on a same L3P, but subnets changed
@@ -240,7 +242,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
             'newid', {
                 "domain-policy-space": 'apic_tenant',
                 "domain-name": 'name_of_l3p',
-                "internal-subnets": sorted(['192.170.0.0/16'])})
+                "internal-subnets": sorted(['192.170.0.0/16',
+                                            '169.254.0.0/16'])})
 
     def test_port_multiple_ep_files(self):
         self.agent.int_br = mock.Mock()
@@ -419,7 +422,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 "domain-policy-space": 'apic_tenant',
                 "domain-name": 'name_of_l3p',
                 "internal-subnets": sorted(['192.168.0.0/16',
-                                            '192.169.0.0/16'])})
+                                            '192.169.0.0/16',
+                                            '169.254.0.0/16'])})
 
     def test_port_bound_no_mapping(self):
         self.agent.int_br = mock.Mock()
@@ -504,4 +508,5 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 "domain-name": mapping['vrf_name'],
                 "internal-subnets": sorted(['192.168.0.0/16',
                                             '192.169.0.0/16',
-                                            '1.1.1.0/24'])})
+                                            '1.1.1.0/24',
+                                            '169.254.0.0/16'])})
