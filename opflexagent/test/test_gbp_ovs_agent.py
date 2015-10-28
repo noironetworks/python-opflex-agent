@@ -15,6 +15,7 @@ import sys
 
 import mock
 sys.modules["apicapi"] = mock.Mock()
+sys.modules["pyinotify"] = mock.Mock()
 
 import contextlib
 from opflexagent import gbp_ovs_agent
@@ -128,7 +129,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                    'endpoint_group_name': 'epg_name',
                    'promiscuous_mode': False,
                    'vm-name': 'somename',
-                   'app_profile_name': 'prof_name',
+                   'app_profile_name': 'profile_name',
                    'extra_ips': ['192.169.8.1', '192.169.8.254'],
                    'vrf_name': 'name_of_l3p',
                    'vrf_tenant': 'apic_tenant',
@@ -182,7 +183,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                         mapping['endpoint_group_name']),
                 "interface-name": args['port'].port_name,
-                "mac": mapping['mac_address'],
+                "mac": 'aa:bb:cc:00:11:22',
                 "promiscuous-mode": mapping['promiscuous_mode'],
                 "uuid": args['port'].vif_id,
                 "attributes": {'vm-name': 'somename'},
