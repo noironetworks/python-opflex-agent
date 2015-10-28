@@ -75,6 +75,7 @@ FILE_NAME_FORMAT = "%s." + FILE_EXTENSION
 VRF_FILE_EXTENSION = "rdconfig"
 VRF_FILE_NAME_FORMAT = "%s." + VRF_FILE_EXTENSION
 METADATA_DEFAULT_IP = '169.254.169.254'
+METADATA_SUBNET = '169.254.0.0/16'
 
 
 class GBPOvsPluginApi(rpc.GBPServerRpcApiMixin):
@@ -434,7 +435,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             if curr_vrf['info'] != vrf_info:
                 vrf_info_copy = copy.deepcopy(vrf_info)
                 vrf_info_copy['internal-subnets'] = sorted(list(
-                    vrf_info_copy['internal-subnets']))
+                    vrf_info_copy['internal-subnets']) + [METADATA_SUBNET])
                 self._write_vrf_file(mapping['l3_policy_id'], vrf_info_copy)
                 curr_vrf['info'] = vrf_info
             if vif_id:
