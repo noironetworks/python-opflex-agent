@@ -59,6 +59,17 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.addCleanup(self.agent.int_br.reset_mock)
         self.addCleanup(self.agent.of_rpc.get_gbp_details)
 
+    def _check_call_list(self, expected, observed, check_all=True):
+        for call in expected:
+            self.assertTrue(call in observed,
+                            msg='Call not found, expected:\n%s\nobserved:'
+                                '\n%s' % (str(call), str(observed)))
+            observed.remove(call)
+        if check_all:
+            self.assertFalse(
+                len(observed),
+                msg='There are more calls than expected: %s' % str(observed))
+
     def _purge_endpoint_dir(self):
         try:
             shutil.rmtree(self.ep_dir)
@@ -124,12 +135,29 @@ class TestGbpOvsAgent(base.BaseTestCase):
                    'extra_ips': ['192.169.8.1', '192.169.8.254'],
                    'vrf_name': 'name_of_l3p',
                    'vrf_tenant': 'apic_tenant',
-                   'vrf_subnets': ['192.168.0.0/16', '192.169.0.0/16']}
+                   'vrf_subnets': ['192.168.0.0/16', '192.169.0.0/16'],
+                   'floating_ip': [{'id': '1',
+                                    'floating_ip_address': '172.10.0.1',
+                                    'floating_network_id': 'ext_net',
+                                    'router_id': 'ext_rout',
+                                    'port_id': 'port_id',
+                                    'fixed_ip_address': '192.168.0.2',
+                                    'nat_epg_tenant': 'nat-epg-tenant',
+                                    'nat_epg_name': 'nat-epg-name'},
+                                   {'id': '2',
+                                    'floating_ip_address': '172.10.0.2',
+                                    'floating_network_id': 'ext_net',
+                                    'router_id': 'ext_rout',
+                                    'port_id': 'port_id',
+                                    'fixed_ip_address': '192.168.1.2'}],
+                   'owned_addresses': ['192.168.0.2']}
         pattern.update(**kwargs)
         return pattern
 
     def _port_bound_args(self, net_type='net_type'):
-        return {'port': mock.Mock(),
+        port = mock.Mock()
+        port.vif_id = uuidutils.generate_uuid()
+        return {'port': port,
                 'net_uuid': 'net_id',
                 'network_type': net_type,
                 'physical_network': 'phys_net',
@@ -152,7 +180,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
             "Port", mock.ANY, "tag")
         self.assertFalse(self.agent.provision_local_vlan.called)
         self.agent._write_endpoint_file.assert_called_with(
-            args['port'].vif_id, {
+            args['port'].vif_id + '_' + mapping['mac_address'], {
                 "policy-space-name": mapping['ptg_tenant'],
                 "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                         mapping['endpoint_group_name']),
@@ -165,7 +193,16 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 "domain-policy-space": 'apic_tenant',
                 "domain-name": 'name_of_l3p',
                 "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
-                       '192.169.8.254']})
+                       '192.169.8.254'],
+                # FIP mapping will be in the file
+                "ip-address-mapping": [{
+                    'uuid': '1', 'mapped-ip': '192.168.0.2',
+                    'floating-ip': '172.10.0.1',
+                    'endpoint-group-name': 'profile_name|nat-epg-name',
+                    'policy-space-name': 'nat-epg-tenant'},
+                    {'uuid': '2', 'mapped-ip': '192.168.1.2',
+                     'floating-ip': '172.10.0.2'}]})
+
         self.agent._write_vrf_file.assert_called_once_with(
             'l3p_id', {
                 "domain-policy-space": 'apic_tenant',
@@ -204,6 +241,146 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 "domain-policy-space": 'apic_tenant',
                 "domain-name": 'name_of_l3p',
                 "internal-subnets": sorted(['192.170.0.0/16'])})
+
+    def test_port_multiple_ep_files(self):
+        self.agent.int_br = mock.Mock()
+        # Prepare AAP list
+        aaps = {'allowed_address_pairs': [
+            # Non active with MAC
+            {'ip_address': '192.169.0.1',
+             'mac_address': 'AA:AA'},
+            # Active with MAC
+            {'ip_address': '192.169.0.2',
+             'mac_address': 'BB:BB',
+             'active': True},
+            # Another address for this mac (BB:BB)
+            {'ip_address': '192.169.0.7',
+             'mac_address': 'BB:BB',
+             'active': True},
+            # Non active No MAC
+            {'ip_address': '192.169.0.3'},
+            # Active no MAC
+            {'ip_address': '192.169.0.4',
+             'active': True},
+            # Non active same MAC as main
+            {'ip_address': '192.169.0.5',
+             'mac_address': 'aa:bb:cc:00:11:22'},
+            # Active same MAC as main
+            {'ip_address': '192.169.0.6',
+             'mac_address': 'aa:bb:cc:00:11:22',
+             'active': True}]}
+        mapping = self._get_gbp_details(**aaps)
+        # Add a floating IPs
+        mapping['floating_ip'].extend([
+            # For non active with MAC AA:AA
+            {'id': '3', 'floating_ip_address': '172.10.0.3',
+             'floating_network_id': 'ext_net',
+             'router_id': 'ext_rout', 'port_id': 'port_id',
+             'fixed_ip_address': '192.169.0.1'},
+            # For active with MAC BB:BB
+            {'id': '4', 'floating_ip_address': '172.10.0.4',
+             'floating_network_id': 'ext_net',
+             'router_id': 'ext_rout', 'port_id': 'port_id',
+             'fixed_ip_address': '192.169.0.2'},
+            # For non-active no MAC specified address
+            {'id': '5', 'floating_ip_address': '172.10.0.5',
+             'floating_network_id': 'ext_net',
+             'router_id': 'ext_rout', 'port_id': 'port_id',
+             'fixed_ip_address': '192.169.0.3'}])
+        self.agent.of_rpc.get_gbp_details.return_value = mapping
+        args = self._port_bound_args('opflex')
+        args['port'].gbp_details = mapping
+        self.agent.port_bound(**args)
+
+        # Build expected calls.
+        # 3 calls are expected, one for unique MAC (AA:AA, BB:BB and main)
+        expected_calls = [
+            # First call, the main EP file is created.
+            mock.call(
+                args['port'].vif_id + '_' + mapping['mac_address'], {
+                    "policy-space-name": mapping['ptg_tenant'],
+                    "endpoint-group-name": (mapping['app_profile_name'] + "|" +
+                                            mapping['endpoint_group_name']),
+                    "interface-name": args['port'].port_name,
+                    "mac": 'aa:bb:cc:00:11:22',
+                    "promiscuous-mode": mapping['promiscuous_mode'],
+                    "uuid": args['port'].vif_id,
+                    "attributes": {'vm-name': 'somename'},
+                    "neutron-network": "net_id",
+                    "domain-policy-space": 'apic_tenant',
+                    "domain-name": 'name_of_l3p',
+                    # Also active AAPs are set
+                    "ip": ['192.168.0.2', '192.168.1.2', '192.169.0.4',
+                           '192.169.0.6', '192.169.8.1', '192.169.8.254'],
+                    # FIP mapping will be in the file except for FIP 3 and 4
+                    "ip-address-mapping": [{
+                        'uuid': '1', 'mapped-ip': '192.168.0.2',
+                        'floating-ip': '172.10.0.1',
+                        'endpoint-group-name': 'profile_name|nat-epg-name',
+                        'policy-space-name': 'nat-epg-tenant'},
+                        {'uuid': '2', 'mapped-ip': '192.168.1.2',
+                         'floating-ip': '172.10.0.2'},
+                        {'uuid': '5', 'mapped-ip': '192.169.0.3',
+                         'floating-ip': '172.10.0.5'}],
+                    # Set the proper allowed address pairs (both active and non
+                    # active with the main MAC address)
+                    'virtual-ip': [{'ip': '192.169.0.3',
+                                    'mac': 'aa:bb:cc:00:11:22'},
+                                   {'ip': '192.169.0.4',
+                                    'mac': 'aa:bb:cc:00:11:22'},
+                                   {'ip': '192.169.0.5',
+                                    'mac': 'aa:bb:cc:00:11:22'},
+                                   {'ip': '192.169.0.6',
+                                    'mac': 'aa:bb:cc:00:11:22'}]}),
+            # Second call for MAC address BB:BB
+            mock.call(
+                args['port'].vif_id + '_' + 'BB:BB', {
+                    "policy-space-name": mapping['ptg_tenant'],
+                    "endpoint-group-name": (mapping['app_profile_name'] + "|" +
+                                            mapping['endpoint_group_name']),
+                    "interface-name": args['port'].port_name,
+                    # mac is BB:BB
+                    "mac": 'BB:BB',
+                    "promiscuous-mode": mapping['promiscuous_mode'],
+                    "uuid": args['port'].vif_id,
+                    "attributes": {'vm-name': 'somename'},
+                    "neutron-network": "net_id",
+                    "domain-policy-space": 'apic_tenant',
+                    "domain-name": 'name_of_l3p',
+                    # Main IP address based on active AAP
+                    "ip": ['192.169.0.2', '192.169.0.7'],
+                    # Only FIP number 4 here
+                    "ip-address-mapping": [
+                        {'uuid': '4', 'mapped-ip': '192.169.0.2',
+                         'floating-ip': '172.10.0.4'}],
+                    # Set the proper allowed address pairs with MAC BB:BB
+                    'virtual-ip': [{'ip': '192.169.0.2', 'mac': 'BB:BB'},
+                                   {'ip': '192.169.0.7', 'mac': 'BB:BB'}]}),
+            # Third call for MAC address AA:AA
+            mock.call(
+                args['port'].vif_id + '_' + 'AA:AA', {
+                    "policy-space-name": mapping['ptg_tenant'],
+                    "endpoint-group-name": (mapping['app_profile_name'] + "|" +
+                                            mapping['endpoint_group_name']),
+                    "interface-name": args['port'].port_name,
+                    # mac is AA:AA
+                    "mac": 'AA:AA',
+                    "promiscuous-mode": mapping['promiscuous_mode'],
+                    "uuid": args['port'].vif_id,
+                    "attributes": {'vm-name': 'somename'},
+                    "neutron-network": "net_id",
+                    "domain-policy-space": 'apic_tenant',
+                    "domain-name": 'name_of_l3p',
+                    # No main IP address
+                    # Only FIP number 3 here
+                    "ip-address-mapping": [
+                        {'uuid': '3', 'mapped-ip': '192.169.0.1',
+                         'floating-ip': '172.10.0.3'}],
+                    # Set the proper allowed address pairs with MAC BB:BB
+                    'virtual-ip': [{'ip': '192.169.0.1', 'mac': 'AA:AA'}]})
+        ]
+        self._check_call_list(expected_calls,
+                              self.agent._write_endpoint_file.call_args_list)
 
     def test_port_unbound_delete_vrf_file(self):
         # Bind 2 ports on same VRF
