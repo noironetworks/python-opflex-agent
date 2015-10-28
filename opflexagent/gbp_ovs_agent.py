@@ -400,7 +400,10 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 virtual_ips.append(
                     {'ip': aap['ip_address'],
                      'mac': aap.get('mac_address', mac)})
-        mapping_dict['ip'] = ips + ips_ext
+                if aap.get('active'):
+                    ips_ext.append(aap['ip_address'])
+        if ips or ips_ext:
+            mapping_dict['ip'] = sorted(ips + ips_ext)
         if virtual_ips:
             mapping_dict['virtual-ip'] = sorted(virtual_ips,
                                                 key=lambda x: x['ip'])

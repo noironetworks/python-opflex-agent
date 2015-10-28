@@ -309,8 +309,9 @@ class TestGbpOvsAgent(base.BaseTestCase):
                     "neutron-network": "net_id",
                     "domain-policy-space": 'apic_tenant',
                     "domain-name": 'name_of_l3p',
-                    "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
-                           '192.169.8.254'],
+                    # Also active AAPs are set
+                    "ip": ['192.168.0.2', '192.168.1.2', '192.169.0.4',
+                           '192.169.0.6', '192.169.8.1', '192.169.8.254'],
                     # FIP mapping will be in the file except for FIP 3 and 4
                     "ip-address-mapping": [{
                         'uuid': '1', 'mapped-ip': '192.168.0.2',
@@ -346,8 +347,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                     "neutron-network": "net_id",
                     "domain-policy-space": 'apic_tenant',
                     "domain-name": 'name_of_l3p',
-                    # No main IP address
-                    "ip": [],
+                    # Main IP address based on active AAP
+                    "ip": ['192.169.0.2', '192.169.0.7'],
                     # Only FIP number 4 here
                     "ip-address-mapping": [
                         {'uuid': '4', 'mapped-ip': '192.169.0.2',
@@ -371,7 +372,6 @@ class TestGbpOvsAgent(base.BaseTestCase):
                     "domain-policy-space": 'apic_tenant',
                     "domain-name": 'name_of_l3p',
                     # No main IP address
-                    "ip": [],
                     # Only FIP number 3 here
                     "ip-address-mapping": [
                         {'uuid': '3', 'mapped-ip': '192.169.0.1',
