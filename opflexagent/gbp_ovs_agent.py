@@ -35,6 +35,7 @@ from opflexagent import as_metadata_manager
 from opflexagent import constants as ofcst
 from opflexagent import opflex_notify
 from opflexagent import rpc
+from opflexagent import snat_iptables_manager
 
 LOG = logging.getLogger(__name__)
 
