@@ -12,7 +12,7 @@ pre-start script
   chown neutron:root /var/run/neutron
 end script
 
-exec start-stop-daemon --start \
+exec start-stop-daemon --start --chuid neutron \
   --exec /usr/bin/neutron-opflex-agent -- \
   --config-file=/etc/neutron/neutron.conf \
   --config-file=/etc/neutron/plugin.ini \
