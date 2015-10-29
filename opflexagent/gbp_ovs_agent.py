@@ -134,6 +134,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.updated_vrf = set()
         self.backup_updated_vrf = set()
         self.dhcp_domain = kwargs['dhcp_domain']
+        self.root_helper = cfg.CONF.AGENT.root_helper
         del kwargs['hybrid_mode']
         del kwargs['epg_mapping_dir']
         del kwargs['opflex_networks']
@@ -143,7 +144,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         del kwargs['dhcp_domain']
 
         self.notify_worker = opflex_notify.worker()
-        self.metadata_mgr = as_metadata_manager.AsMetadataManager(LOG)
+        self.metadata_mgr = as_metadata_manager.AsMetadataManager(
+            LOG, self.root_helper)
 
         super(GBPOvsAgent, self).__init__(**kwargs)
         self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]

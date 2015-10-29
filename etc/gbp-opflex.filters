@@ -1,0 +1,20 @@
+# neutron-rootwrap command filters for nodes on which opflex agent is
+# expected to run
+#
+# This file should be owned by (and only-writeable by) the root user
+
+# format is
+# cmd-name: filter-name, raw-command, user, args
+
+[Filters]
+
+# gbp-opflex filters
+supervisord:   CommandFilter, supervisord, root
+supervisorctl: CommandFilter, supervisorctl, root
+ip:            CommandFilter, ip, root
+ethtool:       CommandFilter, ethtool, root
+mkdir:         CommandFilter, mkdir, root
+chmod:         CommandFilter, chmod, root
+chown:         CommandFilter, chown, root
+ovs-vsctl:     CommandFilter, ovs-vsctl, root
+ovs-ofctl:     CommandFilter, ovs-ofctl, root
