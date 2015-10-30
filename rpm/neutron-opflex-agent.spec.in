@@ -82,6 +82,7 @@ usermod -a -G opflexep neutron
 %{_bindir}/neutron-opflex-agent
 %{_bindir}/opflex-metadata-ep-watcher
 %{_bindir}/opflex-metadata-state-watcher
+%{_sysconfdir}/neutron/rootwrap.d/gbp-opflex.filters
 %{_unitdir}/%{opflex_agent}
 
 %changelog
