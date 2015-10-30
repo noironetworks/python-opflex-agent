@@ -31,9 +31,13 @@ rm -f requirements.txt
 
 %install
 %{__python2} setup.py install -O1 --install-data / --skip-build --root %{buildroot}
+install -p -D -m 600 etc/gbp-opflex.filters \
+    %{buildroot}%{_sysconfdir}/neutron/rootwrap.d/gbp-opflex.filters
+install -p -D -m 0644 rpm/%{opflex_agent} \
+    %{buildroot}/%{_unitdir}/%{opflex_agent}
+
 # Remove unused files
 rm -rf %{buildroot}%{python2_sitelib}/opflexagent/test
-install -p -D -m 0644 rpm/%{opflex_agent} %{buildroot}/%{_unitdir}/%{opflex_agent}
 
 %pre
 getent group opflexep >/dev/null || groupadd -r opflexep
@@ -78,6 +82,7 @@ usermod -a -G opflexep neutron
 %{_bindir}/neutron-opflex-agent
 %{_bindir}/opflex-metadata-ep-watcher
 %{_bindir}/opflex-metadata-state-watcher
+%{_sysconfdir}/neutron/rootwrap.d/gbp-opflex.filters
 %{_unitdir}/%{opflex_agent}
 
 %changelog

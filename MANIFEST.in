@@ -4,6 +4,6 @@ exclude .gitignore
 exclude .gitreview
 include debian/*
 include debian/source/*
+include etc/*
 include rpm/*
 global-exclude *.pyc
-
