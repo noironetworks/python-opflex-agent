@@ -298,8 +298,9 @@ class EpWatcher(FileWatcher):
 
 class StateWatcher(FileWatcher):
     def __init__(self):
-        self.mgr = AsMetadataManager(LOG)
-        self.svc_ovs_port_mac = self.mgr.get_svc_ns_port_mac()[:17]
+        root_helper = cfg.CONF.AGENT.root_helper
+        self.mgr = AsMetadataManager(LOG, root_helper)
+        self.svc_ovsport_mac = self.mgr.get_asport_mac()[:17]
 
         filedir = MD_DIR
         extensions = STATE_FILE_EXTENSION
@@ -382,7 +383,7 @@ class StateWatcher(FileWatcher):
         asvc = {
             "uuid": alloc["uuid"],
             "interface-name": SVC_OVS_PORT,
-            "service-mac": self.svc_ovs_port_mac,
+            "service-mac": self.svc_ovsport_mac,
             "neutron-network": alloc["uuid"],
             "domain-policy-space": alloc["domain-policy-space"],
             "domain-name": alloc["domain-name"],
@@ -444,9 +445,10 @@ class StateWatcher(FileWatcher):
 
 
 class AsMetadataManager(object):
-    def __init__(self, logger):
+    def __init__(self, logger, root_helper):
         global LOG
         LOG = logger
+        self.root_helper = root_helper
         self.name = "AsMetadataManager"
         self.md_filename = "%s/%s" % (MD_DIR, MD_SUP_FILE_NAME)
         self.integ_bridge = cfg.CONF.OVS.integration_bridge
@@ -479,8 +481,8 @@ class AsMetadataManager(object):
                     (self.name, str(e)))
 
     def sh(self, cmd):
-        # TODO(mandeep): Use root_helper
-        cmd = "sudo %s" % cmd
+        if self.root_helper:
+            cmd = "%s %s" % (self.root_helper, cmd)
         LOG.debug("%s: Running command: %s" % (
             self.name, cmd))
         ret = subprocess.check_output(
@@ -524,7 +526,7 @@ class AsMetadataManager(object):
         self.sh("ip netns exec %s ip addr del %s/%s dev %s" %
                 (SVC_NS, ipaddr, SVC_IP_CIDR, SVC_NS_PORT))
 
-    def get_svc_ns_port_mac(self):
+    def get_asport_mac(self):
         return self.sh("ip netns exec %s ip link show %s | "
             "awk -e '/link\/ether/ {print $2}'" %
             (SVC_NS, SVC_NS_PORT))
@@ -652,6 +654,13 @@ def ep_watcher_main():
 def state_watcher_main():
     init_env()
     StateWatcher().run()
+
+
+def as_metadata_main():
+    init_env()
+    root_helper = cfg.CONF.AGENT.root_helper
+    asm = AsMetadataManager(LOG, root_helper)
+    asm.ensure_initialized()
 
 
 if __name__ == "__main__":

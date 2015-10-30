@@ -146,7 +146,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         del kwargs['dhcp_domain']
 
         self.notify_worker = opflex_notify.worker()
-        self.metadata_mgr = as_metadata_manager.AsMetadataManager(LOG)
+        self.metadata_mgr = as_metadata_manager.AsMetadataManager(
+            LOG, self.root_helper)
 
         super(GBPOvsAgent, self).__init__(**kwargs)
         self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
