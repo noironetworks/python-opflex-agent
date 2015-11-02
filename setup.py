@@ -29,9 +29,9 @@ setuptools.setup(
         'console_scripts': [
             'neutron-opflex-agent = '
                 'opflexagent.gbp_ovs_agent:main',
-            'opflex-metadata-ep-watcher = '
+            'opflex-ep-watcher = '
                 'opflexagent.as_metadata_manager:ep_watcher_main',
-            'opflex-metadata-state-watcher = '
+            'opflex-state-watcher = '
                 'opflexagent.as_metadata_manager:state_watcher_main',
         ],
         'neutron.ml2.type_drivers': [
