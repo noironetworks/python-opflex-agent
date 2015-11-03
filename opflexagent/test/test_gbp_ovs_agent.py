@@ -157,7 +157,10 @@ class TestGbpOvsAgent(base.BaseTestCase):
                                     'router_id': 'ext_rout',
                                     'port_id': 'port_id',
                                     'fixed_ip_address': '192.169.8.1'}],
-                   'owned_addresses': ['192.168.0.2']}
+                   'owned_addresses': ['192.168.0.2'],
+                   'attestation': [{'name': 'some_name',
+                                    'validator': 'base64string', 'mac': 'mac'}]
+                   }
         pattern.update(**kwargs)
         return pattern
 
@@ -211,7 +214,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                      'floating-ip': '172.10.0.2'},
                     # for the extra-ip
                     {'uuid': '7', 'mapped-ip': '192.169.8.1',
-                     'floating-ip': '172.10.0.7'}]})
+                     'floating-ip': '172.10.0.7'}],
+                "attestation": mapping['attestation']})
 
         self.agent._write_vrf_file.assert_called_once_with(
             'l3p_id', {
@@ -346,7 +350,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                                    {'ip': '192.169.0.5',
                                     'mac': 'aa:bb:cc:00:11:22'},
                                    {'ip': '192.169.0.6',
-                                    'mac': 'aa:bb:cc:00:11:22'}]}),
+                                    'mac': 'aa:bb:cc:00:11:22'}],
+                    "attestation": mapping['attestation']}),
             # Second call for MAC address BB:BB
             mock.call(
                 args['port'].vif_id + '_' + 'BB:BB', {
@@ -370,7 +375,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                          'floating-ip': '172.10.0.4'}],
                     # Set the proper allowed address pairs with MAC BB:BB
                     'virtual-ip': [{'ip': '192.169.0.2', 'mac': 'BB:BB'},
-                                   {'ip': '192.169.0.7', 'mac': 'BB:BB'}]}),
+                                   {'ip': '192.169.0.7', 'mac': 'BB:BB'}],
+                    "attestation": mapping['attestation']}),
             # Third call for MAC address AA:AA
             mock.call(
                 args['port'].vif_id + '_' + 'AA:AA', {
@@ -392,7 +398,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                         {'uuid': '3', 'mapped-ip': '192.169.0.1',
                          'floating-ip': '172.10.0.3'}],
                     # Set the proper allowed address pairs with MAC BB:BB
-                    'virtual-ip': [{'ip': '192.169.0.1', 'mac': 'AA:AA'}]})
+                    'virtual-ip': [{'ip': '192.169.0.1', 'mac': 'AA:AA'}],
+                    "attestation": mapping['attestation']})
         ]
         self._check_call_list(expected_calls,
                               self.agent._write_endpoint_file.call_args_list)
