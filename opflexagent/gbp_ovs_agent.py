@@ -303,6 +303,10 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 for fixed in fixed_ips:
                     mapping_copy['floating_ip'].extend(
                         fip_by_fixed.get(fixed['ip_address'], []))
+                # FIPs opinting to extra IPs
+                for fixed in mapping['extra_ips']:
+                    mapping_copy['floating_ip'].extend(
+                        fip_by_fixed.get(fixed, []))
 
                 # For the main MAC EP, set al the AAP with no mac address or
                 # MAC address equal to the original MAC.
@@ -661,6 +665,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             for es in self._get_int_fips(ip_ver, port_id).keys():
                 if es not in es_using_int_fip[ip_ver]:
                     self._release_int_fip(ip_ver, port_id, es)
+        if 'ip-address-mapping' in mapping:
+            mapping['ip-address-mapping'].sort(key=lambda x: x['uuid'])
 
     def _get_int_fips(self, ip_ver, port_id):
         return self.int_fip_alloc[ip_ver].get(port_id, {})
