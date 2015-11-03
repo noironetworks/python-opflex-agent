@@ -420,6 +420,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         if 'vrf_name' in mapping:
             mapping_dict['domain-policy-space'] = mapping['vrf_tenant']
             mapping_dict['domain-name'] = mapping['vrf_name']
+        if 'attestation' in mapping:
+            mapping_dict['attestation'] = mapping['attestation']
 
         self._fill_ip_mapping_info(port.vif_id, mapping, ips, mapping_dict)
         # Create one file per MAC address.
