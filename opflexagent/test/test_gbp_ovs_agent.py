@@ -149,7 +149,14 @@ class TestGbpOvsAgent(base.BaseTestCase):
                                     'floating_network_id': 'ext_net',
                                     'router_id': 'ext_rout',
                                     'port_id': 'port_id',
-                                    'fixed_ip_address': '192.168.1.2'}],
+                                    'fixed_ip_address': '192.168.1.2'},
+                                   # FIP pointing to one extra-ip
+                                   {'id': '7',
+                                    'floating_ip_address': '172.10.0.7',
+                                    'floating_network_id': 'ext_net',
+                                    'router_id': 'ext_rout',
+                                    'port_id': 'port_id',
+                                    'fixed_ip_address': '192.169.8.1'}],
                    'owned_addresses': ['192.168.0.2']}
         pattern.update(**kwargs)
         return pattern
@@ -201,7 +208,10 @@ class TestGbpOvsAgent(base.BaseTestCase):
                     'endpoint-group-name': 'profile_name|nat-epg-name',
                     'policy-space-name': 'nat-epg-tenant'},
                     {'uuid': '2', 'mapped-ip': '192.168.1.2',
-                     'floating-ip': '172.10.0.2'}]})
+                     'floating-ip': '172.10.0.2'},
+                    # for the extra-ip
+                    {'uuid': '7', 'mapped-ip': '192.169.8.1',
+                     'floating-ip': '172.10.0.7'}]})
 
         self.agent._write_vrf_file.assert_called_once_with(
             'l3p_id', {
@@ -324,7 +334,9 @@ class TestGbpOvsAgent(base.BaseTestCase):
                         {'uuid': '2', 'mapped-ip': '192.168.1.2',
                          'floating-ip': '172.10.0.2'},
                         {'uuid': '5', 'mapped-ip': '192.169.0.3',
-                         'floating-ip': '172.10.0.5'}],
+                         'floating-ip': '172.10.0.5'},
+                        {'uuid': '7', 'mapped-ip': '192.169.8.1',
+                         'floating-ip': '172.10.0.7'}],
                     # Set the proper allowed address pairs (both active and non
                     # active with the main MAC address)
                     'virtual-ip': [{'ip': '192.169.0.3',
