@@ -304,7 +304,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     mapping_copy['floating_ip'].extend(
                         fip_by_fixed.get(fixed['ip_address'], []))
                 # FIPs opinting to extra IPs
-                for fixed in mapping['extra_ips']:
+                for fixed in (mapping.get('extra_ips') or []):
                     mapping_copy['floating_ip'].extend(
                         fip_by_fixed.get(fixed, []))
 
