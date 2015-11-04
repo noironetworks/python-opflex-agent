@@ -309,6 +309,29 @@ class TestGbpOvsAgent(base.BaseTestCase):
             {'ip_address': '192.169.0.6',
              'mac_address': 'aa:bb:cc:00:11:22',
              'active': True}]}
+        # Prepare extra details for the AAPs
+        extra_details = {'BB:BB': {'extra_ips': ['192.170.0.1',
+                                                 '192.170.0.2'],
+                                   'floating_ip': [
+                                       {'id': '171',
+                                        'floating_ip_address': '173.10.0.1',
+                                        'floating_network_id': 'ext_net',
+                                        'router_id': 'ext_rout',
+                                        'port_id': 'port_id',
+                                        'fixed_ip_address': '192.170.0.1'}],
+                                   'ip_mapping': []},
+                         # AA won't be here because not active
+                         'aa:bb:cc:00:11:22': {
+                             'extra_ips': ['192.180.0.1', '192.180.0.2'],
+                             'floating_ip': [
+                                 {'id': '181',
+                                  'floating_ip_address': '173.11.0.1',
+                                  'floating_network_id': 'ext_net',
+                                  'router_id': 'ext_rout',
+                                  'port_id': 'port_id',
+                                  'fixed_ip_address': '192.180.0.1'}],
+                             'ip_mapping': []}}
+        aaps['extra_details'] = extra_details
         mapping = self._get_gbp_details(**aaps)
         # Add a floating IPs
         mapping['floating_ip'].extend([
@@ -351,13 +374,16 @@ class TestGbpOvsAgent(base.BaseTestCase):
                     "domain-name": 'name_of_l3p',
                     # Also active AAPs are set
                     "ip": ['192.168.0.2', '192.168.1.2', '192.169.0.4',
-                           '192.169.0.6', '192.169.8.1', '192.169.8.254'],
+                           '192.169.0.6', '192.169.8.1', '192.169.8.254',
+                           '192.180.0.1', '192.180.0.2'],
                     # FIP mapping will be in the file except for FIP 3 and 4
                     "ip-address-mapping": [{
                         'uuid': '1', 'mapped-ip': '192.168.0.2',
                         'floating-ip': '172.10.0.1',
                         'endpoint-group-name': 'profile_name|nat-epg-name',
                         'policy-space-name': 'nat-epg-tenant'},
+                        {'uuid': '181', 'mapped-ip': '192.180.0.1',
+                         'floating-ip': '173.11.0.1'},
                         {'uuid': '2', 'mapped-ip': '192.168.1.2',
                          'floating-ip': '172.10.0.2'},
                         {'uuid': '5', 'mapped-ip': '192.169.0.3',
@@ -391,9 +417,12 @@ class TestGbpOvsAgent(base.BaseTestCase):
                     "domain-policy-space": 'apic_tenant',
                     "domain-name": 'name_of_l3p',
                     # Main IP address based on active AAP
-                    "ip": ['192.169.0.2', '192.169.0.7'],
-                    # Only FIP number 4 here
+                    "ip": ['192.169.0.2', '192.169.0.7', '192.170.0.1',
+                           '192.170.0.2'],
+                    # Only FIP number 4 and 171 here
                     "ip-address-mapping": [
+                        {'uuid': '171', 'mapped-ip': '192.170.0.1',
+                         'floating-ip': '173.10.0.1'},
                         {'uuid': '4', 'mapped-ip': '192.169.0.2',
                          'floating-ip': '172.10.0.4'}],
                     # Set the proper allowed address pairs with MAC BB:BB
