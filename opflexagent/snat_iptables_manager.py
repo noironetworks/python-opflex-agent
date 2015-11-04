@@ -34,12 +34,14 @@ class SnatIptablesManager(object):
         if ip_wrapper_root.netns.exists(ns_name):
             ip_wrapper_root.netns.delete(ns_name)
 
-    def _add_port_and_netns(self, if_name, ns_name):
+    def _add_port_and_netns(self, if_name, ns_name, if_mac=None):
         self.int_br.run_vsctl(["add-port", self.int_br.br_name, if_name,
                                "--", "set", "Interface", if_name,
                                "type=internal"])
         ip_wrapper_root = ip_lib.IPWrapper(self.root_helper)
         if_dev = ip_wrapper_root.device(if_name)
+        if if_mac:
+            if_dev.link.set_address(if_mac)
 
         ip_wrapper = ip_wrapper_root.netns.add(ns_name)
         ip_wrapper.netns.execute(['sysctl', '-w', 'net.ipv4.ip_forward=1'])
@@ -103,7 +105,8 @@ class SnatIptablesManager(object):
 
     def setup_snat_for_es(self, es_name,
                           ip_start=None, ip_end=None, ip_gw=None,
-                          ip6_start=None, ip6_end=None, ip6_gw=None):
+                          ip6_start=None, ip6_end=None, ip6_gw=None,
+                          next_hop_mac=None):
         next_hop_if = self._get_hash_for_es(es_name)
         ns = next_hop_if
 
@@ -111,13 +114,14 @@ class SnatIptablesManager(object):
         use_v6 = bool(ip6_start and ip6_gw)
 
         if not use_v4 and not use_v6:
-            return (None, None)
+            return (None, next_hop_mac)
 
         ip_end = ip_end or ip_start
         ip6_end = ip6_end or ip6_start
 
         self._cleanup(next_hop_if, ns)
-        if_dev = self._add_port_and_netns(next_hop_if, ns)
+        if_dev = self._add_port_and_netns(next_hop_if, ns,
+                                          if_mac=next_hop_mac)
         next_hop_mac = if_dev.link.address
         LOG.debug(_("Created namespace %(ns)s, and added port %(pt)s to it"),
                   {'ns': ns, 'pt': next_hop_if})

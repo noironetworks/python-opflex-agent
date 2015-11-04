@@ -95,11 +95,13 @@ class ExtSegNextHopInfo(object):
         self.ip6_gateway = None
         self.next_hop_iface = None
         self.next_hop_mac = None
+        self.from_config = False
 
     def __str__(self):
-        return "%s: ipv4 (%s-%s,%s), ipv6 (%s-%s,%s)" % (self.es_name,
+        return "%s: ipv4 (%s-%s,%s), ipv6 (%s-%s,%s), (%s)" % (self.es_name,
             self.ip_start, self.ip_end, self.ip_gateway,
-            self.ip6_start, self.ip6_end, self.ip6_gateway)
+            self.ip6_start, self.ip6_end, self.ip6_gateway,
+            "configured" if self.from_config else "auto-allocated")
 
     def is_valid(self):
         return ((self.ip_start and self.ip_gateway) or
@@ -425,6 +427,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         if 'attestation' in mapping:
             mapping_dict['attestation'] = mapping['attestation']
 
+        self._handle_host_snat_ip(mapping.get('host_snat_ips', []))
         self._fill_ip_mapping_info(port.vif_id, mapping, ips, mapping_dict)
         # Create one file per MAC address.
         self._write_endpoint_file(port.vif_id + '_' + mac, mapping_dict)
@@ -707,7 +710,12 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 (nh.next_hop_iface, nh.next_hop_mac) = (
                     self.snat_iptables.setup_snat_for_es(es_name,
                         nh.ip_start, nh.ip_end, nh.ip_gateway,
-                        nh.ip6_start, nh.ip6_end, nh.ip6_gateway))
+                        nh.ip6_start, nh.ip6_end, nh.ip6_gateway,
+                        nh.next_hop_mac))
+                LOG.debug(_("Created SNAT iptables for %(es)s: "
+                            "iface %(if)s, mac %(mac)s"),
+                          {'es': es_name, 'if': nh.next_hop_iface,
+                           'mac': nh.next_hop_mac})
             except Exception as e:
                 LOG.error(_("Error while creating SNAT iptables for "
                             "%(es)s: %(ex)s"),
@@ -776,6 +784,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.ext_seg_next_hop = {}
         for es_name, es_info in es_cfg.iteritems():
             nh = ExtSegNextHopInfo(es_name)
+            nh.from_config = True
             for key, value in es_info:
                 if key == 'ip_address_range':
                     (nh.ip_start, nh.ip_end) = parse_range(value)
@@ -787,6 +796,38 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     nh.ip6_gateway = parse_gateway(value)
             self.ext_seg_next_hop[es_name] = nh
             LOG.debug(_("Found external segment: %s") % nh)
+
+    def _handle_host_snat_ip(self, host_snat_ips):
+        for hsi in host_snat_ips:
+            LOG.debug(_("Auto-allocated host SNAT IP: %s"), hsi)
+            es = hsi.get('external_segment_name')
+            if not es:
+                continue
+            nh = self.ext_seg_next_hop.setdefault(es, ExtSegNextHopInfo(es))
+            if nh.from_config:
+                continue    # ignore auto-allocation if manually set
+            ip = hsi.get('host_snat_ip')
+            gw = ("%s/%s" % (hsi['gateway_ip'], hsi['prefixlen'])
+                if (hsi.get('gateway_ip') and hsi.get('prefixlen')) else None)
+            updated = False
+            if netaddr.valid_ipv4(ip):
+                if ip != nh.ip_start or gw != nh.ip_gateway:
+                    nh.ip_start = ip
+                    nh.ip_gateway = gw
+                    updated = True
+            elif netaddr.valid_ipv6(ip):
+                if ip != nh.ip6_start or gw != nh.ip6_gateway:
+                    nh.ip6_start = ip
+                    nh.ip6_gateway = gw
+                    updated = True
+            else:
+                LOG.info(_("Ignoring invalid auto-allocated SNAT IP %s"), ip)
+            if updated:
+                LOG.info(_("Add/update SNAT info: %s"), nh)
+                # Clear the interface so that SNAT iptables will be
+                # re-created as required; leave MAC as is so that it will
+                # be re-used
+                nh.next_hop_iface = None
 
 
 def create_agent_config_map(conf):
