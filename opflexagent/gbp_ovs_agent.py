@@ -298,8 +298,12 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 mapping_copy['floating_ip'] = []
                 fip_by_fixed = {}
                 original_mac = mapping.get('mac_address') or port.vif_mac
+                # Get extra details for main mac (if any)
+                extra_details = mapping.get('extra_details', {}).get(
+                    original_mac, {})
                 # Prepare FIPs by fixed_ip
-                for fip in mapping.get('floating_ip', []):
+                for fip in (mapping.get('floating_ip', []) +
+                            extra_details.get('floating_ip', [])):
                     fip_by_fixed.setdefault(
                         fip['fixed_ip_address'], []).append(fip)
                 # For the main MAC, set floating IP collection to all those
@@ -308,10 +312,17 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     mapping_copy['floating_ip'].extend(
                         fip_by_fixed.get(fixed['ip_address'], []))
                 # FIPs opinting to extra IPs
-                for fixed in (mapping.get('extra_ips') or []):
+                for fixed in (mapping.get('extra_ips', []) +
+                              extra_details.get('extra_ips', [])):
                     mapping_copy['floating_ip'].extend(
                         fip_by_fixed.get(fixed, []))
 
+                if 'ip_mapping' in extra_details:
+                    mapping_copy.setdefault('ip_mapping', []).extend(
+                        extra_details.get('ip_mapping', []))
+                if 'extra_ips' in extra_details:
+                    mapping_copy.setdefault('extra_ips', []).extend(
+                        extra_details.get('extra_ips', []))
                 # For the main MAC EP, set al the AAP with no mac address or
                 # MAC address equal to the original MAC.
                 for aap in mapping.get('allowed_address_pairs', []):
@@ -332,16 +343,25 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 # Reset for AAP EP files
                 mapping_copy['allowed_address_pairs'] = []
                 mapping_copy['fixed_ips'] = []
-                mapping_copy['extra_ips'] = []
                 mapping_copy['subnets'] = []
                 mapping_copy['enable_dhcp_optimization'] = False
                 mapping_copy['enable_metadata_optimization'] = False
                 # Map to file based on the AAP with a MAC address
                 for mac, aaps in mac_aap_map.iteritems():
+                    # Get extra details for this mac (if any)
+                    extra_details = mapping.get('extra_details', {}).get(mac,
+                                                                         {})
                     # Replace the MAC address with the new one
                     mapping_copy['mac_address'] = mac
+                    # The following info are only present if the MAC has at
+                    # least one active address (server is doing the screening)
+                    mapping_copy['floating_ip'] = extra_details.get(
+                        'floating_ip', [])
+                    mapping_copy['extra_ips'] = extra_details.get(
+                        'extra_ips', [])
+                    mapping_copy['ip_mapping'] = extra_details.get(
+                        'ip_mapping', [])
                     # Extend the FIP list based on the allowed IPs
-                    mapping_copy['floating_ip'] = []
                     for aap in aaps:
                         mapping_copy['floating_ip'].extend(fip_by_fixed.get(
                             aap['ip_address'], []))
@@ -551,12 +571,15 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 skipped_devices.append(device)
                 continue
 
+            gbp_details = gbp_details_per_device.get(details['device'], {})
+            if gbp_details and 'port_id' not in gbp_details:
+                # The port is dead
+                details.pop('port_id', None)
             if 'port_id' in details:
                 LOG.info(_("Port %(device)s updated. Details: %(details)s"),
                          {'device': device, 'details': details})
                 # Inject GBP details
-                port.gbp_details = gbp_details_per_device.get(
-                    details['device'], {})
+                port.gbp_details = gbp_details
                 self.treat_vif_port(port, details['port_id'],
                                     details['network_id'],
                                     details['network_type'],
