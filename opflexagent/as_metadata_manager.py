@@ -15,6 +15,7 @@ import hashlib
 import multiprocessing
 import netaddr
 import os
+import os.path
 import pyinotify
 import Queue
 import signal
@@ -470,7 +471,7 @@ class StateWatcher(FileWatcher):
         proxystr = "\n".join([
             "[program:opflex-ns-proxy-%s]" % duuid,
             "command=/sbin/ip netns exec of-svc "
-            "/usr/bin/apic-ns-metadata-proxy "
+            "/usr/bin/opflex-ns-proxy "
             "--metadata_proxy_socket=/var/lib/neutron/metadata_proxy "
             "--state_path=/var/lib/neutron "
             "--pid_file=/var/lib/neutron/external/pids/%s.pid "
@@ -607,6 +608,16 @@ class AsMetadataManager(object):
                     (SVC_NS, SVC_NS_PORT))
 
     def init_supervisor(self):
+        def conf(*fnames):
+            config_str = ''
+            for fname in fnames:
+                if os.path.exists(fname):
+                    if os.path.isfile(fname):
+                        config_str += '--config-file %s ' % fname
+                    elif os.path.isdir(fname):
+                        config_str += '--config-dir %s ' % fname
+            return config_str
+
         config_str = "\n".join([
             "[rpcinterface:supervisor]",
             "supervisor.rpcinterface_factory = "
@@ -635,9 +646,11 @@ class AsMetadataManager(object):
             "strip_ansi = false",
             "",
             "[program:metadata-agent]",
-            "command=/usr/bin/neutron-metadata-agent "
-            "--config-file /etc/neutron/neutron.conf "
-            "--config-file /etc/neutron/metadata_agent.ini "
+            "command=/usr/bin/neutron-metadata-agent " +
+            conf('/usr/share/neutron/neutron-dist.conf',
+                 '/etc/neutron/neutron.conf',
+                 '/etc/neutron/metadata_agent.ini',
+                 '/etc/neutron/conf.d/neutron-metadata-agent') +
             "--log-file /var/log/neutron/metadata-agent.log",
             "exitcodes=0,2",
             "startsecs=10",
@@ -647,9 +660,10 @@ class AsMetadataManager(object):
             "stderr_logfile=NONE",
             "",
             "[program:opflex-ep-watcher]",
-            "command=/usr/bin/opflex-ep-watcher "
-            "--config-file /etc/neutron/neutron.conf "
-            "--config-file /etc/neutron/plugins/ml2/ml2_conf_cisco.ini "
+            "command=/usr/bin/opflex-ep-watcher " +
+            conf('/usr/share/neutron/neutron-dist.conf',
+                 '/etc/neutron/neutron.conf',
+                 '/etc/neutron/plugins/ml2/ml2_conf_cisco.ini') +
             "--log-file /var/log/neutron/opflex-ep-watcher.log",
             "exitcodes=0,2",
             "startsecs=10",
@@ -659,9 +673,10 @@ class AsMetadataManager(object):
             "stderr_logfile=NONE",
             "",
             "[program:opflex-state-watcher]",
-            "command=/usr/bin/opflex-state-watcher "
-            "--config-file /etc/neutron/neutron.conf "
-            "--config-file /etc/neutron/plugins/ml2/ml2_conf_cisco.ini "
+            "command=/usr/bin/opflex-state-watcher " +
+            conf('/usr/share/neutron/neutron-dist.conf',
+                 '/etc/neutron/neutron.conf',
+                 '/etc/neutron/plugins/ml2/ml2_conf_cisco.ini') +
             "--log-file /var/log/neutron/opflex-state-watcher.log",
             "exitcodes=0,2",
             "startsecs=10",
