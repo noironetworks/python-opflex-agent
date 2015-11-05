@@ -54,7 +54,9 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.agent.provision_local_vlan = mock.Mock()
         self.agent.of_rpc.get_gbp_details = mock.Mock()
         self.agent.snat_iptables = mock.Mock()
-        self.agent.snat_iptables.setup_snat_for_es = mock.Mock()
+        self.agent.snat_iptables.setup_snat_for_es = mock.Mock(
+            return_value = tuple([None, None]))
+        self.agent._release_int_fip = mock.Mock()
         self.addCleanup(self._purge_endpoint_dir)
         self.addCleanup(self.agent.provision_local_vlan.reset_mock)
         self.addCleanup(self.agent.int_br.reset_mock)
@@ -158,8 +160,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                                     'port_id': 'port_id',
                                     'fixed_ip_address': '192.169.8.1'}],
                    'ip_mapping': [{'external_segment_name': 'EXT-1',
-                                   'nat_epg_tenant': 'nat-epg-tenant',
-                                   'nat_epg_name': 'nat-epg-name'}],
+                                   'nat_epg_tenant': 'nat-EXT-1-tenant',
+                                   'nat_epg_name': 'nat-EXT-1-name'}],
                    'host_snat_ips': [{'external_segment_name': 'EXT-1',
                                       'host_snat_ip': '200.0.0.10',
                                       'gateway_ip': '200.0.0.1',
@@ -191,7 +193,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
         mapping = self._get_gbp_details()
         self.agent.of_rpc.get_gbp_details.return_value = mapping
         self.agent.snat_iptables.setup_snat_for_es.return_value = tuple(
-            [None, None])
+            ['foo-if', 'foo-mac'])
         args = self._port_bound_args('opflex')
         args['port'].gbp_details = mapping
         self.agent.port_bound(**args)
@@ -199,33 +201,54 @@ class TestGbpOvsAgent(base.BaseTestCase):
             "Port", mock.ANY, "tag")
         self.assertFalse(self.agent.provision_local_vlan.called)
 
-        self.agent._write_endpoint_file.assert_called_with(
-            args['port'].vif_id + '_' + mapping['mac_address'], {
-                "policy-space-name": mapping['ptg_tenant'],
-                "endpoint-group-name": (mapping['app_profile_name'] + "|" +
-                                        mapping['endpoint_group_name']),
-                "interface-name": args['port'].port_name,
-                "mac": 'aa:bb:cc:00:11:22',
-                "promiscuous-mode": mapping['promiscuous_mode'],
-                "uuid": args['port'].vif_id,
-                "attributes": {'vm-name': 'somename'},
-                "neutron-network": "net_id",
-                "domain-policy-space": 'apic_tenant',
-                "domain-name": 'name_of_l3p',
-                "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
-                       '192.169.8.254'],
-                # FIP mapping will be in the file
-                "ip-address-mapping": [{
-                    'uuid': '1', 'mapped-ip': '192.168.0.2',
-                    'floating-ip': '172.10.0.1',
-                    'endpoint-group-name': 'profile_name|nat-epg-name',
-                    'policy-space-name': 'nat-epg-tenant'},
-                    {'uuid': '2', 'mapped-ip': '192.168.1.2',
-                     'floating-ip': '172.10.0.2'},
-                    # for the extra-ip
-                    {'uuid': '7', 'mapped-ip': '192.169.8.1',
-                     'floating-ip': '172.10.0.7'}],
-                "attestation": mapping['attestation']})
+        port_id = args['port'].vif_id
+        ep_name = port_id + '_' + mapping['mac_address']
+        ep_file = {"policy-space-name": mapping['ptg_tenant'],
+            "endpoint-group-name": (mapping['app_profile_name'] + "|" +
+                                    mapping['endpoint_group_name']),
+            "interface-name": args['port'].port_name,
+            "mac": 'aa:bb:cc:00:11:22',
+            "promiscuous-mode": mapping['promiscuous_mode'],
+            "uuid": args['port'].vif_id,
+            "attributes": {'vm-name': 'somename'},
+            "neutron-network": "net_id",
+            "domain-policy-space": 'apic_tenant',
+            "domain-name": 'name_of_l3p',
+            "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
+                   '192.169.8.254'],
+            # FIP mapping will be in the file
+            "ip-address-mapping": [
+                {'uuid': mock.ANY, 'mapped-ip': '192.168.0.2',
+                'floating-ip': '169.254.0.0',
+                'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                'endpoint-group-name': 'profile_name|nat-EXT-1-name',
+                'policy-space-name': 'nat-EXT-1-tenant'},
+                {'uuid': '1', 'mapped-ip': '192.168.0.2',
+                'floating-ip': '172.10.0.1',
+                'endpoint-group-name': 'profile_name|nat-epg-name',
+                'policy-space-name': 'nat-epg-tenant'},
+                {'uuid': mock.ANY, 'mapped-ip': '192.168.1.2',
+                'floating-ip': '169.254.0.1',
+                'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                'endpoint-group-name': 'profile_name|nat-EXT-1-name',
+                'policy-space-name': 'nat-EXT-1-tenant'},
+                {'uuid': '2', 'mapped-ip': '192.168.1.2',
+                 'floating-ip': '172.10.0.2'},
+                # for the extra-ip
+                {'uuid': mock.ANY, 'mapped-ip': '192.169.8.1',
+                'floating-ip': '169.254.0.2',
+                'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                'endpoint-group-name': 'profile_name|nat-EXT-1-name',
+                'policy-space-name': 'nat-EXT-1-tenant'},
+                {'uuid': '7', 'mapped-ip': '192.169.8.1',
+                 'floating-ip': '172.10.0.7'},
+                {'uuid': mock.ANY, 'mapped-ip': '192.169.8.254',
+                'floating-ip': '169.254.0.3',
+                'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                'endpoint-group-name': 'profile_name|nat-EXT-1-name',
+                'policy-space-name': 'nat-EXT-1-tenant'}],
+            "attestation": mapping['attestation']}
+        self.agent._write_endpoint_file.assert_called_with(ep_name, ep_file)
 
         self.agent.snat_iptables.setup_snat_for_es.assert_called_with(
             'EXT-1', '200.0.0.10', None, '200.0.0.1/8', None, None,
@@ -238,6 +261,36 @@ class TestGbpOvsAgent(base.BaseTestCase):
                                             '192.169.0.0/16',
                                             '169.254.0.0/16'])})
 
+        # Send same port info again
+        self.agent._write_vrf_file.reset_mock()
+        self.agent.snat_iptables.setup_snat_for_es.reset_mock()
+        self.agent.port_bound(**args)
+        self.agent._write_endpoint_file.assert_called_with(ep_name, ep_file)
+        self.assertFalse(self.agent._write_vrf_file.called)
+        self.assertFalse(self.agent.snat_iptables.setup_snat_for_es.called)
+
+        # Remove an extra-ip
+        self.agent._write_vrf_file.reset_mock()
+        args['port'].gbp_details.update({'extra_ips': ['192.169.8.1']})
+        ep_file["ip"].remove('192.169.8.254')
+        ep_file["ip-address-mapping"] = [x
+            for x in ep_file["ip-address-mapping"]
+                if x['mapped-ip'] != '192.169.8.254']
+        self.agent.port_bound(**args)
+        self.agent._write_endpoint_file.assert_called_with(ep_name, ep_file)
+        self.agent._release_int_fip.assert_called_with(
+            4, port_id, 'EXT-1', '192.169.8.254')
+
+        # Remove SNAT external segment
+        self.agent._write_vrf_file.reset_mock()
+        self.agent._release_int_fip.reset_mock()
+        args['port'].gbp_details.update({'ip_mapping': []})
+        ep_file["ip-address-mapping"] = [x
+            for x in ep_file["ip-address-mapping"] if not x.get('next-hop-if')]
+        self.agent.port_bound(**args)
+        self.agent._write_endpoint_file.assert_called_with(ep_name, ep_file)
+        self.agent._release_int_fip.assert_called_with(4, port_id, 'EXT-1')
+
         self.agent._write_vrf_file.reset_mock()
         self.agent.snat_iptables.setup_snat_for_es.reset_mock()
 
@@ -246,6 +299,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
         args['port'].gbp_details = mapping
         self.agent.port_bound(**args)
         self.assertFalse(self.agent._write_vrf_file.called)
+        self.assertFalse(self.agent.snat_iptables.setup_snat_for_es.called)
         self.agent._write_vrf_file.reset_mock()
 
         # Bind another port on a different L3P, new VRF file added
@@ -280,7 +334,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                                             '169.254.0.0/16'])})
         self.agent.snat_iptables.setup_snat_for_es.assert_called_with(
             'EXT-1', '200.0.0.11', None, '200.0.0.2/8', None, None,
-            None, None)
+            None, 'foo-mac')
 
     def test_port_multiple_ep_files(self):
         self.agent.int_br = mock.Mock()
@@ -351,6 +405,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
              'router_id': 'ext_rout', 'port_id': 'port_id',
              'fixed_ip_address': '192.169.0.3'}])
         self.agent.of_rpc.get_gbp_details.return_value = mapping
+        self.agent.snat_iptables.setup_snat_for_es.return_value = tuple(
+            ['foo-if', 'foo-mac'])
         args = self._port_bound_args('opflex')
         args['port'].gbp_details = mapping
         self.agent.port_bound(**args)
@@ -377,19 +433,59 @@ class TestGbpOvsAgent(base.BaseTestCase):
                            '192.169.0.6', '192.169.8.1', '192.169.8.254',
                            '192.180.0.1', '192.180.0.2'],
                     # FIP mapping will be in the file except for FIP 3 and 4
-                    "ip-address-mapping": [{
-                        'uuid': '1', 'mapped-ip': '192.168.0.2',
+                    "ip-address-mapping": [
+                        {'uuid': mock.ANY, 'mapped-ip': '192.168.0.2',
+                         'floating-ip': mock.ANY,
+                         'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                         'endpoint-group-name': 'profile_name|nat-EXT-1-name',
+                         'policy-space-name': 'nat-EXT-1-tenant'},
+                        {'uuid': '1', 'mapped-ip': '192.168.0.2',
                         'floating-ip': '172.10.0.1',
                         'endpoint-group-name': 'profile_name|nat-epg-name',
                         'policy-space-name': 'nat-epg-tenant'},
-                        {'uuid': '181', 'mapped-ip': '192.180.0.1',
-                         'floating-ip': '173.11.0.1'},
+                        {'uuid': mock.ANY, 'mapped-ip': '192.168.1.2',
+                         'floating-ip': mock.ANY,
+                         'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                         'endpoint-group-name': 'profile_name|nat-EXT-1-name',
+                         'policy-space-name': 'nat-EXT-1-tenant'},
                         {'uuid': '2', 'mapped-ip': '192.168.1.2',
                          'floating-ip': '172.10.0.2'},
                         {'uuid': '5', 'mapped-ip': '192.169.0.3',
                          'floating-ip': '172.10.0.5'},
+                        {'uuid': mock.ANY, 'mapped-ip': '192.169.0.4',
+                         'floating-ip': mock.ANY,
+                         'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                         'endpoint-group-name': 'profile_name|nat-EXT-1-name',
+                         'policy-space-name': 'nat-EXT-1-tenant'},
+                        {'uuid': mock.ANY, 'mapped-ip': '192.169.0.6',
+                         'floating-ip': mock.ANY,
+                         'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                         'endpoint-group-name': 'profile_name|nat-EXT-1-name',
+                         'policy-space-name': 'nat-EXT-1-tenant'},
+                        {'uuid': mock.ANY, 'mapped-ip': '192.169.8.1',
+                         'floating-ip': mock.ANY,
+                         'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                         'endpoint-group-name': 'profile_name|nat-EXT-1-name',
+                         'policy-space-name': 'nat-EXT-1-tenant'},
                         {'uuid': '7', 'mapped-ip': '192.169.8.1',
-                         'floating-ip': '172.10.0.7'}],
+                         'floating-ip': '172.10.0.7'},
+                        {'uuid': mock.ANY, 'mapped-ip': '192.169.8.254',
+                         'floating-ip': mock.ANY,
+                         'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                         'endpoint-group-name': 'profile_name|nat-EXT-1-name',
+                         'policy-space-name': 'nat-EXT-1-tenant'},
+                        {'uuid': mock.ANY, 'mapped-ip': '192.180.0.1',
+                         'floating-ip': mock.ANY,
+                         'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                         'endpoint-group-name': 'profile_name|nat-EXT-1-name',
+                         'policy-space-name': 'nat-EXT-1-tenant'},
+                        {'uuid': '181', 'mapped-ip': '192.180.0.1',
+                         'floating-ip': '173.11.0.1'},
+                        {'uuid': mock.ANY, 'mapped-ip': '192.180.0.2',
+                         'floating-ip': mock.ANY,
+                         'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                         'endpoint-group-name': 'profile_name|nat-EXT-1-name',
+                         'policy-space-name': 'nat-EXT-1-tenant'}],
                     # Set the proper allowed address pairs (both active and non
                     # active with the main MAC address)
                     'virtual-ip': [{'ip': '192.169.0.3',
@@ -421,10 +517,10 @@ class TestGbpOvsAgent(base.BaseTestCase):
                            '192.170.0.2'],
                     # Only FIP number 4 and 171 here
                     "ip-address-mapping": [
-                        {'uuid': '171', 'mapped-ip': '192.170.0.1',
-                         'floating-ip': '173.10.0.1'},
                         {'uuid': '4', 'mapped-ip': '192.169.0.2',
-                         'floating-ip': '172.10.0.4'}],
+                         'floating-ip': '172.10.0.4'},
+                        {'uuid': '171', 'mapped-ip': '192.170.0.1',
+                         'floating-ip': '173.10.0.1'}],
                     # Set the proper allowed address pairs with MAC BB:BB
                     'virtual-ip': [{'ip': '192.169.0.2', 'mac': 'BB:BB'},
                                    {'ip': '192.169.0.7', 'mac': 'BB:BB'}],
@@ -454,12 +550,12 @@ class TestGbpOvsAgent(base.BaseTestCase):
                     "attestation": mapping['attestation']}),
             # SNAT endpoint
             mock.call(
-                'EXT-1', {'mac': None, 'interface-name': None,
+                'EXT-1', {'mac': 'foo-mac', 'interface-name': 'foo-if',
                           'ip': ['200.0.0.10'],
-                          'policy-space-name': 'nat-epg-tenant',
+                          'policy-space-name': 'nat-EXT-1-tenant',
                           'attributes': mock.ANY,
                           'promiscuous-mode': True,
-                          'endpoint-group-name': 'profile_name|nat-epg-name',
+                          'endpoint-group-name': 'profile_name|nat-EXT-1-name',
                           'uuid': mock.ANY})]
         self._check_call_list(expected_calls,
                               self.agent._write_endpoint_file.call_args_list)
