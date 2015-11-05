@@ -11,14 +11,17 @@
 #    under the License.
 
 import functools
+import hashlib
 import multiprocessing
 import netaddr
 import os
+import os.path
 import pyinotify
 import Queue
 import signal
 import subprocess
 import sys
+import uuid
 
 from neutron.common import config as common_config
 from neutron.common import utils
@@ -51,11 +54,10 @@ AS_MAPPING_DIR = "/var/lib/opflex-agent-ovs/services"
 EOQ = 'STOP'
 MD_DIR = "/var/lib/neutron/opflex_agent"
 MD_DIR_OWNER = "neutron:neutron"
-MD_MAP_FILE_NAME = "metadata.map"
 MD_SUP_FILE_NAME = "metadata.conf"
 SVC_IP_DEFAULT = "169.254.1.2"
 SVC_IP_BASE = 0xA9FEF003
-SVC_IP_MAX = 0xA9FEFFFE
+SVC_IP_SIZE = 1000
 SVC_IP_CIDR = 16
 SVC_NEXTHOP = "169.254.1.1"
 SVC_NS = "of-svc"
@@ -64,9 +66,48 @@ SVC_OVS_PORT = "of-svc-ovsport"
 PID_DIR = "/var/lib/neutron/external/pids"
 PROXY_FILE_EXTENSION = "proxy"
 PROXY_FILE_NAME_FORMAT = "%s." + PROXY_FILE_EXTENSION
+STATE_ANYCAST_SERVICES = "anycast_services"
+STATE_INSTANCE_NETWORKS = "instance_networks"
 STATE_FILE_EXTENSION = "state"
 STATE_FILE_NAME_FORMAT = "%s." + STATE_FILE_EXTENSION
-STATE_IPADDR_ALLLOC = "ipaddr_alloc"
+STATE_FILENAME_SVC = STATE_FILE_NAME_FORMAT % STATE_ANYCAST_SERVICES
+STATE_FILENAME_NETS = STATE_FILE_NAME_FORMAT % STATE_INSTANCE_NETWORKS
+
+
+def read_jsonfile(name):
+    retval = {}
+    try:
+        with open(name, "r") as f:
+            retval = jsonutils.load(f)
+    except Exception as e:
+        LOG.warn("Exception in reading file: %s" % str(e))
+    return retval
+
+
+def write_jsonfile(name, data):
+    try:
+        with open(name, "w") as f:
+            jsonutils.dump(data, f)
+    except Exception as e:
+        LOG.warn("Exception in writing file: %s" % str(e))
+
+
+class AddressPool(object):
+    def __init__(self, base, size):
+        self.base = base
+        self.size = size
+        self.ips = {}
+        for i in xrange(size):
+            self.ips[self.base + i] = True
+
+    def reserve(self, ip):
+        del self.ips[ip]
+
+    def get_addr(self):
+        for i in self.ips:
+            self.reserve(i)
+            return i
+        return None
 
 
 class FileProcessor(object):
@@ -111,7 +152,7 @@ class FileProcessor(object):
 
                     action = "update"
                     if event.maskname == "IN_DELETE" or \
-                        event.maskname == "IN_MOVED_FROM":
+                       event.maskname == "IN_MOVED_FROM":
                         action = "delete"
                     files.append((action, event.pathname))
 
@@ -158,10 +199,10 @@ class FileWatcher(object):
         self.eventq = multiprocessing.Queue()
 
         fp = FileProcessor(
-                self.watchdir,
-                self.extensions,
-                self.eventq,
-                functools.partial(self.process))
+            self.watchdir,
+            self.extensions,
+            self.eventq,
+            functools.partial(self.process))
         fprun = functools.partial(fp.run)
         self.processor = multiprocessing.Process(target=fprun)
         LOG.debug("FileWatcher: %s: starting" % self.name)
@@ -215,110 +256,123 @@ class TmpWatcher(FileWatcher):
 
 
 class EpWatcher(FileWatcher):
-    def __init__(self):
-        filedir = cfg.CONF.OPFLEX.epg_mapping_dir
-        extensions = EP_FILE_EXTENSION
-        super(EpWatcher, self).__init__(
-            filedir, extensions, name="ep-watcher")
+    """EpWatcher watches EPs and generates two state files:
+    domain_svc: maps domain -> AS services for that domains
+    domain_nets: maps IP -> neutron-network for each EP in that domain
 
-    def get_addr(self, curr_ips):
-        for i in curr_ips:
-            del curr_ips[i]
-            return i
-        return None
+    domain_svc = {
+        'domain-uuid-1': {
+            'domain-name': domain_name,
+            'domain-policy-space': domain_tenant,
+            'next-hop-ip': anycast_svc_ip,
+            'uuid': domain_uuid
+        },
+        ...
+        'domain-uuid-n': {
+            <anycast svc specification above>
+        }
+    }
+
+    domain_net = {
+        'domain-uuid-1': {
+            'ip-addr-1': 'neutron-network',
+            ...
+            'ip-addr-n': 'neutron-network'
+        },
+        'domain-uuid-n': {
+            'ip-addr-1': 'neutron-network',
+            ...
+            'ip-addr-n': 'neutron-network'
+        }
+    }
+
+    """
+    def __init__(self):
+        self.svcfile = "%s/%s" % (MD_DIR, STATE_FILENAME_SVC)
+        self.netsfile = "%s/%s" % (MD_DIR, STATE_FILENAME_NETS)
+
+        epfiledir = cfg.CONF.OPFLEX.epg_mapping_dir
+        epextensions = EP_FILE_EXTENSION
+        super(EpWatcher, self).__init__(
+            epfiledir, epextensions, name="ep-watcher")
+
+    def gen_domain_uuid(self, tenant, name):
+        fqname = '%s|%s' % (tenant, name)
+        fqhash = hashlib.md5(fqname).hexdigest()
+        fquuid = str(uuid.UUID(fqhash))
+        return fquuid
 
     def process(self, files):
         LOG.debug("EP files: %s" % files)
 
-        ipallocfile = STATE_FILE_NAME_FORMAT % STATE_IPADDR_ALLLOC
-        ipallocfile = "%s/%s" % (MD_DIR, ipallocfile)
+        curr_svc = read_jsonfile(self.svcfile)
+        ip_pool = AddressPool(SVC_IP_BASE, SVC_IP_SIZE)
+        for domain_uuid in curr_svc:
+            thisip = netaddr.IPAddress(curr_svc[domain_uuid]['next-hop-ip'])
+            ip_pool.reserve(thisip)
 
-        curr_alloc = {}
-        try:
-            with open(ipallocfile, "r") as f:
-                curr_alloc = jsonutils.load(f)
-        except Exception as e:
-            LOG.warn("EPwatcher: Exception in reading ipalloc: %s" % str(e))
-
-        curr_ips = {}
-        for i in xrange(1000):
-            curr_ips[SVC_IP_BASE + i] = True
-        for nnetwork in curr_alloc:
-            thisip = netaddr.IPAddress(curr_alloc[nnetwork]['next-hop-ip'])
-            del curr_ips[thisip.value]
-
-        new_alloc = {}
+        new_svc = {}
+        new_nets = {}
         updated = False
+
         epfiledir = cfg.CONF.OPFLEX.epg_mapping_dir
         for filename in os.listdir(epfiledir):
             if not filename.endswith(EP_FILE_EXTENSION):
                 continue
 
-            ep = None
             filename = "%s/%s" % (epfiledir, filename)
-            try:
-                with open(filename, "r") as f:
-                    ep = jsonutils.load(f)
-            except Exception as e:
-                LOG.warn("EPwatcher: Exception in reading %s: %s" %
-                        (filename, str(e)))
-
+            ep = read_jsonfile(filename)
             if ep:
-                nnetwork = ep.get('neutron-network')
-                vrf_name = ep.get('domain-name')
-                vrf_tenant = ep.get('domain-policy-space')
-                if nnetwork:
-                    if nnetwork not in curr_alloc:
+                domain_name = ep.get('domain-name')
+                domain_tenant = ep.get('domain-policy-space')
+                domain_uuid = self.gen_domain_uuid(domain_tenant, domain_name)
+                if domain_uuid and domain_uuid not in new_svc:
+                    if domain_uuid not in curr_svc:
                         updated = True
-                        as_uuid = nnetwork
-                        as_addr = str(
-                            netaddr.IPAddress(self.get_addr(curr_ips)))
-                        new_alloc[nnetwork] = {
-                            'neutron-network': nnetwork,
-                            'domain-name': vrf_name,
-                            'domain-policy-space': vrf_tenant,
+                        as_uuid = domain_uuid
+                        as_addr = netaddr.IPAddress(ip_pool.get_addr())
+                        as_addr = str(as_addr)
+                        new_svc[domain_uuid] = {
+                            'domain-name': domain_name,
+                            'domain-policy-space': domain_tenant,
                             'next-hop-ip': as_addr,
                             'uuid': as_uuid,
                         }
                     else:
-                        new_alloc[nnetwork] = curr_alloc[nnetwork]
-                        del curr_alloc[nnetwork]
+                        new_svc[domain_uuid] = curr_svc[domain_uuid]
+                        del curr_svc[domain_uuid]
 
-        if curr_alloc:
+                nnetwork = ep.get('neutron-network')
+                ips = ep.get('ip')
+                if domain_uuid not in new_nets:
+                    new_nets[domain_uuid] = {}
+                for ip in ips:
+                    new_nets[domain_uuid][ip] = nnetwork
+
+        if curr_svc:
             updated = True
 
         if updated:
-            try:
-                with open(ipallocfile, "w") as f:
-                    jsonutils.dump(new_alloc, f)
-            except Exception as e:
-                LOG.warn("EPwatcher: Exception in writing ipalloc: %s" %
-                    str(e))
+            write_jsonfile(self.svcfile, new_svc)
+        write_jsonfile(self.netsfile, new_nets)
 
 
 class StateWatcher(FileWatcher):
     def __init__(self):
         root_helper = cfg.CONF.AGENT.root_helper
         self.mgr = AsMetadataManager(LOG, root_helper)
+        self.svcfile = "%s/%s" % (MD_DIR, STATE_FILENAME_SVC)
         self.svc_ovsport_mac = self.mgr.get_asport_mac()[:17]
 
-        filedir = MD_DIR
-        extensions = STATE_FILE_EXTENSION
+        stfiledir = MD_DIR
+        stextensions = STATE_FILE_EXTENSION
         super(StateWatcher, self).__init__(
-            filedir, extensions, name="state-watcher")
+            stfiledir, stextensions, name="state-watcher")
 
     def process(self, files):
         LOG.debug("State Event: %s" % files)
 
-        curr_alloc = {}
-        ipallocfile = STATE_FILE_NAME_FORMAT % STATE_IPADDR_ALLLOC
-        ipallocfile = "%s/%s" % (MD_DIR, ipallocfile)
-        try:
-            with open(ipallocfile, "r") as f:
-                curr_alloc = jsonutils.load(f)
-        except Exception as e:
-            LOG.warn("StateWatcher: Exception in reading ipalloc: %s" %
-                str(e))
+        curr_alloc = read_jsonfile(self.svcfile)
 
         updated = False
         asfiledir = cfg.CONF.OPFLEX.as_mapping_dir
@@ -326,39 +380,32 @@ class StateWatcher(FileWatcher):
             if not filename.endswith(AS_FILE_EXTENSION):
                 continue
 
-            asvc = None
-            try:
-                with open(filename, "r") as f:
-                    asvc = jsonutils.load(f)
-            except Exception as e:
-                LOG.warn("StateWatcher: Exception in reading %s: %s" %
-                    (filename, str(e)))
-
+            filename = "%s/%s" % (asfiledir, filename)
+            asvc = read_jsonfile(filename)
             if asvc:
-                nnetwork = asvc["neutron-network"]
-                if nnetwork not in curr_alloc:
+                domain_uuid = asvc["uuid"]
+                if domain_uuid not in curr_alloc:
                     updated = True
                     self.as_del(filename, asvc)
                 else:
-                    if not self.as_equal(asvc, curr_alloc[nnetwork]):
+                    if not self.as_equal(asvc, curr_alloc[domain_uuid]):
                         updated = True
-                        self.as_write(curr_alloc[nnetwork])
-                    del curr_alloc[nnetwork]
+                        self.as_write(curr_alloc[domain_uuid])
+                    del curr_alloc[domain_uuid]
 
-        for nnetwork in curr_alloc:
+        for domain_uuid in curr_alloc:
             updated = True
-            self.as_create(curr_alloc[nnetwork])
+            self.as_create(curr_alloc[domain_uuid])
 
         if updated:
             self.mgr.update_supervisor()
 
     def as_equal(self, asvc, alloc):
-        for idx in ["uuid", "neutron-network",
-            "domain-name", "domain-policy-space"]:
+        for idx in ["uuid", "domain-name", "domain-policy-space"]:
             if asvc[idx] != alloc[idx]:
                 return False
         if asvc["service-mapping"]["next-hop-ip"] != \
-            alloc["next-hop-ip"]:
+           alloc["next-hop-ip"]:
                 return False
         return True
 
@@ -367,24 +414,21 @@ class StateWatcher(FileWatcher):
             self.mgr.del_ip(asvc["service-mapping"]["next-hop-ip"])
         except Exception as e:
             LOG.warn("EPwatcher: Exception in deleting IP: %s" %
-                str(e))
+                     str(e))
 
-        proxyfilename = PROXY_FILE_NAME_FORMAT % asvc["neutron-network"]
+        proxyfilename = PROXY_FILE_NAME_FORMAT % asvc["uuid"]
         proxyfilename = "%s/%s" % (MD_DIR, proxyfilename)
         try:
             os.remove(filename)
             os.remove(proxyfilename)
         except Exception as e:
-            LOG.warn("EPwatcher: Exception in deleting file: %s" %
-                str(e))
+            LOG.warn("EPwatcher: Exception in deleting file: %s" % str(e))
 
     def as_create(self, alloc):
-        # nnetwork = alloc["neutron-network"]
         asvc = {
             "uuid": alloc["uuid"],
             "interface-name": SVC_OVS_PORT,
             "service-mac": self.svc_ovsport_mac,
-            "neutron-network": alloc["uuid"],
             "domain-policy-space": alloc["domain-policy-space"],
             "domain-name": alloc["domain-name"],
             "service-mapping": [
@@ -400,18 +444,18 @@ class StateWatcher(FileWatcher):
             self.mgr.add_ip(alloc["next-hop-ip"])
         except Exception as e:
             LOG.warn("EPwatcher: Exception in adding IP: %s" %
-                str(e))
+                     str(e))
 
-        asfilename = AS_FILE_NAME_FORMAT % asvc["neutron-network"]
+        asfilename = AS_FILE_NAME_FORMAT % asvc["uuid"]
         asfilename = "%s/%s" % (AS_MAPPING_DIR, asfilename)
         try:
             with open(asfilename, "w") as f:
                 jsonutils.dump(asvc, f)
         except Exception as e:
             LOG.warn("EPwatcher: Exception in writing services file: %s" %
-                str(e))
+                     str(e))
 
-        proxyfilename = PROXY_FILE_NAME_FORMAT % asvc["neutron-network"]
+        proxyfilename = PROXY_FILE_NAME_FORMAT % asvc["uuid"]
         proxyfilename = "%s/%s" % (MD_DIR, proxyfilename)
         proxystr = self.proxyconfig(alloc)
         try:
@@ -419,21 +463,21 @@ class StateWatcher(FileWatcher):
                 f.write(proxystr)
         except Exception as e:
             LOG.warn("EPwatcher: Exception in writing proxy file: %s" %
-                str(e))
+                     str(e))
 
     def proxyconfig(self, alloc):
-        nnetwork = alloc["neutron-network"]
+        duuid = alloc["uuid"]
         ipaddr = alloc["next-hop-ip"]
         proxystr = "\n".join([
-            "[program:apic-proxy-%s]" % nnetwork,
+            "[program:opflex-ns-proxy-%s]" % duuid,
             "command=/sbin/ip netns exec of-svc "
-            "/usr/bin/apic-ns-metadata-proxy "
+            "/usr/bin/opflex-ns-proxy "
             "--metadata_proxy_socket=/var/lib/neutron/metadata_proxy "
             "--state_path=/var/lib/neutron "
             "--pid_file=/var/lib/neutron/external/pids/%s.pid "
-            "--network_id=%s --metadata_host %s --metadata_port=80 "
-            " --log-dir=/var/log/neutron --log-file=proxy-%s.log" % (
-                nnetwork, nnetwork, ipaddr, nnetwork[:8]),
+            "--domain_id=%s --metadata_host %s --metadata_port=80 "
+            "--log-dir=/var/log/neutron --log-file=opflex-ns-proxy-%s.log" % (
+                duuid, duuid, ipaddr, duuid[:8]),
             "exitcodes=0,2",
             "startsecs=10",
             "startretries=3",
@@ -468,7 +512,7 @@ class AsMetadataManager(object):
                 self.initialized = True
             except Exception as e:
                 LOG.error("%s: in initializing anycast metadata service: %s" %
-                    (self.name, str(e)))
+                          (self.name, str(e)))
 
     def ensure_terminated(self):
         if self.initialized:
@@ -478,7 +522,7 @@ class AsMetadataManager(object):
                 self.stop_supervisor()
             except Exception as e:
                 LOG.error("%s: in shuttingdown anycast metadata service: %s" %
-                    (self.name, str(e)))
+                          (self.name, str(e)))
 
     def sh(self, cmd):
         if self.root_helper:
@@ -527,7 +571,8 @@ class AsMetadataManager(object):
                 (SVC_NS, ipaddr, SVC_IP_CIDR, SVC_NS_PORT))
 
     def get_asport_mac(self):
-        return self.sh("ip netns exec %s ip link show %s | "
+        return self.sh(
+            "ip netns exec %s ip link show %s | "
             "awk -e '/link\/ether/ {print $2}'" %
             (SVC_NS, SVC_NS_PORT))
 
@@ -546,7 +591,7 @@ class AsMetadataManager(object):
 
         # Create ports, if needed
         port = self.sh("ip link show %s 2>&1 | grep qdisc ; true" %
-            SVC_OVS_PORT)
+                       SVC_OVS_PORT)
         if not port:
             self.sh("ip link add %s type veth peer name %s" %
                     (SVC_NS_PORT, SVC_OVS_PORT))
@@ -563,6 +608,16 @@ class AsMetadataManager(object):
                     (SVC_NS, SVC_NS_PORT))
 
     def init_supervisor(self):
+        def conf(*fnames):
+            config_str = ''
+            for fname in fnames:
+                if os.path.exists(fname):
+                    if os.path.isfile(fname):
+                        config_str += '--config-file %s ' % fname
+                    elif os.path.isdir(fname):
+                        config_str += '--config-dir %s ' % fname
+            return config_str
+
         config_str = "\n".join([
             "[rpcinterface:supervisor]",
             "supervisor.rpcinterface_factory = "
@@ -591,9 +646,11 @@ class AsMetadataManager(object):
             "strip_ansi = false",
             "",
             "[program:metadata-agent]",
-            "command=/usr/bin/neutron-metadata-agent "
-            "--config-file /etc/neutron/neutron.conf "
-            "--config-file /etc/neutron/metadata_agent.ini "
+            "command=/usr/bin/neutron-metadata-agent " +
+            conf('/usr/share/neutron/neutron-dist.conf',
+                 '/etc/neutron/neutron.conf',
+                 '/etc/neutron/metadata_agent.ini',
+                 '/etc/neutron/conf.d/neutron-metadata-agent') +
             "--log-file /var/log/neutron/metadata-agent.log",
             "exitcodes=0,2",
             "startsecs=10",
@@ -602,11 +659,12 @@ class AsMetadataManager(object):
             "stdout_logfile=NONE",
             "stderr_logfile=NONE",
             "",
-            "[program:metadata-ep-watcher]",
-            "command=/usr/bin/opflex-metadata-ep-watcher "
-            "--config-file /etc/neutron/neutron.conf "
-            "--config-file /etc/neutron/plugins/ml2/ml2_conf_cisco.ini "
-            "--log-file /var/log/neutron/metadata-ep-watcher.log",
+            "[program:opflex-ep-watcher]",
+            "command=/usr/bin/opflex-ep-watcher " +
+            conf('/usr/share/neutron/neutron-dist.conf',
+                 '/etc/neutron/neutron.conf',
+                 '/etc/neutron/plugins/ml2/ml2_conf_cisco.ini') +
+            "--log-file /var/log/neutron/opflex-ep-watcher.log",
             "exitcodes=0,2",
             "startsecs=10",
             "startretries=3",
@@ -614,11 +672,12 @@ class AsMetadataManager(object):
             "stdout_logfile=NONE",
             "stderr_logfile=NONE",
             "",
-            "[program:metadata-state-watcher]",
-            "command=/usr/bin/opflex-metadata-state-watcher "
-            "--config-file /etc/neutron/neutron.conf "
-            "--config-file /etc/neutron/plugins/ml2/ml2_conf_cisco.ini "
-            "--log-file /var/log/neutron/metadata-state-watcher.log",
+            "[program:opflex-state-watcher]",
+            "command=/usr/bin/opflex-state-watcher " +
+            conf('/usr/share/neutron/neutron-dist.conf',
+                 '/etc/neutron/neutron.conf',
+                 '/etc/neutron/plugins/ml2/ml2_conf_cisco.ini') +
+            "--log-file /var/log/neutron/opflex-state-watcher.log",
             "exitcodes=0,2",
             "startsecs=10",
             "startretries=3",
