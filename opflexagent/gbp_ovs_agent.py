@@ -98,10 +98,11 @@ class ExtSegNextHopInfo(object):
         self.from_config = False
 
     def __str__(self):
-        return "%s: ipv4 (%s-%s,%s), ipv6 (%s-%s,%s), (%s)" % (self.es_name,
-            self.ip_start, self.ip_end, self.ip_gateway,
+        return ("%s: ipv4 (%s-%s,%s), ipv6 (%s-%s,%s), if %s, mac %s, (%s)" %
+            (self.es_name, self.ip_start, self.ip_end, self.ip_gateway,
             self.ip6_start, self.ip6_end, self.ip6_gateway,
-            "configured" if self.from_config else "auto-allocated")
+            self.next_hop_iface, self.next_hop_mac,
+            "configured" if self.from_config else "auto-allocated"))
 
     def is_valid(self):
         return ((self.ip_start and self.ip_gateway) or
@@ -448,7 +449,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             mapping_dict['attestation'] = mapping['attestation']
 
         self._handle_host_snat_ip(mapping.get('host_snat_ips', []))
-        self._fill_ip_mapping_info(port.vif_id, mapping, ips, mapping_dict)
+        self._fill_ip_mapping_info(port.vif_id, mapping, ips + ips_ext,
+                                   mapping_dict)
         # Create one file per MAC address.
         self._write_endpoint_file(port.vif_id + '_' + mac, mapping_dict)
         self.vrf_info_to_file(mapping, vif_id=port.vif_id)
@@ -509,10 +511,11 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
     def mapping_cleanup(self, vif_id, cleanup_vrf=True):
         LOG.debug('Cleaning mapping for vif id %s', vif_id)
         self._delete_endpoint_files(vif_id)
-        es = self._get_es_for_port(vif_id)
-        self._dissociate_port_from_es(vif_id, es)
-        self._release_int_fip(4, vif_id)
-        self._release_int_fip(6, vif_id)
+        if cleanup_vrf:
+            es = self._get_es_for_port(vif_id)
+            self._dissociate_port_from_es(vif_id, es)
+            self._release_int_fip(4, vif_id)
+            self._release_int_fip(6, vif_id)
         vrf_id = self.vif_to_vrf.get(vif_id)
         vrf = self.vrf_dict.get(vrf_id)
         if vrf and cleanup_vrf:
@@ -673,10 +676,12 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             next_hop_if, next_hop_mac = self._get_next_hop_info_for_es(ipm)
             if not next_hop_if or not next_hop_mac:
                 continue
+            fip_alloc_es = {4: self._get_int_fips(4, port_id).get(es, {}),
+                            6: self._get_int_fips(6, port_id).get(es, {})}
             for ip in ips:
                 ip_ver = netaddr.IPAddress(ip).version
-                fip = (self._get_int_fips(ip_ver, port_id).get(es) or
-                       self._alloc_int_fip(ip_ver, port_id, es))
+                fip = (fip_alloc_es[ip_ver].get(ip) or
+                       self._alloc_int_fip(ip_ver, port_id, es, ip))
                 es_using_int_fip[ip_ver].add(es)
                 ip_map = {'uuid': uuidutils.generate_uuid(),
                           'mapped-ip': ip,
@@ -692,11 +697,16 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self._dissociate_port_from_es(port_id, old_es - new_es)
 
         for ip_ver in es_using_int_fip.keys():
-            for es in self._get_int_fips(ip_ver, port_id).keys():
+            fip_alloc = self._get_int_fips(ip_ver, port_id)
+            for es in fip_alloc.keys():
                 if es not in es_using_int_fip[ip_ver]:
                     self._release_int_fip(ip_ver, port_id, es)
+                else:
+                    for old in (set(fip_alloc[es].keys()) - set(ips)):
+                        self._release_int_fip(ip_ver, port_id, es, old)
         if 'ip-address-mapping' in mapping:
-            mapping['ip-address-mapping'].sort(key=lambda x: x['uuid'])
+            mapping['ip-address-mapping'].sort(
+                key=lambda x: (x['mapped-ip'], x['floating-ip']))
 
     def _get_int_fips(self, ip_ver, port_id):
         return self.int_fip_alloc[ip_ver].get(port_id, {})
@@ -707,20 +717,35 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         es.update(self._get_int_fips(6, port_id).keys())
         return es
 
-    def _alloc_int_fip(self, ip_ver, port_id, es):
+    def _alloc_int_fip(self, ip_ver, port_id, es, ip):
         fip = self.int_fip_pool[ip_ver].__iter__().next()
         self.int_fip_pool[ip_ver].remove(fip)
-        self.int_fip_alloc[ip_ver].setdefault(port_id, {})[es] = fip
+        self.int_fip_alloc[ip_ver].setdefault(
+            port_id, {}).setdefault(es, {})[ip] = fip
+        LOG.debug(_("Allocated internal FIP %(fip)s to port %(port)s, "
+                    "fixed IP %(ip)s in external segment %(es)s"),
+                  {'fip': fip, 'port': port_id, 'es': es, 'ip': ip})
         return fip
 
-    def _release_int_fip(self, ip_ver, port_id, es=None):
-        if es:
-            fips = self.int_fip_alloc[ip_ver].get(port_id, {}).pop(es, None)
+    def _release_int_fip(self, ip_ver, port_id, es=None, ip=None):
+        if es and ip:
+            fips = self.int_fip_alloc[ip_ver].get(port_id, {}).get(
+                es, {}).pop(ip, None)
             fips = (fips and [fips] or [])
+        elif es:
+            fips = self.int_fip_alloc[ip_ver].get(port_id, {}).pop(
+                es, {}).values()
         else:
-            fips = self.int_fip_alloc[ip_ver].pop(port_id, {}).values()
+            fip_alloc = self.int_fip_alloc[ip_ver].pop(port_id, {}).values()
+            fips = []
+            for x in fip_alloc:
+                fips.extend(x.values())
         for ip in fips:
             self.int_fip_pool[ip_ver].add(ip)
+        LOG.debug(_("Released internal FIP(s) %(fip)s for port %(port)s, "
+                    "fixed IP %(ip)s, external segment %(es)s"),
+                  {'fip': fips, 'port': port_id,
+                   'es': es or '<all>', 'ip': ip or '<all>'})
 
     def _get_next_hop_info_for_es(self, ipm):
         es_name = ipm['external_segment_name']
@@ -735,10 +760,10 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                         nh.ip_start, nh.ip_end, nh.ip_gateway,
                         nh.ip6_start, nh.ip6_end, nh.ip6_gateway,
                         nh.next_hop_mac))
-                LOG.debug(_("Created SNAT iptables for %(es)s: "
-                            "iface %(if)s, mac %(mac)s"),
-                          {'es': es_name, 'if': nh.next_hop_iface,
-                           'mac': nh.next_hop_mac})
+                LOG.info(_("Created SNAT iptables for %(es)s: "
+                           "iface %(if)s, mac %(mac)s"),
+                         {'es': es_name, 'if': nh.next_hop_iface,
+                          'mac': nh.next_hop_mac})
             except Exception as e:
                 LOG.error(_("Error while creating SNAT iptables for "
                             "%(es)s: %(ex)s"),
@@ -846,11 +871,11 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             else:
                 LOG.info(_("Ignoring invalid auto-allocated SNAT IP %s"), ip)
             if updated:
-                LOG.info(_("Add/update SNAT info: %s"), nh)
                 # Clear the interface so that SNAT iptables will be
                 # re-created as required; leave MAC as is so that it will
                 # be re-used
                 nh.next_hop_iface = None
+                LOG.info(_("Add/update SNAT info: %s"), nh)
 
 
 def create_agent_config_map(conf):
