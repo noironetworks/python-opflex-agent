@@ -589,3 +589,15 @@ class TestGbpOvsAgent(base.BaseTestCase):
                                             '192.169.0.0/16',
                                             '1.1.1.0/24',
                                             '169.254.0.0/16'])})
+
+    def test_dead_port(self):
+        self.agent.of_rpc.get_gbp_details_list = mock.Mock(
+            return_value=[{'device': 'some_device'}])
+        self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
+            return_value=[{'device': 'some_device', 'port_id': 'portid'}])
+        port = mock.Mock(ofport=1)
+        self.agent.int_br.get_vif_port_by_id = mock.Mock(return_value=port)
+        self.agent.port_dead = mock.Mock()
+
+        self.agent.treat_devices_added_or_updated(['some_device'], True)
+        self.agent.port_dead.assert_called_once_with(port)

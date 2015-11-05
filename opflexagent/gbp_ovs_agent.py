@@ -569,12 +569,15 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 skipped_devices.append(device)
                 continue
 
+            gbp_details = gbp_details_per_device.get(details['device'], {})
+            if gbp_details and 'port_id' not in gbp_details:
+                # The port is dead
+                details.pop('port_id', None)
             if 'port_id' in details:
                 LOG.info(_("Port %(device)s updated. Details: %(details)s"),
                          {'device': device, 'details': details})
                 # Inject GBP details
-                port.gbp_details = gbp_details_per_device.get(
-                    details['device'], {})
+                port.gbp_details = gbp_details
                 self.treat_vif_port(port, details['port_id'],
                                     details['network_id'],
                                     details['network_type'],
