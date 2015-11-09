@@ -325,6 +325,9 @@ class EpWatcher(FileWatcher):
             if ep:
                 domain_name = ep.get('domain-name')
                 domain_tenant = ep.get('domain-policy-space')
+                if domain_name is None or domain_tenant is None:
+                    continue
+
                 domain_uuid = self.gen_domain_uuid(domain_tenant, domain_name)
                 if domain_uuid and domain_uuid not in new_svc:
                     if domain_uuid not in curr_svc:
@@ -368,6 +371,10 @@ class StateWatcher(FileWatcher):
         stextensions = STATE_FILE_EXTENSION
         super(StateWatcher, self).__init__(
             stfiledir, stextensions, name="state-watcher")
+
+    def terminate(self, signum, frame):
+        self.mgr.ensure_terminated()
+        super(StateWatcher, self).terminate(signum, frame)
 
     def process(self, files):
         LOG.debug("State Event: %s" % files)
@@ -470,14 +477,14 @@ class StateWatcher(FileWatcher):
         ipaddr = alloc["next-hop-ip"]
         proxystr = "\n".join([
             "[program:opflex-ns-proxy-%s]" % duuid,
-            "command=/sbin/ip netns exec of-svc "
+            "command=%s ip netns exec of-svc "
             "/usr/bin/opflex-ns-proxy "
             "--metadata_proxy_socket=/var/lib/neutron/metadata_proxy "
             "--state_path=/var/lib/neutron "
             "--pid_file=/var/lib/neutron/external/pids/%s.pid "
             "--domain_id=%s --metadata_host %s --metadata_port=80 "
             "--log-dir=/var/log/neutron --log-file=opflex-ns-proxy-%s.log" % (
-                duuid, duuid, ipaddr, duuid[:8]),
+                self.mgr.root_helper, duuid, duuid, ipaddr, duuid[:8]),
             "exitcodes=0,2",
             "startsecs=10",
             "startretries=3",
@@ -507,7 +514,7 @@ class AsMetadataManager(object):
     def ensure_initialized(self):
         if not self.initialized:
             try:
-                self.clean_as_files()
+                self.clean_files()
                 self.init_all()
                 self.initialized = True
             except Exception as e:
@@ -518,14 +525,14 @@ class AsMetadataManager(object):
         if self.initialized:
             try:
                 self.initialized = False
-                self.clean_as_files()
+                self.clean_files()
                 self.stop_supervisor()
             except Exception as e:
                 LOG.error("%s: in shuttingdown anycast metadata service: %s" %
                           (self.name, str(e)))
 
-    def sh(self, cmd):
-        if self.root_helper:
+    def sh(self, cmd, as_root=True):
+        if as_root and self.root_helper:
             cmd = "%s %s" % (self.root_helper, cmd)
         LOG.debug("%s: Running command: %s" % (
             self.name, cmd))
@@ -541,22 +548,33 @@ class AsMetadataManager(object):
         with open(name, "w") as f:
             f.write(data)
 
-    def clean_as_files(self):
-        for filename in os.listdir(AS_MAPPING_DIR):
-            os.remove(filename)
+    def clean_files(self):
+        def rm_files(dirname, extension):
+            for filename in os.listdir(dirname):
+                if filename.endswith('.' + extension):
+                    os.remove("%s/%s" % (dirname, filename))
+        rm_files(AS_MAPPING_DIR, AS_FILE_EXTENSION)
+        rm_files(MD_DIR, STATE_FILE_EXTENSION)
+        rm_files(MD_DIR, PROXY_FILE_EXTENSION)
+        rm_files(MD_DIR, '.conf')
 
     def start_supervisor(self):
-        self.sh("supervisord -c %s" % self.md_filename)
+        self.sh("supervisord -c %s" % self.md_filename,
+                as_root=False)
 
     def update_supervisor(self):
-        self.sh("supervisorctl -c %s reread" % self.md_filename)
-        self.sh("supervisorctl -c %s update" % self.md_filename)
+        self.sh("supervisorctl -c %s reread" % self.md_filename,
+                as_root=False)
+        self.sh("supervisorctl -c %s update" % self.md_filename,
+                as_root=False)
 
     def reload_supervisor(self):
-        self.sh("supervisorctl -c %s reload" % self.md_filename)
+        self.sh("supervisorctl -c %s reload" % self.md_filename,
+                as_root=False)
 
     def stop_supervisor(self):
-        self.sh("supervisorctl -c %s shutdown" % self.md_filename)
+        self.sh("supervisorctl -c %s shutdown" % self.md_filename,
+                as_root=False)
 
     def add_default_route(self, nexthop):
         self.sh("ip netns exec %s ip route add default via %s" %
@@ -624,15 +642,15 @@ class AsMetadataManager(object):
             "supervisor.rpcinterface:make_main_rpcinterface",
             "",
             "[unix_http_server]",
-            "file = /var/run/md-svc-supervisor.sock",
+            "file = /var/lib/neutron/opflex_agent/md-svc-supervisor.sock",
             "",
             "[supervisorctl]",
-            "serverurl = unix:///var/run/md-svc-supervisor.sock",
+            "serverurl = unix:///var/lib/neutron/opflex_agent/md-svc-supervisor.sock",
             "prompt = md-svc",
             "",
             "[supervisord]",
             "identifier = md-svc-supervisor",
-            "pidfile = /var/run/md-svc-supervisor.pid",
+            "pidfile = /var/lib/neutron/opflex_agent/md-svc-supervisor.pid",
             "logfile = /var/log/neutron/metadata-supervisor.log",
             "logfile_maxbytes = 10MB",
             "logfile_backups = 3",
