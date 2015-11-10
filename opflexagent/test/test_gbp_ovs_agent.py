@@ -10,6 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import hashlib
 import shutil
 import sys
 
@@ -211,7 +212,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
             "interface-name": args['port'].port_name,
             "mac": 'aa:bb:cc:00:11:22',
             "promiscuous-mode": mapping['promiscuous_mode'],
-            "uuid": args['port'].vif_id,
+            "uuid": hashlib.sha256(args['port'].vif_id +
+                                   'aa:bb:cc:00:11:22').hexdigest(),
             "attributes": {'vm-name': 'somename'},
             "neutron-network": "net_id",
             "domain-policy-space": 'apic_tenant',
@@ -425,7 +427,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                     "interface-name": args['port'].port_name,
                     "mac": 'aa:bb:cc:00:11:22',
                     "promiscuous-mode": mapping['promiscuous_mode'],
-                    "uuid": args['port'].vif_id,
+                    "uuid": hashlib.sha256(args['port'].vif_id +
+                                           'aa:bb:cc:00:11:22').hexdigest(),
                     "attributes": {'vm-name': 'somename'},
                     "neutron-network": "net_id",
                     "domain-policy-space": 'apic_tenant',
@@ -509,7 +512,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                     # mac is BB:BB
                     "mac": 'BB:BB',
                     "promiscuous-mode": mapping['promiscuous_mode'],
-                    "uuid": args['port'].vif_id,
+                    "uuid": hashlib.sha256(args['port'].vif_id +
+                                           'BB:BB').hexdigest(),
                     "attributes": {'vm-name': 'somename'},
                     "neutron-network": "net_id",
                     "domain-policy-space": 'apic_tenant',
@@ -537,7 +541,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                     # mac is AA:AA
                     "mac": 'AA:AA',
                     "promiscuous-mode": mapping['promiscuous_mode'],
-                    "uuid": args['port'].vif_id,
+                    "uuid": hashlib.sha256(args['port'].vif_id +
+                                           'AA:AA').hexdigest(),
                     "attributes": {'vm-name': 'somename'},
                     "neutron-network": "net_id",
                     "domain-policy-space": 'apic_tenant',

@@ -11,6 +11,7 @@
 #    under the License.
 
 import copy
+import hashlib
 import netaddr
 import os
 import signal
@@ -408,7 +409,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             "interface-name": port.port_name,
             "mac": mac,
             "promiscuous-mode": mapping.get('promiscuous_mode') or False,
-            "uuid": port.vif_id,
+            "uuid": hashlib.sha256(port.vif_id + mac).hexdigest(),
             'neutron-network': net_uuid}
 
         ips = [x['ip_address'] for x in fixed_ips]
