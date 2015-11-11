@@ -347,6 +347,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 mapping_copy['subnets'] = []
                 mapping_copy['enable_dhcp_optimization'] = False
                 mapping_copy['enable_metadata_optimization'] = False
+                mapping_copy['promiscuous_mode'] = False
                 # Map to file based on the AAP with a MAC address
                 for mac, aaps in mac_aap_map.iteritems():
                     # Get extra details for this mac (if any)
@@ -406,7 +407,6 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                     mapping['endpoint_group_name']),
             "interface-name": port.port_name,
-            "mac": mac,
             "promiscuous-mode": mapping.get('promiscuous_mode') or False,
             "uuid": '%s|%s' % (port.vif_id, mac.replace(':', '-')),
             'neutron-network': net_uuid}
@@ -436,6 +436,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     ips_ext.append(aap['ip_address'])
         if ips or ips_ext:
             mapping_dict['ip'] = sorted(ips + ips_ext)
+            # Mac should only exist when the ip field is actually set
+            mapping_dict['mac'] = mac
         if virtual_ips:
             mapping_dict['virtual-ip'] = sorted(virtual_ips,
                                                 key=lambda x: x['ip'])

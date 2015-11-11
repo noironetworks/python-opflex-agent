@@ -388,6 +388,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                                   'fixed_ip_address': '192.180.0.1'}],
                              'ip_mapping': []}}
         aaps['extra_details'] = extra_details
+        aaps['promiscuous_mode'] = True
         mapping = self._get_gbp_details(**aaps)
         # Add a floating IPs
         mapping['floating_ip'].extend([
@@ -424,7 +425,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                                             mapping['endpoint_group_name']),
                     "interface-name": args['port'].port_name,
                     "mac": 'aa:bb:cc:00:11:22',
-                    "promiscuous-mode": mapping['promiscuous_mode'],
+                    "promiscuous-mode": True,
                     "uuid": args['port'].vif_id + '|aa-bb-cc-00-11-22',
                     "attributes": {'vm-name': 'somename'},
                     "neutron-network": "net_id",
@@ -508,7 +509,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                     "interface-name": args['port'].port_name,
                     # mac is BB:BB
                     "mac": 'BB:BB',
-                    "promiscuous-mode": mapping['promiscuous_mode'],
+                    "promiscuous-mode": False,
                     "uuid": args['port'].vif_id + '|BB-BB',
                     "attributes": {'vm-name': 'somename'},
                     "neutron-network": "net_id",
@@ -534,9 +535,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                     "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                             mapping['endpoint_group_name']),
                     "interface-name": args['port'].port_name,
-                    # mac is AA:AA
-                    "mac": 'AA:AA',
-                    "promiscuous-mode": mapping['promiscuous_mode'],
+                    "promiscuous-mode": False,
                     "uuid": args['port'].vif_id + '|AA-AA',
                     "attributes": {'vm-name': 'somename'},
                     "neutron-network": "net_id",
