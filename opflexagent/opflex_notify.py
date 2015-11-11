@@ -45,6 +45,9 @@ class OpflexNotifyAgent(object):
             format(uuids, mac, addr))
         try:
             for uuid in uuids:
+                uuid = uuid.split('|')[0]
+                if not uuid:
+                    continue
                 notification = {
                     'port': uuid,
                     'ip_address_v4': addr,

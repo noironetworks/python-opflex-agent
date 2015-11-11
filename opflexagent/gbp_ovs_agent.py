@@ -406,7 +406,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             "interface-name": port.port_name,
             "mac": mac,
             "promiscuous-mode": mapping.get('promiscuous_mode') or False,
-            "uuid": port.vif_id + mac,
+            "uuid": '%s|%s' % (port.vif_id, mac.replace(':', '-')),
             'neutron-network': net_uuid}
 
         ips = [x['ip_address'] for x in fixed_ips]
