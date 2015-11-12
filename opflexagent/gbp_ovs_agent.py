@@ -309,7 +309,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                         fip['fixed_ip_address'], []).append(fip)
                 # For the main MAC, set floating IP collection to all those
                 # FIPs pointing to the Port fixed ips.
-                for fixed in fixed_ips:
+                for fixed in (mapping.get('fixed_ips') or fixed_ips):
                     mapping_copy['floating_ip'].extend(
                         fip_by_fixed.get(fixed['ip_address'], []))
                 # FIPs opinting to extra IPs
@@ -502,7 +502,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     {'dest': str(cidr.network),
                      'dest-prefix': cidr.prefixlen,
                      'next-hop': hr['nexthop']})
-            if 'dhcp_server_ips' in sn:
+            if 'dhcp_server_ips' in sn and sn['dhcp_server_ips']:
                 dhcp4['server-ip'] = sn['dhcp_server_ips'][0]
             mapping_dict['dhcp4'] = dhcp4
             break
