@@ -257,10 +257,12 @@ class TmpWatcher(FileWatcher):
 
 class EpWatcher(FileWatcher):
     """EpWatcher watches EPs and generates two state files:
-    domain_svc: maps domain -> AS services for that domains
-    domain_nets: maps IP -> neutron-network for each EP in that domain
+    anycast_services.state:
+        maps domain -> AS services for that domains
+    instance_networks.state:
+        maps IP -> neutron-network for each EP in that domain
 
-    domain_svc = {
+    anycast_services = {
         'domain-uuid-1': {
             'domain-name': domain_name,
             'domain-policy-space': domain_tenant,
@@ -273,7 +275,7 @@ class EpWatcher(FileWatcher):
         }
     }
 
-    domain_net = {
+    instance_networks = {
         'domain-uuid-1': {
             'ip-addr-1': 'neutron-network',
             ...
@@ -309,7 +311,7 @@ class EpWatcher(FileWatcher):
         ip_pool = AddressPool(SVC_IP_BASE, SVC_IP_SIZE)
         for domain_uuid in curr_svc:
             thisip = netaddr.IPAddress(curr_svc[domain_uuid]['next-hop-ip'])
-            ip_pool.reserve(thisip)
+            ip_pool.reserve(int(thisip))
 
         new_svc = {}
         new_nets = {}
@@ -411,7 +413,7 @@ class StateWatcher(FileWatcher):
         for idx in ["uuid", "domain-name", "domain-policy-space"]:
             if asvc[idx] != alloc[idx]:
                 return False
-        if asvc["service-mapping"]["next-hop-ip"] != \
+        if asvc["service-mapping"][0]["next-hop-ip"] != \
            alloc["next-hop-ip"]:
                 return False
         return True
@@ -536,8 +538,12 @@ class AsMetadataManager(object):
             cmd = "%s %s" % (self.root_helper, cmd)
         LOG.debug("%s: Running command: %s" % (
             self.name, cmd))
-        ret = subprocess.check_output(
-            cmd, stderr=subprocess.STDOUT, shell=True)
+        ret = ''
+        try:
+            ret = subprocess.check_output(
+                cmd, stderr=subprocess.STDOUT, shell=True)
+        except Exception as e:
+            LOG.error("In running command: %s: %s" % (cmd, str(e)))
         LOG.debug("%s: Command output: %s" % (
             self.name, ret))
         return ret
@@ -550,9 +556,13 @@ class AsMetadataManager(object):
 
     def clean_files(self):
         def rm_files(dirname, extension):
-            for filename in os.listdir(dirname):
-                if filename.endswith('.' + extension):
-                    os.remove("%s/%s" % (dirname, filename))
+            try:
+                for filename in os.listdir(dirname):
+                    if filename.endswith('.' + extension):
+                        os.remove("%s/%s" % (dirname, filename))
+            except Exception:
+                # Yes, one of those few cases, when a pass is OK!
+                pass
         rm_files(AS_MAPPING_DIR, AS_FILE_EXTENSION)
         rm_files(MD_DIR, STATE_FILE_EXTENSION)
         rm_files(MD_DIR, PROXY_FILE_EXTENSION)
@@ -617,13 +627,12 @@ class AsMetadataManager(object):
             self.sh("ip link set %s netns %s" % (SVC_NS_PORT, SVC_NS))
             self.sh("ip netns exec %s ip link set dev %s up" %
                     (SVC_NS, SVC_NS_PORT))
-            self.sh("ovs-vsctl add-port %s %s" %
-                    (integ_br, SVC_OVS_PORT))
             self.add_ip(SVC_IP_DEFAULT)
             self.add_default_route(SVC_NEXTHOP)
             self.sh("ethtool --offload %s tx off" % SVC_OVS_PORT)
             self.sh("ip netns exec %s ethtool --offload %s tx off" %
                     (SVC_NS, SVC_NS_PORT))
+        self.sh("ovs-vsctl add-port %s %s" % (integ_br, SVC_OVS_PORT))
 
     def init_supervisor(self):
         def conf(*fnames):
@@ -645,7 +654,8 @@ class AsMetadataManager(object):
             "file = /var/lib/neutron/opflex_agent/md-svc-supervisor.sock",
             "",
             "[supervisorctl]",
-            "serverurl = unix:///var/lib/neutron/opflex_agent/md-svc-supervisor.sock",
+            "serverurl = "
+            "unix:///var/lib/neutron/opflex_agent/md-svc-supervisor.sock",
             "prompt = md-svc",
             "",
             "[supervisord]",
