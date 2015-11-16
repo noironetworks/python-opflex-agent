@@ -240,7 +240,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.int_br.add_flow(table=constants.CANARY_TABLE, priority=0,
                              actions="drop")
         self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
-            self.int_br, self.root_helper)
+            self.int_br)
 
     def setup_physical_bridges(self, bridge_mappings):
         """Override parent setup physical bridges.
@@ -767,9 +767,9 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                          {'es': es_name, 'if': nh.next_hop_iface,
                           'mac': nh.next_hop_mac})
             except Exception as e:
-                LOG.error(_("Error while creating SNAT iptables for "
-                            "%(es)s: %(ex)s"),
-                          {'es': es_name, 'ex': e})
+                LOG.exception(_("Error while creating SNAT iptables for "
+                                "%(es)s: %(ex)s"),
+                              {'es': es_name, 'ex': e})
             self._create_host_endpoint_file(ipm, nh)
         return (nh.next_hop_iface, nh.next_hop_mac)
 

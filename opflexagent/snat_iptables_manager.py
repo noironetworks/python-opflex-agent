@@ -24,21 +24,18 @@ LOG = logging.getLogger(__name__)
 class SnatIptablesManager(object):
     IFACE_PREFIX = 'of-'
 
-    def __init__(self, int_br, root_helper):
+    def __init__(self, int_br):
         self.int_br = int_br
-        self.root_helper = root_helper
 
     def _cleanup(self, if_name, ns_name):
         self.int_br.delete_port(if_name)
-        ip_wrapper_root = ip_lib.IPWrapper(self.root_helper)
+        ip_wrapper_root = ip_lib.IPWrapper()
         if ip_wrapper_root.netns.exists(ns_name):
             ip_wrapper_root.netns.delete(ns_name)
 
     def _add_port_and_netns(self, if_name, ns_name, if_mac=None):
-        self.int_br.run_vsctl(["add-port", self.int_br.br_name, if_name,
-                               "--", "set", "Interface", if_name,
-                               "type=internal"])
-        ip_wrapper_root = ip_lib.IPWrapper(self.root_helper)
+        self.int_br.add_port(if_name, ('type', 'internal'))
+        ip_wrapper_root = ip_lib.IPWrapper()
         if_dev = ip_wrapper_root.device(if_name)
         if if_mac:
             if_dev.link.set_address(if_mac)
@@ -56,8 +53,7 @@ class SnatIptablesManager(object):
 
     def _setup_routes(self, if_dev, ver, ip_start, ip_end, gw_ip):
         gw_ip_net = netaddr.IPNetwork(gw_ip)
-        if_dev.addr.add(ver, "%s/%s" % (ip_start, gw_ip_net.prefixlen),
-                        gw_ip_net.broadcast)
+        if_dev.addr.add("%s/%s" % (ip_start, gw_ip_net.prefixlen))
         if_dev.route.add_gateway(str(gw_ip_net.ip))
         if ip_start != ip_end:
             local_nets = netaddr.cidr_merge(netaddr.iter_iprange(ip_start,
@@ -70,8 +66,8 @@ class SnatIptablesManager(object):
 
     def _setup_iptables(self, netns, if_name, ip_start, ip_end,
                         ip6_start, ip6_end):
-        iptables = iptables_manager.IptablesManager(
-            root_helper=self.root_helper, use_ipv6=True, namespace=netns)
+        iptables = iptables_manager.IptablesManager(use_ipv6=True,
+                                                    namespace=netns)
         use_v4 = bool(ip_start and ip_end)
         use_v6 = bool(ip6_start and ip6_end)
         ip_versions = []
