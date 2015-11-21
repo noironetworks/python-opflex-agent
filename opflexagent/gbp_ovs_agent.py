@@ -649,6 +649,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             LOG.debug(e.message)
 
     def _fill_ip_mapping_info(self, port_id, gbp_details, ips, mapping):
+        fip_fixed_ips = {}
         for fip in gbp_details.get('floating_ip', []):
             fm = {'uuid': fip['id'],
                   'mapped-ip': fip['fixed_ip_address'],
@@ -656,10 +657,13 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             if 'nat_epg_tenant' in fip:
                 fm['policy-space-name'] = fip['nat_epg_tenant']
             if 'nat_epg_name' in fip:
-                fm['endpoint-group-name'] = (
+                nat_epg = (
                     fip.get('nat_epg_app_profile',
                             gbp_details['app_profile_name']) + "|" +
                     fip['nat_epg_name'])
+                fm['endpoint-group-name'] = nat_epg
+                fip_fixed_ips.setdefault(nat_epg, set()).add(
+                    fip['fixed_ip_address'])
             mapping.setdefault('ip-address-mapping', []).append(fm)
 
         es_using_int_fip = {4: set(), 6: set()}
@@ -679,6 +683,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             fip_alloc_es = {4: self._get_int_fips(4, port_id).get(es, {}),
                             6: self._get_int_fips(6, port_id).get(es, {})}
             for ip in ips:
+                if ip in fip_fixed_ips.get(epg, []):
+                    continue
                 ip_ver = netaddr.IPAddress(ip).version
                 fip = (fip_alloc_es[ip_ver].get(ip) or
                        self._alloc_int_fip(ip_ver, port_id, es, ip))
