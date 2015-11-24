@@ -133,13 +133,9 @@ class TestGbpOvsAgent(base.BaseTestCase):
                    'endpoint_group_name': 'epg_name',
                    'promiscuous_mode': False,
                    'vm-name': 'somename',
-<<<<<<< HEAD
                    'app_profile_name': 'profile_name',
-                   'extra_ips': ['192.169.8.1', '192.169.8.254'],
-=======
                    'extra_ips': ['192.169.8.1', '192.169.8.253',
                                  '192.169.8.254'],
->>>>>>> ef3bac1... If fixed-IP has a mapped floating-IP, don't create SNAT entries
                    'vrf_name': 'name_of_l3p',
                    'vrf_tenant': 'apic_tenant',
                    'vrf_subnets': ['192.168.0.0/16', '192.169.0.0/16'],
