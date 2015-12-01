@@ -348,7 +348,13 @@ class EpWatcher(FileWatcher):
                         del curr_svc[domain_uuid]
 
                 nnetwork = ep.get('neutron-network')
+                if nnetwork is None:
+                    continue
+
                 ips = ep.get('ip')
+                if ips is None:
+                    ips = []
+
                 if domain_uuid not in new_nets:
                     new_nets[domain_uuid] = {}
                 for ip in ips:
