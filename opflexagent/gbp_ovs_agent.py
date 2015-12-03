@@ -387,6 +387,11 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         # Delete epg mapping file
         self.mapping_cleanup(vif_id)
 
+    def port_dead(self, port):
+        super(GBPOvsAgent, self).port_dead(port)
+        # Delete epg mapping file
+        self.mapping_cleanup(port.vif_id)
+
     def mapping_to_file(self, port, net_uuid, mapping, fixed_ips,
                         device_owner):
         """Mapping to file.
