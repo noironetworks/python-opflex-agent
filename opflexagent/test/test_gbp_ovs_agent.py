@@ -58,6 +58,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.agent.snat_iptables.setup_snat_for_es = mock.Mock(
             return_value = tuple([None, None]))
         self.agent._release_int_fip = mock.Mock()
+        self.agent.notify_worker.terminate()
         self.addCleanup(self._purge_endpoint_dir)
         self.addCleanup(self.agent.provision_local_vlan.reset_mock)
         self.addCleanup(self.agent.int_br.reset_mock)
@@ -707,3 +708,31 @@ class TestGbpOvsAgent(base.BaseTestCase):
 
         self.agent.treat_devices_added_or_updated(['some_device'], True)
         self.agent.port_dead.assert_called_once_with(port)
+
+    def test_admin_disabled_port(self):
+        # Set port's admin_state_up to False => mapping file should be removed
+        mapping = self._get_gbp_details(device='some_device')
+        self.agent.of_rpc.get_gbp_details_list = mock.Mock(
+            return_value=[mapping])
+        port_details = {'device': 'some_device',
+                        'admin_state_up': False,
+                        'port_id': mapping['port_id'],
+                        'network_id': 'some-net',
+                        'network_type': 'opflex',
+                        'physical_network': 'phys_net',
+                        'segmentation_id': '',
+                        'fixed_ips': [],
+                        'device_owner': 'some-vm'}
+        self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
+            return_value=[port_details])
+        port = mock.Mock(ofport=1, vif_id=mapping['port_id'])
+        self.agent.int_br.get_vif_port_by_id = mock.Mock(return_value=port)
+
+        self.agent.mapping_cleanup = mock.Mock()
+        self.agent.mapping_to_file = mock.Mock()
+        self.agent.treat_devices_added_or_updated(['some_device'], False)
+        self.agent.mapping_cleanup.assert_called_once_with(mapping['port_id'])
+
+        port_details['admin_state_up'] = True
+        self.agent.treat_devices_added_or_updated(['some_device'], False)
+        self.assertTrue(self.agent.mapping_to_file.called)
