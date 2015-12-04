@@ -250,7 +250,20 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 'endpoint-group-name': 'profile_name|nat-epg-name',
                 'policy-space-name': 'nat-epg-tenant'}],
             "attestation": mapping['attestation']}
-        self.agent._write_endpoint_file.assert_called_with(ep_name, ep_file)
+        snat_ep_file = {'mac': 'foo-mac', 'interface-name': 'foo-if',
+                        'ip': ['200.0.0.10'],
+                        'policy-space-name': 'nat-epg-tenant',
+                        'attributes': mock.ANY,
+                        'promiscuous-mode': True,
+                        'endpoint-group-name': 'profile_name|nat-epg-name',
+                        'uuid': mock.ANY}
+        snat_ep_uuid = [x[0][1]['uuid']
+            for x in self.agent._write_endpoint_file.call_args_list
+            if x[0][0] == 'EXT-1']
+        self._check_call_list(
+            [mock.call(ep_name, ep_file), mock.call('EXT-1', snat_ep_file)],
+            self.agent._write_endpoint_file.call_args_list)
+        snat_ep_file['uuid'] = snat_ep_uuid[0] if snat_ep_uuid else None
 
         self.agent.snat_iptables.setup_snat_for_es.assert_called_with(
             'EXT-1', '200.0.0.10', None, '200.0.0.1/8', None, None,
@@ -317,6 +330,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                                             '192.169.0.0/16',
                                             '169.254.0.0/16'])})
         self.agent._write_vrf_file.reset_mock()
+        self.agent._write_endpoint_file.reset_mock()
         self.agent.snat_iptables.setup_snat_for_es.reset_mock()
 
         # Bind another port on a same L3P, but subnets changed.
@@ -328,6 +342,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
                             'host_snat_ip': '200.0.0.11',
                             'gateway_ip': '200.0.0.2',
                             'prefixlen': 8}])
+        snat_ep_file['ip'] = ['200.0.0.11']
         self.agent.port_bound(**args)
         self.agent._write_vrf_file.assert_called_once_with(
             'newid', {
@@ -335,6 +350,9 @@ class TestGbpOvsAgent(base.BaseTestCase):
                 "domain-name": 'name_of_l3p',
                 "internal-subnets": sorted(['192.170.0.0/16',
                                             '169.254.0.0/16'])})
+        self._check_call_list([mock.call('EXT-1', snat_ep_file)],
+            self.agent._write_endpoint_file.call_args_list,
+            False)
         self.agent.snat_iptables.setup_snat_for_es.assert_called_with(
             'EXT-1', '200.0.0.11', None, '200.0.0.2/8', None, None,
             None, 'foo-mac')

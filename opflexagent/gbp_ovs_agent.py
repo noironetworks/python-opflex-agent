@@ -96,6 +96,7 @@ class ExtSegNextHopInfo(object):
         self.next_hop_iface = None
         self.next_hop_mac = None
         self.from_config = False
+        self.uuid = uuidutils.generate_uuid()
 
     def __str__(self):
         return ("%s: ipv4 (%s-%s,%s), ipv6 (%s-%s,%s), if %s, mac %s, (%s)" %
@@ -803,7 +804,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             "interface-name": nh.next_hop_iface,
             "ip": [str(x) for x in ips],
             "mac": nh.next_hop_mac,
-            "uuid": uuidutils.generate_uuid(),
+            "uuid": nh.uuid,
             "promiscuous-mode": True,
         }
         self._write_endpoint_file(nh.es_name, ep_dict)
