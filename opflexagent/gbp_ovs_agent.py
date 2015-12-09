@@ -495,7 +495,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             if not sn:
                 continue
             dhcp4 = {'ip': fip['ip_address'],
-                     'routers': [sn['gateway_ip']],
+                     'routers': [x for x in [sn.get('gateway_ip')] if x],
                      'dns-servers': sn['dns_nameservers'],
                      'domain': self.dhcp_domain,
                      'prefix-len': netaddr.IPNetwork(sn['cidr']).prefixlen}
