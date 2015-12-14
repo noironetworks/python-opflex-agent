@@ -743,6 +743,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                         'device_owner': 'some-vm'}
         self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
             return_value=[port_details])
+        self.agent.plugin_rpc.update_device_up = mock.Mock()
+        self.agent.plugin_rpc.update_device_down = mock.Mock()
         port = mock.Mock(ofport=1, vif_id=mapping['port_id'])
         self.agent.int_br.get_vif_port_by_id = mock.Mock(return_value=port)
 
