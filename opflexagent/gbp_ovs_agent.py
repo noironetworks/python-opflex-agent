@@ -33,6 +33,7 @@ from oslo_log import log as logging
 from oslo_serialization import jsonutils
 
 from opflexagent import as_metadata_manager
+from opflexagent import config as ofcfg  # noqa
 from opflexagent import constants as ofcst
 from opflexagent import opflex_notify
 from opflexagent import rpc
@@ -40,44 +41,6 @@ from opflexagent import snat_iptables_manager
 
 eventlet_utils.monkey_patch()
 LOG = logging.getLogger(__name__)
-
-gbp_opts = [
-    cfg.BoolOpt('hybrid_mode',
-                default=False,
-                help=_("Whether Neutron's ports can coexist with GBP owned"
-                       "ports.")),
-    cfg.StrOpt('epg_mapping_dir',
-               default='/var/lib/opflex-agent-ovs/endpoints/',
-               help=_("Directory where the EPG port mappings will be "
-                      "stored.")),
-    cfg.StrOpt('as_mapping_dir',
-               default='/var/lib/opflex-agent-ovs/services/',
-               help=_("Directory where the anycast svc mappings will be "
-                      "stored.")),
-    cfg.StrOpt('opflex_agent_dir',
-               default='/var/lib/neutron/opflex_agent',
-               help=_("Directory where the opflex agent state will be "
-                      "stored.")),
-    cfg.ListOpt('opflex_networks',
-                default=['*'],
-                help=_("List of the physical networks managed by this agent. "
-                       "Use * for binding any opflex network to this agent")),
-    cfg.ListOpt('internal_floating_ip_pool',
-               default=['169.254.0.0/16'],
-               help=_("IP pool used for intermediate floating-IPs with SNAT")),
-    cfg.ListOpt('internal_floating_ip6_pool',
-               default=['fe80::/64'],
-               help=_("IPv6 pool used for intermediate floating-IPs "
-                      "with SNAT"))
-]
-cfg.CONF.register_opts(gbp_opts, "OPFLEX")
-
-FILE_EXTENSION = "ep"
-FILE_NAME_FORMAT = "%s." + FILE_EXTENSION
-VRF_FILE_EXTENSION = "rdconfig"
-VRF_FILE_NAME_FORMAT = "%s." + VRF_FILE_EXTENSION
-METADATA_DEFAULT_IP = '169.254.169.254'
-METADATA_SUBNET = '169.254.0.0/16'
 
 
 class GBPOvsPluginApi(rpc.GBPServerRpcApiMixin):
@@ -118,10 +81,10 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                      kwargs['epg_mapping_dir'] else '')
         self.epg_mapping_file = (kwargs['epg_mapping_dir'] +
                                  ('/' if separator != '/' else '') +
-                                 FILE_NAME_FORMAT)
+                                 ofcst.FILE_NAME_FORMAT)
         self.vrf_mapping_file = (kwargs['epg_mapping_dir'] +
                                  ('/' if separator != '/' else '') +
-                                 VRF_FILE_NAME_FORMAT)
+                                 ofcst.VRF_FILE_NAME_FORMAT)
         self.file_formats = [self.epg_mapping_file,
                              self.vrf_mapping_file]
         self.opflex_networks = kwargs['opflex_networks']
@@ -130,8 +93,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.int_fip_pool = {
             4: netaddr.IPSet(kwargs['internal_floating_ip_pool']),
             6: netaddr.IPSet(kwargs['internal_floating_ip6_pool'])}
-        if METADATA_DEFAULT_IP in self.int_fip_pool[4]:
-            self.int_fip_pool[4].remove(METADATA_DEFAULT_IP)
+        if ofcst.METADATA_DEFAULT_IP in self.int_fip_pool[4]:
+            self.int_fip_pool[4].remove(ofcst.METADATA_DEFAULT_IP)
         self.int_fip_alloc = {4: {}, 6: {}}
         self._load_es_next_hop_info(kwargs['external_segment'])
         self.es_port_dict = {}
@@ -167,8 +130,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 continue
             # Remove all existing EPs mapping
             for f in os.listdir(directory):
-                if f.endswith('.' + FILE_EXTENSION) or f.endswith(
-                        '.' + VRF_FILE_EXTENSION):
+                if f.endswith('.' + ofcst.FILE_EXTENSION) or f.endswith(
+                        '.' + ofcst.VRF_FILE_EXTENSION):
                     try:
                         os.remove(os.path.join(directory, f))
                     except OSError as e:
@@ -478,7 +441,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             if curr_vrf['info'] != vrf_info:
                 vrf_info_copy = copy.deepcopy(vrf_info)
                 vrf_info_copy['internal-subnets'] = sorted(list(
-                    vrf_info_copy['internal-subnets']) + [METADATA_SUBNET])
+                    vrf_info_copy['internal-subnets']) +
+                    [ofcst.METADATA_SUBNET])
                 self._write_vrf_file(mapping['l3_policy_id'], vrf_info_copy)
                 curr_vrf['info'] = vrf_info
             if vif_id:
@@ -631,7 +595,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         directory = os.path.dirname(self.epg_mapping_file)
         # Remove all existing EPs mapping for port_id
         for f in os.listdir(directory):
-            if f.endswith('.' + FILE_EXTENSION) and port_id in f:
+            if f.endswith('.' + ofcst.FILE_EXTENSION) and port_id in f:
                 try:
                     os.remove(os.path.join(directory, f))
                 except OSError as e:
