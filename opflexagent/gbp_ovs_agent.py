@@ -648,7 +648,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
         with open(filename, 'w') as f:
-            jsonutils.dump(mapping_dict, f)
+            jsonutils.dump(mapping_dict, f, indent=4)
 
     def _delete_file(self, port_id, file_format):
         try:
