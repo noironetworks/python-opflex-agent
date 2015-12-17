@@ -15,7 +15,7 @@ import netaddr
 import os
 
 from neutron.common import constants as n_constants
-from neutron.i18n import _LE, _LI, _LW
+from neutron.i18n import _LI
 from neutron.openstack.common import uuidutils
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
@@ -33,6 +33,7 @@ VRF_FILE_NAME_FORMAT = "%s." + VRF_FILE_EXTENSION
 
 
 class ExtSegNextHopInfo(object):
+
     def __init__(self, es_name):
         self.es_name = es_name
         self.ip_start = None
@@ -65,7 +66,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
     agent.
     """
 
-    def initialize(self, host, integration_bridge, config):
+    def initialize(self, host, bridge_manager, config):
         LOG.info(_LI("Initializing the Endpoint File Manager. \n %s"), config)
         separator = (config['epg_mapping_dir'][-1] if
                      config['epg_mapping_dir'] else '')
@@ -90,7 +91,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
         self._setup_ep_directory()
         self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
-            integration_bridge)
+            bridge_manager.int_br)
         self.host = host
         return self
 
@@ -594,7 +595,6 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
     def _write_endpoint_file(self, port_id, mapping_dict):
         return self._write_file(port_id, mapping_dict, self.epg_mapping_file)
 
-
     def _delete_endpoint_file(self, port_id):
         return self._delete_file(port_id, self.epg_mapping_file)
 
@@ -620,7 +620,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         if not os.path.exists(os.path.dirname(filename)):
             os.makedirs(os.path.dirname(filename))
         with open(filename, 'w') as f:
-            jsonutils.dump(mapping_dict, f)
+            jsonutils.dump(mapping_dict, f, indent=4)
 
     def _delete_file(self, port_id, file_format):
         try:

@@ -22,6 +22,7 @@ TOPIC_OPFLEX = 'opflex'
 ENDPOINT = 'endpoint'
 VRF = 'vrf'
 
+
 class AgentNotifierApi(object):
     """Server side notification API:
 
