@@ -14,10 +14,6 @@ from oslo_config import cfg
 
 
 gbp_opts = [
-    cfg.BoolOpt('hybrid_mode',
-                default=False,
-                help=_("Whether Neutron's ports can coexist with GBP owned"
-                       "ports.")),
     cfg.StrOpt('epg_mapping_dir',
                default='/var/lib/opflex-agent-ovs/endpoints/',
                help=_("Directory where the EPG port mappings will be "
