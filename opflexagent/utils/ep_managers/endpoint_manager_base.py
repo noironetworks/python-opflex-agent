@@ -22,22 +22,20 @@ class EndpointManagerBase(object):
     repository. The endpoint manager takes care of policy based connectivity,
     that includes NAT when applicable.
     """
+    vrf_dict = {}
 
     @abc.abstractmethod
-    def initialize(self, host, integration_bridge, config):
+    def initialize(self, host, bridge_manager, config):
         """ EP Manager initialization method.
 
         This method will be called before any other.
 
         :param host: agent host
-
+        :param bridge_manager: the integration bridge manager.
         :param config: configuration dictionary
-
-        :param integration_bridge: the integration bridge object.
 
         :returns: self
         """
-
 
     @abc.abstractmethod
     def declare_endpoint(self, port, mapping):
@@ -48,7 +46,6 @@ class EndpointManagerBase(object):
         method will undeclare the endpoint altogether.
 
         :param port: Object that represents the Openstack port.
-
         :param mapping: dictionary containing info retrieved from the Openstack
          server. See the gbp_details RPC
 

@@ -10,34 +10,36 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import copy
-import netaddr
-import os
 import signal
 import sys
+import time
 
 from neutron.agent.common import config
+from neutron.agent.common import polling
 from neutron.agent.dhcp import config as dhcp_config
 from neutron.agent.linux import ip_lib
 from neutron.agent import rpc as agent_rpc
+from neutron.agent import securitygroups_rpc as sg_rpc
 from neutron.common import config as common_config
 from neutron.common import constants as n_constants
 from neutron.common import eventlet_utils
 from neutron.common import topics
 from neutron.common import utils as q_utils
-from neutron.openstack.common import uuidutils
+from neutron.i18n import _LE, _LI, _LW
+from neutron import context
+from neutron.openstack.common import loopingcall
 from neutron.plugins.openvswitch.agent import ovs_neutron_agent as ovs
 from neutron.plugins.openvswitch.common import constants
 from oslo_config import cfg
 from oslo_log import log as logging
-from oslo_serialization import jsonutils
 
 from opflexagent import as_metadata_manager
 from opflexagent import config as ofcfg  # noqa
 from opflexagent import constants as ofcst
 from opflexagent import opflex_notify
 from opflexagent import rpc
-from opflexagent import snat_iptables_manager
+from opflexagent.utils.bridge_managers import ovs_manager
+from opflexagent.utils.ep_managers import endpoint_file_manager as ep_manager
 
 eventlet_utils.monkey_patch()
 LOG = logging.getLogger(__name__)
@@ -47,105 +49,102 @@ class GBPOvsPluginApi(rpc.GBPServerRpcApiMixin):
     pass
 
 
-class ExtSegNextHopInfo(object):
-    def __init__(self, es_name):
-        self.es_name = es_name
-        self.ip_start = None
-        self.ip_end = None
-        self.ip_gateway = None
-        self.ip6_start = None
-        self.ip6_end = None
-        self.ip6_gateway = None
-        self.next_hop_iface = None
-        self.next_hop_mac = None
-        self.from_config = False
-        self.uuid = uuidutils.generate_uuid()
+class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin):
+    """Group Based Policy Opflex Agent.
 
-    def __str__(self):
-        return ("%s: ipv4 (%s-%s,%s), ipv6 (%s-%s,%s), if %s, mac %s, (%s)" %
-            (self.es_name, self.ip_start, self.ip_end, self.ip_gateway,
-            self.ip6_start, self.ip6_end, self.ip6_gateway,
-            self.next_hop_iface, self.next_hop_mac,
-            "configured" if self.from_config else "auto-allocated"))
+    The GBP opflex agent assumes a pre-existing bridge (integration bridge is
+    not required). This agent is an interface between the SDN controller and
+    the opflex-agent-ovs, which renders the policies from ACI and Openstack
+    into openflow rules.
 
-    def is_valid(self):
-        return ((self.ip_start and self.ip_gateway) or
-                (self.ip6_start and self.ip6_gateway))
-
-
-class GBPOvsAgent(ovs.OVSNeutronAgent):
+    The GBP Opflex Agent
+    """
 
     def __init__(self, root_helper=None, **kwargs):
-        self.hybrid_mode = kwargs['hybrid_mode']
-        separator = (kwargs['epg_mapping_dir'][-1] if
-                     kwargs['epg_mapping_dir'] else '')
-        self.epg_mapping_file = (kwargs['epg_mapping_dir'] +
-                                 ('/' if separator != '/' else '') +
-                                 ofcst.FILE_NAME_FORMAT)
-        self.vrf_mapping_file = (kwargs['epg_mapping_dir'] +
-                                 ('/' if separator != '/' else '') +
-                                 ofcst.VRF_FILE_NAME_FORMAT)
-        self.file_formats = [self.epg_mapping_file,
-                             self.vrf_mapping_file]
         self.opflex_networks = kwargs['opflex_networks']
         if self.opflex_networks and self.opflex_networks[0] == '*':
             self.opflex_networks = None
-        self.int_fip_pool = {
-            4: netaddr.IPSet(kwargs['internal_floating_ip_pool']),
-            6: netaddr.IPSet(kwargs['internal_floating_ip6_pool'])}
-        if ofcst.METADATA_DEFAULT_IP in self.int_fip_pool[4]:
-            self.int_fip_pool[4].remove(ofcst.METADATA_DEFAULT_IP)
-        self.int_fip_alloc = {4: {}, 6: {}}
-        self._load_es_next_hop_info(kwargs['external_segment'])
-        self.es_port_dict = {}
-        self.vrf_dict = {}
-        self.vif_to_vrf = {}
-        self.updated_vrf = set()
-        self.backup_updated_vrf = set()
-        self.dhcp_domain = kwargs['dhcp_domain']
         self.root_helper = root_helper
-        del kwargs['hybrid_mode']
-        del kwargs['epg_mapping_dir']
-        del kwargs['opflex_networks']
-        del kwargs['internal_floating_ip_pool']
-        del kwargs['internal_floating_ip6_pool']
-        del kwargs['external_segment']
-        del kwargs['dhcp_domain']
-
         self.notify_worker = opflex_notify.worker()
-        super(GBPOvsAgent, self).__init__(**kwargs)
-        self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
-        self.setup_pt_directory()
+        self.host = cfg.CONF.host
 
-    def setup_pt_directory(self):
-        created = False
-        for file_format in self.file_formats:
-            directory = os.path.dirname(file_format)
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-                created = True
-                continue
-            # Remove all existing EPs mapping
-            for f in os.listdir(directory):
-                if f.endswith('.' + ofcst.FILE_EXTENSION) or f.endswith(
-                        '.' + ofcst.VRF_FILE_EXTENSION):
-                    try:
-                        os.remove(os.path.join(directory, f))
-                    except OSError as e:
-                        LOG.debug(e.message)
-        if not created:
-            self.snat_iptables.cleanup_snat_all()
+        self.agent_state = {
+            'binary': 'neutron-opflex-agent',
+            'host': self.host,
+            'topic': n_constants.L2_AGENT_TOPIC,
+            'configurations': {'bridge_mappings': kwargs['bridge_mappings'],
+                               'opflex_networks': self.opflex_networks},
+            'agent_type': ofcst.AGENT_TYPE_OPFLEX_OVS,
+            'start_flag': True}
+
+        # Initialize OVS Manager
+        self.bridge_manager = ovs_manager.OvsManager().initialize(self.host,
+                                                                  kwargs)
+        # Stores port update notifications for processing in main rpc loop
+        self.updated_ports = set()
+        # Stores port delete notifications
+        self.deleted_ports = set()
+        # Stores VRF update notifications
+        self.updated_vrf = set()
+        self.setup_rpc()
+        self.local_ip = kwargs['local_ip']
+        self.polling_interval = kwargs['polling_interval']
+        self.minimize_polling = kwargs['minimize_polling']
+        self.ovsdb_monitor_respawn_interval = (kwargs.get(
+            'ovsdb_monitor_respawn_interval') or
+             constants.DEFAULT_OVSDBMON_RESPAWN)
+        self.setup_report()
+        self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
+
+        # Initialize iteration counter
+        self.iter_num = 0
+        self.run_daemon_loop = True
+        # The initialization is complete; we can start receiving messages
+        self.connection.consume_in_threads()
+
+        self.quitting_rpc_timeout = kwargs['quitting_rpc_timeout']
+        # Initialize the Endpoint Manager.
+        # TODO(ivar): make this component pluggable.
+        self.ep_manager = ep_manager.EndpointFileManager().initialize(
+            self.host, self.bridge_manager, kwargs)
+        # Clenup SNAT rules.
+
+    def setup_report(self):
+        report_interval = cfg.CONF.AGENT.report_interval
+        # Be synchronous for the first report
+        self.use_call = True
+        if report_interval:
+            heartbeat = loopingcall.FixedIntervalLoopingCall(
+                self._report_state)
+            heartbeat.start(interval=report_interval)
+
+    def _report_state(self):
+        # How many devices are likely used by a VM
+        self.agent_state.get('configurations')['devices'] = (
+            self.bridge_manager.int_br_device_count)
+
+        try:
+            self.state_rpc.report_state(self.context,
+                                        self.agent_state,
+                                        self.use_call)
+            self.use_call = False
+            self.agent_state.pop('start_flag', None)
+        except Exception:
+            LOG.exception(_LE("Failed reporting state!"))
 
     def setup_rpc(self):
-        self.agent_state['agent_type'] = ofcst.AGENT_TYPE_OPFLEX_OVS
-        self.agent_state['configurations']['opflex_networks'] = (
-            self.opflex_networks)
-        self.agent_state['binary'] = 'opflex-ovs-agent'
-        super(GBPOvsAgent, self).setup_rpc()
+        self.agent_id = 'opflex-agent-%s' % cfg.CONF.host
+        self.context = context.get_admin_context_without_session()
         # Set GBP rpc API
         self.of_rpc = GBPOvsPluginApi(rpc.TOPIC_OPFLEX)
+        self.plugin_rpc = ovs.OVSPluginApi(topics.PLUGIN)
+        self.sg_plugin_rpc = sg_rpc.SecurityGroupServerRpcApi(topics.PLUGIN)
+        self.sg_agent = sg_rpc.SecurityGroupAgentRpc(
+            self.context, self.sg_plugin_rpc, defer_refresh_firewall=True)
 
-        # Need to override the current RPC callbacks to add subnet related RPC
+        self.state_rpc = agent_rpc.PluginReportStateAPI(topics.PLUGIN)
+        self.topic = topics.AGENT
+        self.endpoints = [self]
         consumers = [[topics.PORT, topics.UPDATE],
                      [topics.NETWORK, topics.DELETE],
                      [constants.TUNNEL, topics.UPDATE],
@@ -153,9 +152,6 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                      [topics.SECURITY_GROUP, topics.UPDATE],
                      [topics.DVR, topics.UPDATE],
                      [topics.SUBNET, topics.UPDATE]]
-        if self.l2_pop:
-            consumers.append([topics.L2POPULATION,
-                              topics.UPDATE, cfg.CONF.host])
         self.connection = agent_rpc.create_consumers(
             self.endpoints, self.topic, consumers, start_listening=False)
 
@@ -165,173 +161,40 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                   subnet['id'])
 
     def _agent_has_updates(self, polling_manager):
-        return (self.updated_vrf or
-                super(GBPOvsAgent, self)._agent_has_updates(polling_manager))
+        return (polling_manager.is_polling_required or
+                self.updated_ports or
+                self.deleted_ports or
+                self.updated_vrf or
+                self.sg_agent.firewall_refresh_needed())
 
-    def _port_info_has_changes(self, port_info):
-        return (port_info.get('vrf_updated') or
-                super(GBPOvsAgent, self)._port_info_has_changes(port_info))
+    def _info_has_changes(self, port_info):
+        return (port_info.get('added') or
+                port_info.get('removed') or
+                port_info.get('updated') or
+                port_info.get('vrf_updated'))
 
-    def scan_ports(self, registered_ports, updated_ports=None):
-        port_info = super(GBPOvsAgent, self).scan_ports(registered_ports,
-                                                        updated_ports)
-        self.backup_updated_vrf = self.updated_vrf
-        self.updated_vrf = set()
-        port_info['vrf_updated'] = self.backup_updated_vrf & set(
-            self.vrf_dict.keys())
-        return port_info
-
-    def setup_integration_br(self):
-        """Override parent setup integration bridge.
-
-        The opflex agent controls all the flows in the integration bridge,
-        therefore we have to make sure the parent doesn't reset them.
-        """
-        self.int_br.create()
-        self.int_br.set_secure_mode()
-
-        self.int_br.delete_port(cfg.CONF.OVS.int_peer_patch_port)
-        # The following is executed in the parent method:
-        # self.int_br.remove_all_flows()
-
-        if self.hybrid_mode:
-            # switch all traffic using L2 learning
-            self.int_br.add_flow(priority=1, actions="normal")
-        # Add a canary flow to int_br to track OVS restarts
-        self.int_br.add_flow(table=constants.CANARY_TABLE, priority=0,
-                             actions="drop")
-        self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
-            self.int_br)
-
-    def setup_physical_bridges(self, bridge_mappings):
-        """Override parent setup physical bridges.
-
-        Only needs to be executed in hybrid mode. If not in hybrid mode, only
-        the existence of the integration bridge is assumed.
-        """
-        self.phys_brs = {}
-        self.int_ofports = {}
-        self.phys_ofports = {}
-        if self.hybrid_mode:
-            super(GBPOvsAgent, self).setup_physical_bridges(bridge_mappings)
-
-    def reset_tunnel_br(self, tun_br_name=None):
-        """Override parent reset tunnel br.
-
-        Only needs to be executed in hybrid mode. If not in hybrid mode, only
-        the existence of the integration bridge is assumed.
-        """
-        if self.hybrid_mode:
-            super(GBPOvsAgent, self).reset_tunnel_br(tun_br_name)
-
-    def setup_tunnel_br(self, tun_br_name=None):
-        """Override parent setup tunnel br.
-
-        Only needs to be executed in hybrid mode. If not in hybrid mode, only
-        the existence of the integration bridge is assumed.
-        """
-        if self.hybrid_mode:
-            super(GBPOvsAgent, self).setup_tunnel_br(tun_br_name)
-
-    def port_bound(self, port, net_uuid,
-                   network_type, physical_network,
-                   segmentation_id, fixed_ips, device_owner,
-                   ovs_restarted):
-
+    def port_bound(self, port, net_uuid, network_type, physical_network,
+                   fixed_ips, device_owner, ovs_restarted):
+        # TODO(ivar): No flows are needed in OVS, and GBP details can now
+        # be retrieved in a sane way. This methos probably is not needed
+        # anymore
         mapping = port.gbp_details
+        port.net_uuid = net_uuid
+        port.device_owner = device_owner
+        port.fixed_ips = fixed_ips
         if not mapping:
-            self.mapping_cleanup(port.vif_id)
-            if self.hybrid_mode:
-                super(GBPOvsAgent, self).port_bound(
-                    port, net_uuid, network_type, physical_network,
-                    segmentation_id, fixed_ips, device_owner, ovs_restarted)
+            # Mapping is empty, this port left the Opflex policy space.
+            LOG.warn("Mapping for port %s is None, undeclaring the Endpoint",
+                     port.vif_id)
+            self.ep_manager.undeclare_endpoint(port.vif_id)
         elif network_type in self.supported_pt_network_types:
-            # PT cleanup is needed before writing the new endpoint files
-            self.mapping_cleanup(port.vif_id, cleanup_vrf=False)
             if ((self.opflex_networks is None) or
                     (physical_network in self.opflex_networks)):
-                # Port has to be untagged due to a opflex agent requirement
-                self.int_br.clear_db_attribute("Port", port.port_name, "tag")
-                # Multiple files will be created based on how many MAC
-                # addresses are owned by the specific port.
-                mapping_copy = copy.deepcopy(mapping)
-                mac_aap_map = {}
-                mapping_copy['allowed_address_pairs'] = []
-                mapping_copy['floating_ip'] = []
-                fip_by_fixed = {}
-                original_mac = mapping.get('mac_address') or port.vif_mac
-                # Get extra details for main mac (if any)
-                extra_details = mapping.get('extra_details', {}).get(
-                    original_mac, {})
-                # Prepare FIPs by fixed_ip
-                for fip in (mapping.get('floating_ip', []) +
-                            extra_details.get('floating_ip', [])):
-                    fip_by_fixed.setdefault(
-                        fip['fixed_ip_address'], []).append(fip)
-                # For the main MAC, set floating IP collection to all those
-                # FIPs pointing to the Port fixed ips.
-                for fixed in (mapping.get('fixed_ips') or fixed_ips):
-                    mapping_copy['floating_ip'].extend(
-                        fip_by_fixed.get(fixed['ip_address'], []))
-                # FIPs opinting to extra IPs
-                for fixed in (mapping.get('extra_ips', []) +
-                              extra_details.get('extra_ips', [])):
-                    mapping_copy['floating_ip'].extend(
-                        fip_by_fixed.get(fixed, []))
-
-                if 'ip_mapping' in extra_details:
-                    mapping_copy.setdefault('ip_mapping', []).extend(
-                        extra_details.get('ip_mapping', []))
-                if 'extra_ips' in extra_details:
-                    mapping_copy.setdefault('extra_ips', []).extend(
-                        extra_details.get('extra_ips', []))
-                # For the main MAC EP, set al the AAP with no mac address or
-                # MAC address equal to the original MAC.
-                for aap in mapping.get('allowed_address_pairs', []):
-                    if not aap.get('mac_address') or aap.get(
-                            'mac_address') == original_mac:
-                        # Should go with the MAIN mac address EP file
-                        mapping_copy['allowed_address_pairs'].append(aap)
-                        # Also set the right floating IPs
-                        mapping_copy['floating_ip'].extend(
-                            fip_by_fixed.get(aap['ip_address'], []))
-                    else:
-                        # Store for future processing
-                        mac_aap_map.setdefault(
-                            aap['mac_address'], []).append(aap)
-                # Create mapping file for base MAC address
-                self.mapping_to_file(port, net_uuid, mapping_copy, fixed_ips,
-                                     device_owner)
-                # Reset for AAP EP files
-                mapping_copy['allowed_address_pairs'] = []
-                mapping_copy['fixed_ips'] = []
-                mapping_copy['subnets'] = []
-                mapping_copy['enable_dhcp_optimization'] = False
-                mapping_copy['enable_metadata_optimization'] = False
-                mapping_copy['promiscuous_mode'] = False
-                # Map to file based on the AAP with a MAC address
-                for mac, aaps in mac_aap_map.iteritems():
-                    # Get extra details for this mac (if any)
-                    extra_details = mapping.get('extra_details', {}).get(mac,
-                                                                         {})
-                    # Replace the MAC address with the new one
-                    mapping_copy['mac_address'] = mac
-                    # The following info are only present if the MAC has at
-                    # least one active address (server is doing the screening)
-                    mapping_copy['floating_ip'] = extra_details.get(
-                        'floating_ip', [])
-                    mapping_copy['extra_ips'] = extra_details.get(
-                        'extra_ips', [])
-                    mapping_copy['ip_mapping'] = extra_details.get(
-                        'ip_mapping', [])
-                    # Extend the FIP list based on the allowed IPs
-                    for aap in aaps:
-                        mapping_copy['floating_ip'].extend(fip_by_fixed.get(
-                            aap['ip_address'], []))
-                    # For this mac, set all the allowed address pairs.
-                    mapping_copy['allowed_address_pairs'] = aaps
-                    self.mapping_to_file(port, net_uuid, mapping_copy, [],
-                                         device_owner)
+                # Endpoint Manager to process the EP info
+                LOG.debug("Processing the endpoint mapping "
+                          "for port %(port)s: \n mapping: %(mapping)s" % {
+                              'port': port.vif_id, 'mapping': mapping})
+                self.ep_manager.declare_endpoint(port, mapping)
             else:
                 LOG.error(_("Cannot provision OPFLEX network for "
                             "net-id=%(net_uuid)s - no bridge for "
@@ -345,174 +208,103 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                       {'net_type': network_type,
                        'supported': self.supported_pt_network_types})
 
-    def port_unbound(self, vif_id, net_uuid=None):
-        super(GBPOvsAgent, self).port_unbound(vif_id, net_uuid)
-        # Delete epg mapping file
-        self.mapping_cleanup(vif_id)
+    def port_unbound(self, vif_id):
+        """Unbind port.
+
+        :param vif_id: the id of the vif
+        """
+        self.ep_manager.undeclare_endpoint(vif_id)
 
     def port_dead(self, port):
-        super(GBPOvsAgent, self).port_dead(port)
-        # Delete epg mapping file
-        self.mapping_cleanup(port.vif_id)
-
-    def mapping_to_file(self, port, net_uuid, mapping, fixed_ips,
-                        device_owner):
-        """Mapping to file.
-
-        Converts the port mapping into file.
-        """
-        # Skip router-interface ports - they interfere with OVS pipeline
-
-        fixed_ips = mapping.get('fixed_ips') or fixed_ips
-        if device_owner in [n_constants.DEVICE_OWNER_ROUTER_INTF]:
-            return
-        ips_ext = mapping.get('extra_ips') or []
-        mac = mapping.get('mac_address') or port.vif_mac
-        mapping_dict = {
-            "policy-space-name": mapping['ptg_tenant'],
-            "endpoint-group-name": (mapping['app_profile_name'] + "|" +
-                                    mapping['endpoint_group_name']),
-            "interface-name": port.port_name,
-            "promiscuous-mode": mapping.get('promiscuous_mode') or False,
-            "uuid": '%s|%s' % (port.vif_id, mac.replace(':', '-')),
-            'neutron-network': net_uuid}
-
-        ips = [x['ip_address'] for x in fixed_ips]
-
-        virtual_ips = []
-        if device_owner == n_constants.DEVICE_OWNER_DHCP:
-            # vm-name, if specified in mappings, will override this
-            mapping_dict['attributes'] = {'vm-name': (
-                'dhcp|' +
-                mapping['ptg_tenant'] + '|' +
-                mapping['app_profile_name'] + '|' +
-                mapping['endpoint_group_name'])
-            }
-        else:
-            if (mapping.get('enable_dhcp_optimization', False) and
-               'subnets' in mapping):
-                    self._map_dhcp_info(fixed_ips, mapping['subnets'],
-                                        mapping_dict)
-        for aap in mapping.get('allowed_address_pairs', []):
-            if aap.get('ip_address'):
-                virtual_ips.append(
-                    {'ip': aap['ip_address'],
-                     'mac': aap.get('mac_address', mac)})
-                if aap.get('active'):
-                    ips_ext.append(aap['ip_address'])
-        if ips or ips_ext:
-            mapping_dict['ip'] = sorted(ips + ips_ext)
-            # Mac should only exist when the ip field is actually set
-            mapping_dict['mac'] = mac
-        if virtual_ips:
-            mapping_dict['virtual-ip'] = sorted(virtual_ips,
-                                                key=lambda x: x['ip'])
-
-        if 'vm-name' in mapping:
-            mapping_dict['attributes'] = {'vm-name': mapping['vm-name']}
-        if 'vrf_name' in mapping:
-            mapping_dict['domain-policy-space'] = mapping['vrf_tenant']
-            mapping_dict['domain-name'] = mapping['vrf_name']
-        if 'attestation' in mapping:
-            mapping_dict['attestation'] = mapping['attestation']
-
-        self._handle_host_snat_ip(mapping.get('host_snat_ips', []))
-        self._fill_ip_mapping_info(port.vif_id, mapping, ips + ips_ext,
-                                   mapping_dict)
-        # Create one file per MAC address.
-        self._write_endpoint_file(port.vif_id + '_' + mac, mapping_dict)
-        self.vrf_info_to_file(mapping, vif_id=port.vif_id)
-
-    def vrf_info_to_file(self, mapping, vif_id=None):
-        if 'vrf_subnets' in mapping:
-            vrf_info = {
-                'domain-policy-space': mapping['vrf_tenant'],
-                'domain-name': mapping['vrf_name'],
-                'internal-subnets': set(mapping['vrf_subnets'])}
-            curr_vrf = self.vrf_dict.setdefault(
-                mapping['l3_policy_id'], {'info': {}, 'vifs': set()})
-            if curr_vrf['info'] != vrf_info:
-                vrf_info_copy = copy.deepcopy(vrf_info)
-                vrf_info_copy['internal-subnets'] = sorted(list(
-                    vrf_info_copy['internal-subnets']) +
-                    [ofcst.METADATA_SUBNET])
-                self._write_vrf_file(mapping['l3_policy_id'], vrf_info_copy)
-                curr_vrf['info'] = vrf_info
-            if vif_id:
-                curr_vrf['vifs'].add(vif_id)
-                self.vif_to_vrf[vif_id] = mapping['l3_policy_id']
-
-    def _map_dhcp_info(self, fixed_ips, subnets, mapping_dict):
-        v4subnets = {k['id']: k for k in subnets
-                     if k['ip_version'] == 4 and k['enable_dhcp']}
-        v6subnets = {k['id']: k for k in subnets
-                     if k['ip_version'] == 6 and k['enable_dhcp']}
-
-        # REVISIT(amit): we use only the first fixed-ip for DHCP optimization
-        for fip in fixed_ips:
-            sn = v4subnets.get(fip['subnet_id'])
-            if not sn:
-                continue
-            dhcp4 = {'ip': fip['ip_address'],
-                     'routers': [x for x in [sn.get('gateway_ip')] if x],
-                     'dns-servers': sn['dns_nameservers'],
-                     'domain': self.dhcp_domain,
-                     'prefix-len': netaddr.IPNetwork(sn['cidr']).prefixlen}
-            dhcp4['static-routes'] = []
-            for hr in sn['host_routes']:
-                cidr = netaddr.IPNetwork(hr['destination'])
-                dhcp4['static-routes'].append(
-                    {'dest': str(cidr.network),
-                     'dest-prefix': cidr.prefixlen,
-                     'next-hop': hr['nexthop']})
-            if 'dhcp_server_ips' in sn and sn['dhcp_server_ips']:
-                dhcp4['server-ip'] = sn['dhcp_server_ips'][0]
-            mapping_dict['dhcp4'] = dhcp4
-            break
-        if len(v6subnets) > 0 and v6subnets[0]['dns_nameservers']:
-            mapping_dict['dhcp6'] = {
-                'dns-servers': v6subnets[0]['dns_nameservers']}
-
-    def mapping_cleanup(self, vif_id, cleanup_vrf=True):
-        LOG.debug('Cleaning mapping for vif id %s', vif_id)
-        self._delete_endpoint_files(vif_id)
-        if cleanup_vrf:
-            es = self._get_es_for_port(vif_id)
-            self._dissociate_port_from_es(vif_id, es)
-            self._release_int_fip(4, vif_id)
-            self._release_int_fip(6, vif_id)
-        vrf_id = self.vif_to_vrf.get(vif_id)
-        vrf = self.vrf_dict.get(vrf_id)
-        if vrf and cleanup_vrf:
-            del self.vif_to_vrf[vif_id]
-            vrf['vifs'].discard(vif_id)
-            if not vrf['vifs']:
-                del self.vrf_dict[vrf_id]
-                # No more endpoints for this VRF here
-                self._delete_vrf_file(vrf_id)
+        self.bridge_manager.port_dead(port)
+        self.ep_manager.undeclare_endpoint(port.vif_id)
 
     def process_network_ports(self, port_info, ovs_restarted):
-        res = super(GBPOvsAgent, self).process_network_ports(port_info,
-                                                             ovs_restarted)
-        if port_info.get('vrf_updated'):
+        resync_a = False
+        resync_b = False
+        # TODO(salv-orlando): consider a solution for ensuring notifications
+        # are processed exactly in the same order in which they were
+        # received. This is tricky because there are two notification
+        # sources: the neutron server, and the ovs db monitor process
+        # If there is an exception while processing security groups ports
+        # will not be wired anyway, and a resync will be triggered
+        # TODO(salv-orlando): Optimize avoiding applying filters unnecessarily
+        # (eg: when there are no IP address changes)
+        self.sg_agent.setup_port_filters(port_info.get('added', set()),
+                                         port_info.get('updated', set()))
+        # VIF wiring needs to be performed always for 'new' devices.
+        # For updated ports, re-wiring is not needed in most cases, but needs
+        # to be performed anyway when the admin state of a device is changed.
+        # A device might be both in the 'added' and 'updated'
+        # list at the same time; avoid processing it twice.
+        devices_added_updated = (port_info.get('added', set()) |
+                                 port_info.get('updated', set()))
+        if devices_added_updated:
+            start = time.time()
             try:
-                vrf_details_list = self.of_rpc.get_vrf_details_list(
-                    self.context, self.agent_id, port_info['vrf_updated'],
-                    cfg.CONF.host)
-                for details in vrf_details_list:
-                    self.vrf_info_to_file(details)
+                skipped_devices = self.treat_devices_added_or_updated(
+                    devices_added_updated, ovs_restarted)
+                LOG.debug("process_network_ports - iteration:%(iter_num)d - "
+                          "treat_devices_added_or_updated completed. "
+                          "Skipped %(num_skipped)d devices of "
+                          "%(num_current)d devices currently available. "
+                          "Time elapsed: %(elapsed).3f",
+                          {'iter_num': self.iter_num,
+                           'num_skipped': len(skipped_devices),
+                           'num_current': len(port_info['current']),
+                           'elapsed': time.time() - start})
+                # Update the list of current ports storing only those which
+                # have been actually processed.
+                port_info['current'] = (port_info['current'] -
+                                        set(skipped_devices))
+            except ovs.DeviceListRetrievalError:
+                # Need to resync as there was an error with server
+                # communication.
+                LOG.exception(_LE("process_network_ports - iteration:%d - "
+                                  "failure while retrieving port details "
+                                  "from server"), self.iter_num)
+                resync_a = True
+        if 'removed' in port_info:
+            start = time.time()
+            resync_b = self.treat_devices_removed(port_info['removed'])
+            LOG.debug("process_network_ports - iteration:%(iter_num)d - "
+                      "treat_devices_removed completed in %(elapsed).3f",
+                      {'iter_num': self.iter_num,
+                       'elapsed': time.time() - start})
+        if port_info.get('vrf_updated'):
+            self.process_vrf_update(port_info['vrf_updated'])
+        # If one of the above operations fails => resync with plugin
+        return (resync_a | resync_b)
+
+    def treat_devices_removed(self, devices):
+        resync = False
+        self.sg_agent.remove_devices_filter(devices)
+        for device in devices:
+            LOG.info(_LI("Attachment %s removed"), device)
+            try:
+                self.plugin_rpc.update_device_down(self.context,
+                                                   device,
+                                                   self.agent_id,
+                                                   cfg.CONF.host)
             except Exception as e:
-                LOG.error("VRF update failed because of %s", e.message)
-                if self.backup_updated_vrf:
-                    self.updated_vrf = self.backup_updated_vrf
-                raise
-        return res
+                LOG.debug("port_removed failed for %(device)s: %(e)s",
+                          {'device': device, 'e': e})
+                resync = True
+                continue
+            self.port_unbound(device)
+        return resync
+
+    def process_vrf_update(self, vrf_update):
+        # TODO(ivar): use the acync model
+        vrf_details_list = self.of_rpc.get_vrf_details_list(
+            self.context, self.agent_id, vrf_update, self.host)
+        for details in vrf_details_list:
+            # REVISIT(ivar): this is not a public facing API, we will move to
+            # the right method once the redesign is complete.
+            self.ep_manager.vrf_info_to_file(details)
 
     def treat_devices_added_or_updated(self, devices, ovs_restarted):
-        # REVISIT(ivar): This method is copied from parent in order to inject
-        # an efficient way to request GBP details. This is needed because today
-        # ML2 RPC doesn't allow drivers to add custom information to the device
-        # details list.
+        # TODO(ivar): Move this method in the ep manager
 
         skipped_devices = []
         try:
@@ -531,7 +323,9 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         for details in devices_details_list:
             device = details['device']
             LOG.debug("Processing port: %s", device)
-            port = self.int_br.get_vif_port_by_id(device)
+            # REVISIT(ivar): this is not a public facing API, we will move to
+            # the right method once the redesign is complete.
+            port = self.bridge_manager.int_br.get_vif_port_by_id(device)
             if not port:
                 # The port disappeared and cannot be processed
                 LOG.info(_("Port %s was not found on the integration bridge "
@@ -552,7 +346,6 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                                     details['network_id'],
                                     details['network_type'],
                                     details['physical_network'],
-                                    details['segmentation_id'],
                                     details['admin_state_up'],
                                     details['fixed_ips'],
                                     details['device_owner'],
@@ -577,281 +370,172 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     self.port_dead(port)
         return skipped_devices
 
-    def _write_endpoint_file(self, port_id, mapping_dict):
-        return self._write_file(port_id, mapping_dict, self.epg_mapping_file)
-
-    def _delete_endpoint_file(self, port_id):
-        return self._delete_file(port_id, self.epg_mapping_file)
-
-    def _delete_endpoint_files(self, port_id):
-        # Delete all files for this specific port_id
-        directory = os.path.dirname(self.epg_mapping_file)
-        # Remove all existing EPs mapping for port_id
-        for f in os.listdir(directory):
-            if f.endswith('.' + ofcst.FILE_EXTENSION) and port_id in f:
-                try:
-                    os.remove(os.path.join(directory, f))
-                except OSError as e:
-                    LOG.exception(e)
-
-    def _write_vrf_file(self, vrf_id, mapping_dict):
-        return self._write_file(vrf_id, mapping_dict, self.vrf_mapping_file)
-
-    def _delete_vrf_file(self, vrf_id):
-        return self._delete_file(vrf_id, self.vrf_mapping_file)
-
-    def _write_file(self, port_id, mapping_dict, file_format):
-        filename = file_format % port_id
-        if not os.path.exists(os.path.dirname(filename)):
-            os.makedirs(os.path.dirname(filename))
-        with open(filename, 'w') as f:
-            jsonutils.dump(mapping_dict, f, indent=4)
-
-    def _delete_file(self, port_id, file_format):
-        try:
-            os.remove(file_format % port_id)
-        except OSError as e:
-            LOG.debug(e.message)
-
-    def _fill_ip_mapping_info(self, port_id, gbp_details, ips, mapping):
-        fip_fixed_ips = {}
-        for fip in gbp_details.get('floating_ip', []):
-            fm = {'uuid': fip['id'],
-                  'mapped-ip': fip['fixed_ip_address'],
-                  'floating-ip': fip['floating_ip_address']}
-            if 'nat_epg_tenant' in fip:
-                fm['policy-space-name'] = fip['nat_epg_tenant']
-            if 'nat_epg_name' in fip:
-                nat_epg = (
-                    fip.get('nat_epg_app_profile',
-                            gbp_details['app_profile_name']) + "|" +
-                    fip['nat_epg_name'])
-                fm['endpoint-group-name'] = nat_epg
-                fip_fixed_ips.setdefault(nat_epg, set()).add(
-                    fip['fixed_ip_address'])
-            mapping.setdefault('ip-address-mapping', []).append(fm)
-
-        es_using_int_fip = {4: set(), 6: set()}
-        for ipm in gbp_details.get('ip_mapping', []):
-            if (not ips or not ipm.get('external_segment_name') or
-                not ipm.get('nat_epg_tenant') or
-                not ipm.get('nat_epg_name')):
-                continue
-            es = ipm['external_segment_name']
-            epg = (ipm.get('nat_epg_app_profile',
-                           gbp_details['app_profile_name']) + "|" +
-                   ipm['nat_epg_name'])
-            ipm['nat_epg_name'] = epg
-            next_hop_if, next_hop_mac = self._get_next_hop_info_for_es(ipm)
-            if not next_hop_if or not next_hop_mac:
-                continue
-            fip_alloc_es = {4: self._get_int_fips(4, port_id).get(es, {}),
-                            6: self._get_int_fips(6, port_id).get(es, {})}
-            for ip in ips:
-                if ip in fip_fixed_ips.get(epg, []):
-                    continue
-                ip_ver = netaddr.IPAddress(ip).version
-                fip = (fip_alloc_es[ip_ver].get(ip) or
-                       self._alloc_int_fip(ip_ver, port_id, es, ip))
-                es_using_int_fip[ip_ver].add(es)
-                ip_map = {'uuid': uuidutils.generate_uuid(),
-                          'mapped-ip': ip,
-                          'floating-ip': str(fip),
-                          'policy-space-name': ipm['nat_epg_tenant'],
-                          'endpoint-group-name': epg,
-                          'next-hop-if': next_hop_if,
-                          'next-hop-mac': next_hop_mac}
-                mapping.setdefault('ip-address-mapping', []).append(ip_map)
-        old_es = self._get_es_for_port(port_id)
-        new_es = es_using_int_fip[4] | es_using_int_fip[6]
-        self._associate_port_with_es(port_id, new_es)
-        self._dissociate_port_from_es(port_id, old_es - new_es)
-
-        for ip_ver in es_using_int_fip.keys():
-            fip_alloc = self._get_int_fips(ip_ver, port_id)
-            for es in fip_alloc.keys():
-                if es not in es_using_int_fip[ip_ver]:
-                    self._release_int_fip(ip_ver, port_id, es)
-                else:
-                    for old in (set(fip_alloc[es].keys()) - set(ips)):
-                        self._release_int_fip(ip_ver, port_id, es, old)
-        if 'ip-address-mapping' in mapping:
-            mapping['ip-address-mapping'].sort(
-                key=lambda x: (x['mapped-ip'], x['floating-ip']))
-
-    def _get_int_fips(self, ip_ver, port_id):
-        return self.int_fip_alloc[ip_ver].get(port_id, {})
-
-    def _get_es_for_port(self, port_id):
-        """ Return ESs for which there is a internal FIP allocated """
-        es = set(self._get_int_fips(4, port_id).keys())
-        es.update(self._get_int_fips(6, port_id).keys())
-        return es
-
-    def _alloc_int_fip(self, ip_ver, port_id, es, ip):
-        fip = self.int_fip_pool[ip_ver].__iter__().next()
-        self.int_fip_pool[ip_ver].remove(fip)
-        self.int_fip_alloc[ip_ver].setdefault(
-            port_id, {}).setdefault(es, {})[ip] = fip
-        LOG.debug(_("Allocated internal FIP %(fip)s to port %(port)s, "
-                    "fixed IP %(ip)s in external segment %(es)s"),
-                  {'fip': fip, 'port': port_id, 'es': es, 'ip': ip})
-        return fip
-
-    def _release_int_fip(self, ip_ver, port_id, es=None, ip=None):
-        if es and ip:
-            fips = self.int_fip_alloc[ip_ver].get(port_id, {}).get(
-                es, {}).pop(ip, None)
-            fips = (fips and [fips] or [])
-        elif es:
-            fips = self.int_fip_alloc[ip_ver].get(port_id, {}).pop(
-                es, {}).values()
-        else:
-            fip_alloc = self.int_fip_alloc[ip_ver].pop(port_id, {}).values()
-            fips = []
-            for x in fip_alloc:
-                fips.extend(x.values())
-        for ip in fips:
-            self.int_fip_pool[ip_ver].add(ip)
-        LOG.debug(_("Released internal FIP(s) %(fip)s for port %(port)s, "
-                    "fixed IP %(ip)s, external segment %(es)s"),
-                  {'fip': fips, 'port': port_id,
-                   'es': es or '<all>', 'ip': ip or '<all>'})
-
-    def _get_next_hop_info_for_es(self, ipm):
-        es_name = ipm['external_segment_name']
-        nh = self.ext_seg_next_hop.get(es_name)
-        if not nh or not nh.is_valid():
-            return (None, None)
-        # create ep file for endpoint and snat tables
-        if not nh.next_hop_iface:
-            try:
-                (nh.next_hop_iface, nh.next_hop_mac) = (
-                    self.snat_iptables.setup_snat_for_es(es_name,
-                        nh.ip_start, nh.ip_end, nh.ip_gateway,
-                        nh.ip6_start, nh.ip6_end, nh.ip6_gateway,
-                        nh.next_hop_mac))
-                LOG.info(_("Created SNAT iptables for %(es)s: "
-                           "iface %(if)s, mac %(mac)s"),
-                         {'es': es_name, 'if': nh.next_hop_iface,
-                          'mac': nh.next_hop_mac})
-            except Exception as e:
-                LOG.exception(_("Error while creating SNAT iptables for "
-                                "%(es)s: %(ex)s"),
-                              {'es': es_name, 'ex': e})
-            self._create_host_endpoint_file(ipm, nh)
-        return (nh.next_hop_iface, nh.next_hop_mac)
-
-    def _create_host_endpoint_file(self, ipm, nh):
-        ips = []
-        for s, e in [(nh.ip_start, nh.ip_end), (nh.ip6_start, nh.ip6_end)]:
-            if s:
-                ips.extend(list(netaddr.iter_iprange(s, e or s)))
-        ep_dict = {
-            "attributes": {
-                "vm-name": (
-                    "snat|" +
-                    cfg.CONF.host + "|" +
-                    ipm["nat_epg_tenant"] + "|" +
-                    ipm["nat_epg_name"]
-                )
-            },
-            "policy-space-name": ipm['nat_epg_tenant'],
-            "endpoint-group-name": ipm['nat_epg_name'],
-            "interface-name": nh.next_hop_iface,
-            "ip": [str(x) for x in ips],
-            "mac": nh.next_hop_mac,
-            "uuid": nh.uuid,
-            "promiscuous-mode": True,
-        }
-        self._write_endpoint_file(nh.es_name, ep_dict)
-
-    def _associate_port_with_es(self, port_id, ess):
-        for es in ess:
-            self.es_port_dict.setdefault(es, set()).add(port_id)
-
-    def _dissociate_port_from_es(self, port_id, ess):
-        for es in ess:
-            if es not in self.es_port_dict:
-                continue
-            self.es_port_dict[es].discard(port_id)
-            if self.es_port_dict[es]:
-                continue
-            self.es_port_dict.pop(es)
-            if es in self.ext_seg_next_hop:
-                self.ext_seg_next_hop[es].next_hop_iface = None
-                self.ext_seg_next_hop[es].next_hop_mac = None
-            self._delete_endpoint_file(es)
-            try:
-                self.snat_iptables.cleanup_snat_for_es(es)
-            except Exception as e:
-                LOG.warn(_("Failed to remove SNAT iptables for "
-                           "%(es)s: %(ex)s"),
-                         {'es': es, 'ex': e})
-
-    def _load_es_next_hop_info(self, es_cfg):
-        def parse_range(val):
-            if val and val[0]:
-                ip = [x.strip() for x in val[0].split(',', 1)]
-                return (ip[0] or None,
-                        (len(ip) > 1 and ip[1]) and ip[1] or None)
-            return (None, None)
-
-        def parse_gateway(val):
-            return (val and '/' in val[0]) and val[0] or None
-
-        self.ext_seg_next_hop = {}
-        for es_name, es_info in es_cfg.iteritems():
-            nh = ExtSegNextHopInfo(es_name)
-            nh.from_config = True
-            for key, value in es_info:
-                if key == 'ip_address_range':
-                    (nh.ip_start, nh.ip_end) = parse_range(value)
-                elif key == 'ip_gateway':
-                    nh.ip_gateway = parse_gateway(value)
-                elif key == 'ip6_address_range':
-                    (nh.ip6_start, nh.ip6_end) = parse_range(value)
-                elif key == 'ip6_gateway':
-                    nh.ip6_gateway = parse_gateway(value)
-            self.ext_seg_next_hop[es_name] = nh
-            LOG.debug(_("Found external segment: %s") % nh)
-
-    def _handle_host_snat_ip(self, host_snat_ips):
-        for hsi in host_snat_ips:
-            LOG.debug(_("Auto-allocated host SNAT IP: %s"), hsi)
-            es = hsi.get('external_segment_name')
-            if not es:
-                continue
-            nh = self.ext_seg_next_hop.setdefault(es, ExtSegNextHopInfo(es))
-            if nh.from_config:
-                continue    # ignore auto-allocation if manually set
-            ip = hsi.get('host_snat_ip')
-            gw = ("%s/%s" % (hsi['gateway_ip'], hsi['prefixlen'])
-                if (hsi.get('gateway_ip') and hsi.get('prefixlen')) else None)
-            updated = False
-            if netaddr.valid_ipv4(ip):
-                if ip != nh.ip_start or gw != nh.ip_gateway:
-                    nh.ip_start = ip
-                    nh.ip_gateway = gw
-                    updated = True
-            elif netaddr.valid_ipv6(ip):
-                if ip != nh.ip6_start or gw != nh.ip6_gateway:
-                    nh.ip6_start = ip
-                    nh.ip6_gateway = gw
-                    updated = True
+    def treat_vif_port(self, vif_port, port_id, network_id, network_type,
+                       physical_network, admin_state_up,
+                       fixed_ips, device_owner, ovs_restarted):
+        # When this function is called for a port, the port should have
+        # an OVS ofport configured, as only these ports were considered
+        # for being treated. If that does not happen, it is a potential
+        # error condition of which operators should be aware
+        if not vif_port.ofport:
+            LOG.warn(_LW("VIF port: %s has no ofport configured, "
+                         "and might not be able to transmit"), vif_port.vif_id)
+        if vif_port:
+            if admin_state_up:
+                self.port_bound(vif_port, network_id, network_type,
+                                physical_network, fixed_ips, device_owner,
+                                ovs_restarted)
             else:
-                LOG.info(_("Ignoring invalid auto-allocated SNAT IP %s"), ip)
-            if updated:
-                # Clear the interface so that SNAT iptables will be
-                # re-created as required; leave MAC as is so that it will
-                # be re-used
-                nh.next_hop_iface = None
-                LOG.info(_("Add/update SNAT info: %s"), nh)
+                self.port_dead(vif_port)
+        else:
+            LOG.debug("No VIF port for port %s defined on agent.", port_id)
+
+    def loop_count_and_wait(self, start_time, port_stats):
+        # sleep till end of polling interval
+        elapsed = time.time() - start_time
+        LOG.debug("Agent rpc_loop - iteration:%(iter_num)d "
+                  "completed. Processed ports statistics: "
+                  "%(port_stats)s. Elapsed:%(elapsed).3f",
+                  {'iter_num': self.iter_num,
+                   'port_stats': port_stats,
+                   'elapsed': elapsed})
+        if elapsed < self.polling_interval:
+            # TODO(ivar) use this polling time to apply incoming config
+            # and verify timeouts
+            time.sleep(self.polling_interval - elapsed)
+        else:
+            LOG.debug("Loop iteration exceeded interval "
+                      "(%(polling_interval)s vs. %(elapsed)s)!",
+                      {'polling_interval': self.polling_interval,
+                       'elapsed': elapsed})
+        self.iter_num = self.iter_num + 1
+
+    def process_deleted_ports(self, port_info):
+        # don't try to process removed ports as deleted ports since
+        # they are already gone
+        if 'removed' in port_info:
+            self.deleted_ports -= port_info['removed']
+        deleted_ports = list(self.deleted_ports)
+        while self.deleted_ports:
+            port_id = self.deleted_ports.pop()
+            self.bridge_manager.process_deleted_port(port_id)
+            self.port_unbound(port_id)
+        # Flush firewall rules
+        self.sg_agent.remove_devices_filter(deleted_ports)
+
+    def rpc_loop(self, polling_manager):
+        sync = True
+        ports = set()
+        updated_ports_copy = set()
+        updated_vrf_copy = set()
+        ovs_restarted = False
+        while self.run_daemon_loop:
+            start = time.time()
+            port_stats = {'regular': {'added': 0,
+                                      'updated': 0,
+                                      'removed': 0},
+                          'ancillary': {'added': 0,
+                                        'removed': 0}}
+            LOG.debug("Agent rpc_loop - iteration:%d started",
+                      self.iter_num)
+            if sync:
+                LOG.info(_LI("Agent out of sync with plugin!"))
+                ports.clear()
+                sync = False
+                polling_manager.force_polling()
+            ovs_status = self.bridge_manager.check_ovs_status()
+            if ovs_status == constants.OVS_RESTARTED:
+                self.bridge_manager.setup_integration_br()
+            elif ovs_status == constants.OVS_DEAD:
+                # Agent doesn't apply any operations when ovs is dead, to
+                # prevent unexpected failure or crash. Sleep and continue
+                # loop in which ovs status will be checked periodically.
+                self.loop_count_and_wait(start, port_stats)
+                continue
+
+            ovs_restarted |= (ovs_status == constants.OVS_RESTARTED)
+            if self._agent_has_updates(polling_manager) or ovs_restarted:
+                try:
+                    LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
+                              "starting polling. Elapsed:%(elapsed).3f",
+                              {'iter_num': self.iter_num,
+                               'elapsed': time.time() - start})
+                    # Save updated ports dict to perform rollback in
+                    # case resync would be needed, and then clear
+                    # self.updated_ports. As the greenthread should not yield
+                    # between these two statements, this will be thread-safe
+                    updated_ports_copy = self.updated_ports
+                    self.updated_ports = set()
+                    reg_ports = (set() if ovs_restarted else ports)
+                    port_info = self.bridge_manager.scan_ports(
+                        reg_ports, updated_ports_copy)
+
+                    updated_vrf_copy = self.updated_vrf
+                    self.updated_vrf = set()
+                    vrf_info = updated_vrf_copy & set(
+                        self.ep_manager.vrf_dict.keys())
+                    port_info['vrf_updated'] = vrf_info
+
+                    self.process_deleted_ports(port_info)
+                    LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
+                              "port information retrieved. "
+                              "Elapsed:%(elapsed).3f",
+                              {'iter_num': self.iter_num,
+                               'elapsed': time.time() - start})
+                    # Secure and wire/unwire VIFs and update their status
+                    # on Neutron server
+                    if (self._info_has_changes(port_info) or
+                        self.sg_agent.firewall_refresh_needed() or
+                        ovs_restarted):
+                        LOG.debug("Starting to process devices in:%s",
+                                  port_info)
+                        # If treat devices fails - must resync with plugin
+                        sync = self.process_network_ports(port_info,
+                                                          ovs_restarted)
+                        LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
+                                  "ports processed. Elapsed:%(elapsed).3f",
+                                  {'iter_num': self.iter_num,
+                                   'elapsed': time.time() - start})
+                        port_stats['regular']['added'] = (
+                            len(port_info.get('added', [])))
+                        port_stats['regular']['updated'] = (
+                            len(port_info.get('updated', [])))
+                        port_stats['regular']['removed'] = (
+                            len(port_info.get('removed', [])))
+                    ports = port_info['current']
+                    polling_manager.polling_completed()
+                    # Keep this flag in the last line of "try" block,
+                    # so we can sure that no other Exception occurred.
+                    if not sync:
+                        ovs_restarted = False
+                except Exception:
+                    LOG.exception(_LE("Error while processing VIF ports"))
+                    # Put the ports back in self.updated_port
+                    self.updated_ports |= updated_ports_copy
+                    self.updated_vrf |= updated_vrf_copy
+                    sync = True
+
+            self.loop_count_and_wait(start, port_stats)
+
+    def daemon_loop(self):
+        with polling.get_polling_manager(
+                self.minimize_polling,
+                self.ovsdb_monitor_respawn_interval) as pm:
+            self.rpc_loop(polling_manager=pm)
+
+    def _handle_sigterm(self, signum, frame):
+        LOG.debug("Agent caught SIGTERM, quitting daemon loop.")
+        self.run_daemon_loop = False
+        if self.quitting_rpc_timeout:
+            self.set_rpc_timeout(self.quitting_rpc_timeout)
+
+    def set_rpc_timeout(self, timeout):
+        for rpc_api in (self.plugin_rpc, self.sg_plugin_rpc, self.state_rpc):
+            rpc_api.client.timeout = timeout
 
 
 def create_agent_config_map(conf):
     agent_config = ovs.create_agent_config_map(conf)
-    agent_config['hybrid_mode'] = conf.OPFLEX.hybrid_mode
     agent_config['epg_mapping_dir'] = conf.OPFLEX.epg_mapping_dir
     agent_config['opflex_networks'] = conf.OPFLEX.opflex_networks
     agent_config['internal_floating_ip_pool'] = (
@@ -892,14 +576,9 @@ def main():
         LOG.error(_('%s Agent terminated!'), e)
         sys.exit(1)
 
-    is_xen_compute_host = 'rootwrap-xen-dom0' in cfg.CONF.AGENT.root_helper
-    if is_xen_compute_host:
-        # Force ip_lib to always use the root helper to ensure that ip
-        # commands target xen dom0 rather than domU.
-        cfg.CONF.set_default('ip_lib_force_root', True)
     try:
-        agent = GBPOvsAgent(root_helper=cfg.CONF.AGENT.root_helper,
-                            **agent_config)
+        agent = GBPOpflexAgent(root_helper=cfg.CONF.AGENT.root_helper,
+                               **agent_config)
     except RuntimeError as e:
         LOG.error(_("%s Agent terminated!"), e)
         sys.exit(1)
