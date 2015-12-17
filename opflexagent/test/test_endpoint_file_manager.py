@@ -47,7 +47,6 @@ class TestEndpointFileManager(base.BaseTestCase):
         self.manager._release_int_fip = mock.Mock()
         self.addCleanup(self._purge_endpoint_dir)
 
-
     def _check_call_list(self, expected, observed, check_all=True):
         for call in expected:
             self.assertTrue(call in observed,
@@ -296,7 +295,6 @@ class TestEndpointFileManager(base.BaseTestCase):
         self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
             'EXT-1', '200.0.0.11', None, '200.0.0.2/8', None, None,
             None, 'foo-mac')
-
 
     def test_port_multiple_ep_files(self):
         # Prepare AAP list
