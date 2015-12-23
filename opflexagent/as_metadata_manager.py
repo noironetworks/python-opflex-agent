@@ -485,14 +485,14 @@ class StateWatcher(FileWatcher):
         ipaddr = alloc["next-hop-ip"]
         proxystr = "\n".join([
             "[program:opflex-ns-proxy-%s]" % duuid,
-            "command=%s ip netns exec of-svc "
+            "command=ip netns exec of-svc "
             "/usr/bin/opflex-ns-proxy "
             "--metadata_proxy_socket=/var/lib/neutron/metadata_proxy "
             "--state_path=/var/lib/neutron "
             "--pid_file=/var/lib/neutron/external/pids/%s.pid "
             "--domain_id=%s --metadata_host %s --metadata_port=80 "
             "--log-dir=/var/log/neutron --log-file=opflex-ns-proxy-%s.log" % (
-                self.mgr.root_helper, duuid, duuid, ipaddr, duuid[:8]),
+                duuid, duuid, ipaddr, duuid[:8]),
             "exitcodes=0,2",
             "startsecs=10",
             "startretries=3",
@@ -575,22 +575,17 @@ class AsMetadataManager(object):
         rm_files(MD_DIR, '.conf')
 
     def start_supervisor(self):
-        self.sh("supervisord -c %s" % self.md_filename,
-                as_root=False)
+        self.sh("supervisord -c %s" % self.md_filename)
 
     def update_supervisor(self):
-        self.sh("supervisorctl -c %s reread" % self.md_filename,
-                as_root=False)
-        self.sh("supervisorctl -c %s update" % self.md_filename,
-                as_root=False)
+        self.sh("supervisorctl -c %s reread" % self.md_filename)
+        self.sh("supervisorctl -c %s update" % self.md_filename)
 
     def reload_supervisor(self):
-        self.sh("supervisorctl -c %s reload" % self.md_filename,
-                as_root=False)
+        self.sh("supervisorctl -c %s reload" % self.md_filename)
 
     def stop_supervisor(self):
-        self.sh("supervisorctl -c %s shutdown" % self.md_filename,
-                as_root=False)
+        self.sh("supervisorctl -c %s shutdown" % self.md_filename)
 
     def add_default_route(self, nexthop):
         self.sh("ip netns exec %s ip route add default via %s" %
@@ -692,6 +687,7 @@ class AsMetadataManager(object):
             "stopwaitsecs=10",
             "stdout_logfile=NONE",
             "stderr_logfile=NONE",
+            "user=neutron",
             "",
             "[program:opflex-ep-watcher]",
             "command=/usr/bin/opflex-ep-watcher " +
@@ -705,6 +701,7 @@ class AsMetadataManager(object):
             "stopwaitsecs=10",
             "stdout_logfile=NONE",
             "stderr_logfile=NONE",
+            "user=neutron",
             "",
             "[program:opflex-state-watcher]",
             "command=/usr/bin/opflex-state-watcher " +
@@ -718,6 +715,7 @@ class AsMetadataManager(object):
             "stopwaitsecs=10",
             "stdout_logfile=NONE",
             "stderr_logfile=NONE",
+            "user=neutron",
             "",
             "[include]",
             "files = %s/*.proxy" % MD_DIR,
