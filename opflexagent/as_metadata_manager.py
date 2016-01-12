@@ -21,6 +21,7 @@ import Queue
 import signal
 import subprocess
 import sys
+import time
 import uuid
 
 from neutron.common import config as common_config
@@ -64,6 +65,7 @@ SVC_NS = "of-svc"
 SVC_NS_PORT = "of-svc-nsport"
 SVC_OVS_PORT = "of-svc-ovsport"
 PID_DIR = "/var/lib/neutron/external/pids"
+PID_FILE_NAME_FORMAT = PID_DIR + "/%s.pid"
 PROXY_FILE_EXTENSION = "proxy"
 PROXY_FILE_NAME_FORMAT = "%s." + PROXY_FILE_EXTENSION
 STATE_ANYCAST_SERVICES = "anycast_services"
@@ -476,6 +478,8 @@ class StateWatcher(FileWatcher):
         try:
             with open(proxyfilename, "w") as f:
                 f.write(proxystr)
+            pidfile = PID_FILE_NAME_FORMAT % asvc["uuid"]
+            self.mgr.sh("rm -f %s" % pidfile)
         except Exception as e:
             LOG.warn("EPwatcher: Exception in writing proxy file: %s" %
                      str(e))
@@ -494,6 +498,7 @@ class StateWatcher(FileWatcher):
             "--log-dir=/var/log/neutron --log-file=opflex-ns-proxy-%s.log" % (
                 duuid, duuid, ipaddr, duuid[:8]),
             "exitcodes=0,2",
+            "stopasgroup=true",
             "startsecs=10",
             "startretries=3",
             "stopwaitsecs=10",
@@ -575,6 +580,7 @@ class AsMetadataManager(object):
         rm_files(MD_DIR, '.conf')
 
     def start_supervisor(self):
+        self.stop_supervisor()
         self.sh("supervisord -c %s" % self.md_filename)
 
     def update_supervisor(self):
@@ -586,6 +592,7 @@ class AsMetadataManager(object):
 
     def stop_supervisor(self):
         self.sh("supervisorctl -c %s shutdown" % self.md_filename)
+        time.sleep(30)
 
     def add_default_route(self, nexthop):
         self.sh("ip netns exec %s ip route add default via %s" %
@@ -608,6 +615,7 @@ class AsMetadataManager(object):
     def init_host(self, integ_br):
         # Create required directories
         self.sh("mkdir -p %s" % PID_DIR)
+        self.sh("rm -f %s/*.pid" % PID_DIR)
         self.sh("chown %s %s" % (MD_DIR_OWNER, PID_DIR))
         self.sh("chown %s %s/.." % (MD_DIR_OWNER, PID_DIR))
         self.sh("mkdir -p %s" % MD_DIR)
@@ -682,6 +690,7 @@ class AsMetadataManager(object):
                  '/etc/neutron/conf.d/neutron-metadata-agent') +
             "--log-file /var/log/neutron/metadata-agent.log",
             "exitcodes=0,2",
+            "stopasgroup=true",
             "startsecs=10",
             "startretries=3",
             "stopwaitsecs=10",
@@ -696,6 +705,7 @@ class AsMetadataManager(object):
                  '/etc/neutron/plugins/ml2/ml2_conf_cisco.ini') +
             "--log-file /var/log/neutron/opflex-ep-watcher.log",
             "exitcodes=0,2",
+            "stopasgroup=true",
             "startsecs=10",
             "startretries=3",
             "stopwaitsecs=10",
@@ -710,6 +720,7 @@ class AsMetadataManager(object):
                  '/etc/neutron/plugins/ml2/ml2_conf_cisco.ini') +
             "--log-file /var/log/neutron/opflex-state-watcher.log",
             "exitcodes=0,2",
+            "stopasgroup=true",
             "startsecs=10",
             "startretries=3",
             "stopwaitsecs=10",

@@ -16,5 +16,6 @@ ethtool:       CommandFilter, ethtool, root
 mkdir:         CommandFilter, mkdir, root
 chmod:         CommandFilter, chmod, root
 chown:         CommandFilter, chown, root
+rm:            CommandFilter, rm, root
 ovs-vsctl:     CommandFilter, ovs-vsctl, root
 ovs-ofctl:     CommandFilter, ovs-ofctl, root
