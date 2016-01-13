@@ -89,9 +89,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         if ofcst.METADATA_DEFAULT_IP in self.int_fip_pool[4]:
             self.int_fip_pool[4].remove(ofcst.METADATA_DEFAULT_IP)
 
-        self._setup_ep_directory()
         self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
             bridge_manager.int_br)
+        self._setup_ep_directory()
         self.host = host
         return self
 
