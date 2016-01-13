@@ -450,7 +450,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin):
                 ports.clear()
                 sync = False
                 polling_manager.force_polling()
-            ovs_status = self.bridge_manager.check_ovs_status()
+            ovs_status = self.bridge_manager.check_bridge_status()
             if ovs_status == constants.OVS_RESTARTED:
                 self.bridge_manager.setup_integration_br()
             elif ovs_status == constants.OVS_DEAD:
