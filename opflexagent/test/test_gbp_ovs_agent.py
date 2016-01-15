@@ -184,6 +184,11 @@ class TestGbpOvsAgent(base.BaseTestCase):
     def _port_bound_args(self, net_type='net_type'):
         port = mock.Mock()
         port.vif_id = uuidutils.generate_uuid()
+        port_tags = {'int-br-eth2': [],
+                     'patch-tun': [],
+                     'qr-76d9e6b6-21': 1,
+                     'tapce5318ff-78': 1,
+                     'tape1400310-e6': 1}
         return {'port': port,
                 'net_uuid': 'net_id',
                 'network_type': net_type,
@@ -194,7 +199,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
                               {'subnet_id': 'id2',
                                'ip_address': '192.168.1.2'}],
                 'device_owner': 'compute:',
-                'ovs_restarted': True}
+                'ovs_restarted': True,
+                'port_tags': port_tags}
 
     def test_port_bound(self):
         self.agent.int_br = mock.Mock()
