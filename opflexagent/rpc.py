@@ -32,12 +32,18 @@ class AgentNotifierApi(object):
         self.client = n_rpc.get_client(target)
         self.topic_port_update = topics.get_topic_name(topic, topics.PORT,
                                                        topics.UPDATE)
+        self.topic_port_delete = topics.get_topic_name(topic, topics.PORT,
+                                                       topics.DELETE)
         self.topic_subnet_update = topics.get_topic_name(topic, topics.SUBNET,
                                                          topics.UPDATE)
 
     def port_update(self, context, port):
         cctxt = self.client.prepare(fanout=True, topic=self.topic_port_update)
         cctxt.cast(context, 'port_update', port=port)
+
+    def port_delete(self, context, port):
+        cctxt = self.client.prepare(fanout=True, topic=self.topic_port_delete)
+        cctxt.cast(context, 'port_delete', port=port)
 
     def subnet_update(self, context, subnet):
         cctxt = self.client.prepare(fanout=True,
@@ -130,3 +136,24 @@ class GBPServerRpcCallback(object):
 
     def ip_address_owner_update(self, context, **kwargs):
         self.gbp_driver.ip_address_owner_update(context, **kwargs)
+
+
+class GbpNeutronAgentRpcCallbackMixin(object):
+
+    def port_update(self, context, **kwargs):
+        port = kwargs.get('port')
+        self.updated_ports.add(port['id'])
+        LOG.debug("port_update message processed for port %s", port['id'])
+
+    def port_delete(self, context, **kwargs):
+        port_id = kwargs.get('port_id')
+        self.deleted_ports.add(port_id)
+        LOG.debug("port_delete message processed for port %s", port_id)
+
+    def network_delete(self, context, **kwargs):
+        pass
+
+    def subnet_update(self, context, subnet):
+        self.updated_vrf.add(subnet['tenant_id'])
+        LOG.debug("subnet_update message processed for subnet %s",
+                  subnet['id'])

@@ -32,6 +32,7 @@ from neutron.plugins.openvswitch.agent import ovs_neutron_agent as ovs
 from neutron.plugins.openvswitch.common import constants
 from oslo_config import cfg
 from oslo_log import log as logging
+import oslo_messaging
 
 from opflexagent import as_metadata_manager
 from opflexagent import config as ofcfg  # noqa
@@ -49,7 +50,8 @@ class GBPOvsPluginApi(rpc.GBPServerRpcApiMixin):
     pass
 
 
-class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin):
+class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
+                     rpc.GbpNeutronAgentRpcCallbackMixin):
     """Group Based Policy Opflex Agent.
 
     The GBP opflex agent assumes a pre-existing bridge (integration bridge is
@@ -59,6 +61,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin):
 
     The GBP Opflex Agent
     """
+
+    target = oslo_messaging.Target(version='1.2')
 
     def __init__(self, root_helper=None, **kwargs):
         self.opflex_networks = kwargs['opflex_networks']
@@ -146,19 +150,11 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin):
         self.topic = topics.AGENT
         self.endpoints = [self]
         consumers = [[topics.PORT, topics.UPDATE],
-                     [topics.NETWORK, topics.DELETE],
-                     [constants.TUNNEL, topics.UPDATE],
-                     [constants.TUNNEL, topics.DELETE],
+                     [topics.PORT, topics.DELETE],
                      [topics.SECURITY_GROUP, topics.UPDATE],
-                     [topics.DVR, topics.UPDATE],
                      [topics.SUBNET, topics.UPDATE]]
         self.connection = agent_rpc.create_consumers(
             self.endpoints, self.topic, consumers, start_listening=False)
-
-    def subnet_update(self, context, subnet):
-        self.updated_vrf.add(subnet['tenant_id'])
-        LOG.debug("subnet_update message processed for subnet %s",
-                  subnet['id'])
 
     def _agent_has_updates(self, polling_manager):
         return (polling_manager.is_polling_required or
