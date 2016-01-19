@@ -59,8 +59,7 @@ class OvsManager(bridge_manager_base.BridgeManagerBase):
         cur_ports = self.int_br.get_vif_port_set()
         self.int_br_device_count = len(cur_ports)
         port_info = {'current': cur_ports}
-        if updated_ports is None:
-            updated_ports = set()
+        updated_ports = updated_ports or set()
         if updated_ports:
             # Some updated ports might have been removed in the
             # meanwhile, and therefore should not be processed.
