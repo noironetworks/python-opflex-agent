@@ -150,9 +150,6 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         del kwargs['dhcp_domain']
 
         self.notify_worker = opflex_notify.worker()
-        self.metadata_mgr = as_metadata_manager.AsMetadataManager(
-            LOG, self.root_helper)
-
         super(GBPOvsAgent, self).__init__(**kwargs)
         self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
         self.setup_pt_directory()
@@ -462,10 +459,6 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         # Create one file per MAC address.
         self._write_endpoint_file(port.vif_id + '_' + mac, mapping_dict)
         self.vrf_info_to_file(mapping, vif_id=port.vif_id)
-        if mapping.get('enable_metadata_optimization', False):
-            self.metadata_mgr.ensure_initialized()
-        else:
-            self.metadata_mgr.ensure_terminated()
 
     def vrf_info_to_file(self, mapping, vif_id=None):
         if 'vrf_subnets' in mapping:
@@ -949,6 +942,11 @@ def main():
     signal.signal(signal.SIGTERM, agent._handle_sigterm)
 
     # Start everything.
+    LOG.info(_("Initializing metadata service ... "))
+    helper = cfg.CONF.AGENT.root_helper
+    metadata_mgr = as_metadata_manager.AsMetadataManager(LOG, helper)
+    metadata_mgr.ensure_initialized()
+
     LOG.info(_("Agent initialized successfully, now running... "))
     agent.daemon_loop()
 
