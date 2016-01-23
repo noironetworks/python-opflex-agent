@@ -403,6 +403,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             return
         ips_ext = mapping.get('extra_ips') or []
         mac = mapping.get('mac_address') or port.vif_mac
+        LOG.debug("Generating mapping for %s", port.vif_id + '_' + mac)
         mapping_dict = {
             "policy-space-name": mapping['ptg_tenant'],
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
@@ -452,7 +453,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             mapping_dict['attestation'] = mapping['attestation']
 
         self._handle_host_snat_ip(mapping.get('host_snat_ips', []))
-        self._fill_ip_mapping_info(port.vif_id, mapping, ips + ips_ext,
+        self._fill_ip_mapping_info(port.vif_id, mac, mapping, ips + ips_ext,
                                    mapping_dict)
         # Create one file per MAC address.
         self._write_endpoint_file(port.vif_id + '_' + mac, mapping_dict)
@@ -511,8 +512,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         LOG.debug('Cleaning mapping for vif id %s', vif_id)
         self._delete_endpoint_files(vif_id)
         if cleanup_vrf:
-            es = self._get_es_for_port(vif_id)
-            self._dissociate_port_from_es(vif_id, es)
+            self._dissociate_port_from_es(vif_id)
             self._release_int_fip(4, vif_id)
             self._release_int_fip(6, vif_id)
         vrf_id = self.vif_to_vrf.get(vif_id)
@@ -647,7 +647,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         except OSError as e:
             LOG.debug(e.message)
 
-    def _fill_ip_mapping_info(self, port_id, gbp_details, ips, mapping):
+    def _fill_ip_mapping_info(self, port_id, port_mac, gbp_details,
+                              ips, mapping):
         fip_fixed_ips = {}
         for fip in gbp_details.get('floating_ip', []):
             fm = {'uuid': fip['id'],
@@ -679,14 +680,15 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             next_hop_if, next_hop_mac = self._get_next_hop_info_for_es(ipm)
             if not next_hop_if or not next_hop_mac:
                 continue
-            fip_alloc_es = {4: self._get_int_fips(4, port_id).get(es, {}),
-                            6: self._get_int_fips(6, port_id).get(es, {})}
+            fip_alloc_es = {
+                4: self._get_int_fips(4, port_id, port_mac).get(es, {}),
+                6: self._get_int_fips(6, port_id, port_mac).get(es, {})}
             for ip in ips:
                 if ip in fip_fixed_ips.get(epg, []):
                     continue
                 ip_ver = netaddr.IPAddress(ip).version
                 fip = (fip_alloc_es[ip_ver].get(ip) or
-                       self._alloc_int_fip(ip_ver, port_id, es, ip))
+                       self._alloc_int_fip(ip_ver, port_id, port_mac, es, ip))
                 es_using_int_fip[ip_ver].add(es)
                 ip_map = {'uuid': uuidutils.generate_uuid(),
                           'mapped-ip': ip,
@@ -696,61 +698,76 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                           'next-hop-if': next_hop_if,
                           'next-hop-mac': next_hop_mac}
                 mapping.setdefault('ip-address-mapping', []).append(ip_map)
-        old_es = self._get_es_for_port(port_id)
+        old_es = self._get_es_for_port(port_id, port_mac)
         new_es = es_using_int_fip[4] | es_using_int_fip[6]
-        self._associate_port_with_es(port_id, new_es)
-        self._dissociate_port_from_es(port_id, old_es - new_es)
+        self._associate_port_with_es(port_id, port_mac, new_es)
+        self._dissociate_port_from_es(port_id, port_mac, old_es - new_es)
 
         for ip_ver in es_using_int_fip.keys():
-            fip_alloc = self._get_int_fips(ip_ver, port_id)
+            fip_alloc = self._get_int_fips(ip_ver, port_id, port_mac)
             for es in fip_alloc.keys():
                 if es not in es_using_int_fip[ip_ver]:
-                    self._release_int_fip(ip_ver, port_id, es)
+                    self._release_int_fip(ip_ver, port_id, port_mac, es)
                 else:
                     for old in (set(fip_alloc[es].keys()) - set(ips)):
-                        self._release_int_fip(ip_ver, port_id, es, old)
+                        self._release_int_fip(ip_ver, port_id, port_mac, es,
+                                              old)
         if 'ip-address-mapping' in mapping:
             mapping['ip-address-mapping'].sort(
                 key=lambda x: (x['mapped-ip'], x['floating-ip']))
 
-    def _get_int_fips(self, ip_ver, port_id):
-        return self.int_fip_alloc[ip_ver].get(port_id, {})
+    def _get_int_fips(self, ip_ver, port_id, port_mac):
+        return self.int_fip_alloc[ip_ver].get((port_id, port_mac), {})
 
-    def _get_es_for_port(self, port_id):
+    def _get_es_for_port(self, port_id, port_mac):
         """ Return ESs for which there is a internal FIP allocated """
-        es = set(self._get_int_fips(4, port_id).keys())
-        es.update(self._get_int_fips(6, port_id).keys())
+        es = set(self._get_int_fips(4, port_id, port_mac).keys())
+        es.update(self._get_int_fips(6, port_id, port_mac).keys())
         return es
 
-    def _alloc_int_fip(self, ip_ver, port_id, es, ip):
+    def _alloc_int_fip(self, ip_ver, port_id, port_mac, es, ip):
         fip = self.int_fip_pool[ip_ver].__iter__().next()
         self.int_fip_pool[ip_ver].remove(fip)
         self.int_fip_alloc[ip_ver].setdefault(
-            port_id, {}).setdefault(es, {})[ip] = fip
-        LOG.debug(_("Allocated internal FIP %(fip)s to port %(port)s, "
-                    "fixed IP %(ip)s in external segment %(es)s"),
-                  {'fip': fip, 'port': port_id, 'es': es, 'ip': ip})
+            (port_id, port_mac), {}).setdefault(es, {})[ip] = fip
+        LOG.debug(_("Allocated internal v%(version)d FIP %(fip)s to "
+                    "port %(port)s, %(mac)s, fixed IP %(ip)s "
+                    "in external segment %(es)s"),
+                  {'fip': fip, 'port': port_id, 'mac': port_mac,
+                   'es': es, 'ip': ip, 'version': ip_ver})
         return fip
 
-    def _release_int_fip(self, ip_ver, port_id, es=None, ip=None):
-        if es and ip:
-            fips = self.int_fip_alloc[ip_ver].get(port_id, {}).get(
-                es, {}).pop(ip, None)
+    def _release_int_fip(self, ip_ver, port_id, port_mac=None, es=None,
+                         ip=None):
+        if ip and es and port_mac:
+            fips = self.int_fip_alloc[ip_ver].get(
+                (port_id, port_mac), {}).get(es, {}).pop(ip, None)
             fips = (fips and [fips] or [])
-        elif es:
-            fips = self.int_fip_alloc[ip_ver].get(port_id, {}).pop(
-                es, {}).values()
+        elif es and port_mac:
+            fips = self.int_fip_alloc[ip_ver].get(
+                (port_id, port_mac), {}).pop(es, {}).values()
         else:
-            fip_alloc = self.int_fip_alloc[ip_ver].pop(port_id, {}).values()
+            if port_mac:
+                fip_map_list = self.int_fip_alloc[ip_ver].pop(
+                    (port_id, port_mac), {}).values()
+            else:
+                fip_map_list = []
+                for id_mac in self.int_fip_alloc[ip_ver].keys():
+                    if id_mac[0] == port_id:
+                        fip_map_list.extend(
+                            self.int_fip_alloc[ip_ver].pop(
+                                id_mac, {}).values())
             fips = []
-            for x in fip_alloc:
+            for x in fip_map_list:
                 fips.extend(x.values())
-        for ip in fips:
-            self.int_fip_pool[ip_ver].add(ip)
-        LOG.debug(_("Released internal FIP(s) %(fip)s for port %(port)s, "
+        for float_ip in fips:
+            self.int_fip_pool[ip_ver].add(float_ip)
+        LOG.debug(_("Released internal v%(version)d FIP(s) %(fip)s "
+                    "for port %(port)s, mac %(mac)s, "
                     "fixed IP %(ip)s, external segment %(es)s"),
-                  {'fip': fips, 'port': port_id,
-                   'es': es or '<all>', 'ip': ip or '<all>'})
+                  {'fip': fips, 'port': port_id, 'mac': port_mac or '<all>',
+                   'es': es or '<all>', 'ip': ip or '<all>',
+                   'version': ip_ver})
 
     def _get_next_hop_info_for_es(self, ipm):
         es_name = ipm['external_segment_name']
@@ -800,15 +817,24 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         }
         self._write_endpoint_file(nh.es_name, ep_dict)
 
-    def _associate_port_with_es(self, port_id, ess):
+    def _associate_port_with_es(self, port_id, port_mac, ess):
         for es in ess:
-            self.es_port_dict.setdefault(es, set()).add(port_id)
+            self.es_port_dict.setdefault(es, set()).add((port_id, port_mac))
 
-    def _dissociate_port_from_es(self, port_id, ess):
-        for es in ess:
+    def _dissociate_port_from_es(self, port_id, port_mac=None, ess=None):
+        if ess is None:
+            es_list = self.es_port_dict.keys()
+        else:
+            es_list = ess
+        for es in es_list:
             if es not in self.es_port_dict:
                 continue
-            self.es_port_dict[es].discard(port_id)
+            if port_mac:
+                self.es_port_dict[es].discard((port_id, port_mac))
+            else:
+                entries = set([x for x in self.es_port_dict[es]
+                               if x[0] == port_id])
+                self.es_port_dict[es] -= entries
             if self.es_port_dict[es]:
                 continue
             self.es_port_dict.pop(es)
@@ -818,6 +844,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             self._delete_endpoint_file(es)
             try:
                 self.snat_iptables.cleanup_snat_for_es(es)
+                LOG.debug("Removed SNAT iptables for %s", es)
             except Exception as e:
                 LOG.warn(_("Failed to remove SNAT iptables for "
                            "%(es)s: %(ex)s"),
