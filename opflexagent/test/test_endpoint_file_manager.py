@@ -234,7 +234,7 @@ class TestEndpointFileManager(base.BaseTestCase):
         self.manager.declare_endpoint(port, mapping)
         self.manager._write_endpoint_file.assert_called_with(ep_name, ep_file)
         self.manager._release_int_fip.assert_called_with(
-            4, port_id, 'EXT-1', '192.169.8.254')
+            4, port_id, mapping['mac_address'], 'EXT-1', '192.169.8.254')
 
         # Remove SNAT external segment
         self.manager._write_vrf_file.reset_mock()
@@ -245,7 +245,8 @@ class TestEndpointFileManager(base.BaseTestCase):
             for x in ep_file["ip-address-mapping"] if not x.get('next-hop-if')]
         self.manager.declare_endpoint(port, mapping)
         self.manager._write_endpoint_file.assert_called_with(ep_name, ep_file)
-        self.manager._release_int_fip.assert_called_with(4, port_id, 'EXT-1')
+        self.manager._release_int_fip.assert_called_with(
+            4, port_id, mapping['mac_address'], 'EXT-1')
 
         self.manager._write_vrf_file.reset_mock()
         self.manager.snat_iptables.setup_snat_for_es.reset_mock()
