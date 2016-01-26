@@ -13,8 +13,10 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from neutron.plugins.ml2 import config
+from neutron.common import config as nconfig  # noqa
+from neutron.plugins.ml2 import config  # noqa
 from neutron.tests.unit import testlib_api
+from oslo_config import cfg
 
 from opflexagent import config as ofconf  # noqa
 from opflexagent import type_opflex
@@ -23,12 +25,12 @@ from opflexagent import type_opflex
 OPFLEX_NETWORKS = ['opflex_net1', 'opflex_net2']
 
 
-class FlatTypeTest(testlib_api.SqlTestCase):
+class OpflexTypeTest(testlib_api.SqlTestCase):
 
     def setUp(self):
-        super(FlatTypeTest, self).setUp()
-        config.cfg.CONF.set_override('opflex_networks', OPFLEX_NETWORKS,
-                                     group='OPFLEX')
+        super(OpflexTypeTest, self).setUp()
+        cfg.CONF.set_override('opflex_networks', OPFLEX_NETWORKS,
+                              group='OPFLEX')
         self.driver = type_opflex.OpflexTypeDriver()
 
     def test_physnet_mtus_initiated(self):
