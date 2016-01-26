@@ -33,7 +33,6 @@ from neutron.plugins.ml2.drivers.openvswitch.agent import (
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from oslo_config import cfg
 from oslo_log import log as logging
-import oslo_messaging
 from oslo_service import loopingcall
 
 from opflexagent import as_metadata_manager
@@ -43,13 +42,10 @@ from opflexagent import opflex_notify
 from opflexagent import rpc
 from opflexagent.utils.bridge_managers import ovs_manager
 from opflexagent.utils.ep_managers import endpoint_file_manager as ep_manager
+from opflexagent.utils.port_managers import async_port_manager as port_manager
 
 eventlet_utils.monkey_patch()
 LOG = logging.getLogger(__name__)
-
-
-class GBPOvsPluginApi(rpc.GBPServerRpcApiMixin):
-    pass
 
 
 # TODO(bose) Remove when we switch to using RPC method
@@ -59,7 +55,7 @@ class DeviceListRetrievalError(exceptions.NeutronException):
 
 
 class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
-                     rpc.GbpNeutronAgentRpcCallbackMixin):
+                     rpc.OpenstackRpcMixin):
     """Group Based Policy Opflex Agent.
 
     The GBP opflex agent assumes a pre-existing bridge (integration bridge is
@@ -69,8 +65,6 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
     The GBP Opflex Agent
     """
-
-    target = oslo_messaging.Target(version='1.2')
 
     def __init__(self, root_helper=None, **kwargs):
         self.opflex_networks = kwargs['opflex_networks']
@@ -108,6 +102,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.setup_rpc()
         self.local_ip = ovs_conf.local_ip
         self.polling_interval = agent_conf.polling_interval
+        self.config_apply_interval = kwargs['config_apply_interval']
         self.minimize_polling = agent_conf.minimize_polling
         self.ovsdb_monitor_respawn_interval = (
             agent_conf.ovsdb_monitor_respawn_interval or
@@ -123,9 +118,11 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
         self.quitting_rpc_timeout = agent_conf.quitting_rpc_timeout
         # Initialize the Endpoint Manager.
-        # TODO(ivar): make this component pluggable.
+        # TODO(ivar): make these components pluggable.
         self.ep_manager = ep_manager.EndpointFileManager().initialize(
             self.host, self.bridge_manager, kwargs)
+        self.port_manager = port_manager.AsyncPortManager().initialize(
+            self.host, self, kwargs)
 
     def setup_report(self):
         report_interval = cfg.CONF.AGENT.report_interval
@@ -154,7 +151,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.agent_id = 'opflex-agent-%s' % cfg.CONF.host
         self.context = context.get_admin_context_without_session()
         # Set GBP rpc API
-        self.of_rpc = GBPOvsPluginApi(rpc.TOPIC_OPFLEX)
+        self.of_rpc = rpc.GBPServerRpcApi(rpc.TOPIC_OPFLEX)
         self.plugin_rpc = ovs.OVSPluginApi(topics.PLUGIN)
         self.sg_plugin_rpc = sg_rpc.SecurityGroupServerRpcApi(topics.PLUGIN)
         self.sg_agent = sg_rpc.SecurityGroupAgentRpc(
@@ -166,7 +163,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         consumers = [[topics.PORT, topics.UPDATE],
                      [topics.PORT, topics.DELETE],
                      [topics.SECURITY_GROUP, topics.UPDATE],
-                     [topics.SUBNET, topics.UPDATE]]
+                     [topics.SUBNET, topics.UPDATE],
+                     [rpc.TOPIC_OPFLEX, rpc.VRF, topics.UPDATE]]
         self.connection = agent_rpc.create_consumers(
             self.endpoints, self.topic, consumers, start_listening=False)
 
@@ -184,7 +182,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 port_info.get('vrf_updated'))
 
     def port_bound(self, port, net_uuid, network_type, physical_network,
-                   fixed_ips, device_owner, ovs_restarted):
+                   fixed_ips, device_owner):
         # TODO(ivar): No flows are needed in OVS, and GBP details can now
         # be retrieved in a sane way. This methos probably is not needed
         # anymore
@@ -232,14 +230,6 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
     def process_network_ports(self, port_info, ovs_restarted):
         resync_a = False
         resync_b = False
-        # TODO(salv-orlando): consider a solution for ensuring notifications
-        # are processed exactly in the same order in which they were
-        # received. This is tricky because there are two notification
-        # sources: the neutron server, and the ovs db monitor process
-        # If there is an exception while processing security groups ports
-        # will not be wired anyway, and a resync will be triggered
-        # TODO(salv-orlando): Optimize avoiding applying filters unnecessarily
-        # (eg: when there are no IP address changes)
         self.sg_agent.setup_port_filters(port_info.get('added', set()),
                                          port_info.get('updated', set()))
         # VIF wiring needs to be performed always for 'new' devices.
@@ -252,8 +242,10 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         if devices_added_updated:
             start = time.time()
             try:
-                skipped_devices = self.treat_devices_added_or_updated(
-                    devices_added_updated, ovs_restarted)
+                # Schedule request for port update
+                self.port_manager.schedule_update(devices_added_updated)
+                # Apply configuration
+                skipped_devices = self.port_manager.apply_config()
                 LOG.debug("process_network_ports - iteration:%(iter_num)d - "
                           "treat_devices_added_or_updated completed. "
                           "Skipped %(num_skipped)d devices of "
@@ -288,6 +280,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
     def treat_devices_removed(self, devices):
         resync = False
+        self.port_manager.unschedule_update(devices)
         self.sg_agent.remove_devices_filter(devices)
         for device in devices:
             LOG.info(_LI("Attachment %s removed"), device)
@@ -305,7 +298,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         return resync
 
     def process_vrf_update(self, vrf_update):
-        # TODO(ivar): use the acync model
+        # TODO(ivar): use the async model
         vrf_details_list = self.of_rpc.get_vrf_details_list(
             self.context, self.agent_id, vrf_update, self.host)
         for details in vrf_details_list:
@@ -313,79 +306,61 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             # the right method once the redesign is complete.
             self.ep_manager.vrf_info_to_file(details)
 
-    def treat_devices_added_or_updated(self, devices, ovs_restarted):
-        # TODO(ivar): Move this method in the ep manager
-
-        skipped_devices = []
-        try:
-            # TODO(bose) Use get_devices_details_list_and_failed_devices()
-            devices_details_list = self.plugin_rpc.get_devices_details_list(
-                self.context,
-                devices,
-                self.agent_id,
-                cfg.CONF.host)
-            devices_gbp_details_list = self.of_rpc.get_gbp_details_list(
-                self.context, self.agent_id, devices, cfg.CONF.host)
-            # Correlate port details
-            gbp_details_per_device = {x['device']: x for x in
-                                      devices_gbp_details_list if x}
-        except Exception as e:
-            raise DeviceListRetrievalError(devices=devices, error=e)
-        for details in devices_details_list:
-            device = details['device']
-            LOG.debug("Processing port: %s", device)
-            # REVISIT(ivar): this is not a public facing API, we will move to
-            # the right method once the redesign is complete.
-            port = self.bridge_manager.int_br.get_vif_port_by_id(device)
-            if not port:
-                # The port disappeared and cannot be processed
-                LOG.info(_("Port %s was not found on the integration bridge "
-                           "and will therefore not be processed"), device)
-                skipped_devices.append(device)
-                # Delete EP file
-                self.ep_manager.undeclare_endpoint(device)
-                continue
-
-            gbp_details = gbp_details_per_device.get(details['device'], {})
+    def treat_devices_added_or_updated(self, details):
+        """Process added or updated devices
+        :param: Port details retrieved from the Neutron server
+        :returns: Boolean indicating whether the device was processed or
+                  skipped
+        """
+        device = details['device']
+        LOG.debug("Processing port: %s", device)
+        # REVISIT(ivar): this is not a public facing API, we will move to
+        # the right method once the redesign is complete.
+        port = self.bridge_manager.int_br.get_vif_port_by_id(device)
+        if port:
+            gbp_details = details.get('gbp_details')
+            neutron_details = details.get('neutron_details')
             if gbp_details and 'port_id' not in gbp_details:
                 # The port is dead
                 details.pop('port_id', None)
-            if 'port_id' in details:
+            if neutron_details and 'port_id' in neutron_details:
                 LOG.info(_("Port %(device)s updated. Details: %(details)s"),
                          {'device': device, 'details': details})
                 # Inject GBP details
                 port.gbp_details = gbp_details
-                self.treat_vif_port(port, details['port_id'],
-                                    details['network_id'],
-                                    details['network_type'],
-                                    details['physical_network'],
-                                    details['admin_state_up'],
-                                    details['fixed_ips'],
-                                    details['device_owner'],
-                                    ovs_restarted)
+                self.treat_vif_port(port, neutron_details['port_id'],
+                                    neutron_details['network_id'],
+                                    neutron_details['network_type'],
+                                    neutron_details['physical_network'],
+                                    neutron_details['admin_state_up'],
+                                    neutron_details['fixed_ips'],
+                                    neutron_details['device_owner'])
                 # update plugin about port status
-                # FIXME(salv-orlando): Failures while updating device status
-                # must be handled appropriately. Otherwise this might prevent
-                # neutron server from sending network-vif-* events to the nova
-                # API server, thus possibly preventing instance spawn.
-                if details.get('admin_state_up'):
+                if neutron_details.get('admin_state_up'):
                     LOG.debug(_("Setting status for %s to UP"), device)
                     self.plugin_rpc.update_device_up(
-                        self.context, device, self.agent_id, cfg.CONF.host)
+                        self.context, device, self.agent_id, self.host)
                 else:
                     LOG.debug(_("Setting status for %s to DOWN"), device)
                     self.plugin_rpc.update_device_down(
-                        self.context, device, self.agent_id, cfg.CONF.host)
-                LOG.info(_("Configuration for device %s completed."), device)
+                        self.context, device, self.agent_id, self.host)
+                LOG.info(_("Configuration for device %s completed."),
+                         device)
             else:
                 LOG.warn(_("Device %s not defined on plugin"), device)
-                if (port and port.ofport != -1):
+                if port and port.ofport != -1:
                     self.port_dead(port)
-        return skipped_devices
+        else:
+            # The port disappeared and cannot be processed
+            LOG.info(_("Port %s was not found on the integration bridge "
+                       "and will therefore not be processed"), device)
+            self.ep_manager.undeclare_endpoint(device)
+            return False
+        return True
 
     def treat_vif_port(self, vif_port, port_id, network_id, network_type,
                        physical_network, admin_state_up,
-                       fixed_ips, device_owner, ovs_restarted):
+                       fixed_ips, device_owner):
         # When this function is called for a port, the port should have
         # an OVS ofport configured, as only these ports were considered
         # for being treated. If that does not happen, it is a potential
@@ -396,8 +371,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         if vif_port:
             if admin_state_up:
                 self.port_bound(vif_port, network_id, network_type,
-                                physical_network, fixed_ips, device_owner,
-                                ovs_restarted)
+                                physical_network, fixed_ips, device_owner)
             else:
                 self.port_dead(vif_port)
         else:
@@ -412,10 +386,12 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                   {'iter_num': self.iter_num,
                    'port_stats': port_stats,
                    'elapsed': elapsed})
-        if elapsed < self.polling_interval:
-            # TODO(ivar) use this polling time to apply incoming config
-            # and verify timeouts
-            time.sleep(self.polling_interval - elapsed)
+        while elapsed < self.polling_interval:
+            self.port_manager.apply_config()
+            # TODO(ivar): Verify optimal sleep time
+            time.sleep(min(self.config_apply_interval,
+                           self.polling_interval - elapsed))
+            elapsed = time.time() - start_time
         else:
             LOG.debug("Loop iteration exceeded interval "
                       "(%(polling_interval)s vs. %(elapsed)s)!",
@@ -429,6 +405,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         if 'removed' in port_info:
             self.deleted_ports -= port_info['removed']
         deleted_ports = list(self.deleted_ports)
+        self.port_manager.unschedule_update(deleted_ports)
         while self.deleted_ports:
             port_id = self.deleted_ports.pop()
             self.bridge_manager.process_deleted_port(port_id)
@@ -565,6 +542,9 @@ def create_agent_config_map(conf):
     agent_config = {}
     agent_config['epg_mapping_dir'] = conf.OPFLEX.epg_mapping_dir
     agent_config['opflex_networks'] = conf.OPFLEX.opflex_networks
+    agent_config['endpoint_request_timeout'] = (
+        conf.OPFLEX.endpoint_request_timeout)
+    agent_config['config_apply_interval'] = conf.OPFLEX.config_apply_interval
     agent_config['internal_floating_ip_pool'] = (
         conf.OPFLEX.internal_floating_ip_pool)
     agent_config['internal_floating_ip6_pool'] = (

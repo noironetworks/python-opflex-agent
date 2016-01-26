@@ -37,7 +37,7 @@ class OpflexNotifyAgent(object):
         self.agent_id = 'opflex-notify-agent-%s' % self.host
         self.context = context.get_admin_context_without_session()
         self.sockname = OPFLEX_NOTIFY_SOCKNAME
-        self.of_rpc = opflexagent.gbp_ovs_agent.GBPOvsPluginApi(
+        self.of_rpc = opflexagent.rpc.GBPServerRpcApi(
             opflexagent.rpc.TOPIC_OPFLEX)
 
     def _handle(self, uuids, mac, addr):
