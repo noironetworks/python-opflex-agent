@@ -55,9 +55,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
     """Group Based Policy Opflex Agent.
 
     The GBP opflex agent assumes a pre-existing bridge (integration bridge is
-    not required). This agent is an interface between the SDN controller and
-    the opflex-agent-ovs, which renders the policies from ACI and Openstack
-    into openflow rules.
+    not required). This agent is an interface between Openstack Neutron and
+    agent-ovs, which renders policies from an OpFlex-based SDN controller
+    (like Cisco ACI) into OpenFlow rules for OVS.
 
     The GBP Opflex Agent
     """
@@ -111,7 +111,6 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # TODO(ivar): make this component pluggable.
         self.ep_manager = ep_manager.EndpointFileManager().initialize(
             self.host, self.bridge_manager, kwargs)
-        # Clenup SNAT rules.
 
     def setup_report(self):
         report_interval = cfg.CONF.AGENT.report_interval
