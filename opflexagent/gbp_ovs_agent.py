@@ -224,6 +224,8 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         The opflex agent controls all the flows in the integration bridge,
         therefore we have to make sure the parent doesn't reset them.
         """
+        if hasattr(self.int_br, 'set_agent_uuid_stamp'):
+            self.int_br.set_agent_uuid_stamp(self.agent_uuid_stamp)
         self.int_br.create()
         self.int_br.set_secure_mode()
 
@@ -273,15 +275,22 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
     def port_bound(self, port, net_uuid,
                    network_type, physical_network,
                    segmentation_id, fixed_ips, device_owner,
-                   ovs_restarted):
+                   ovs_restarted, port_tags=None):
 
         mapping = port.gbp_details
         if not mapping:
             self.mapping_cleanup(port.vif_id)
             if self.hybrid_mode:
-                super(GBPOvsAgent, self).port_bound(
-                    port, net_uuid, network_type, physical_network,
-                    segmentation_id, fixed_ips, device_owner, ovs_restarted)
+                try:
+                    super(GBPOvsAgent, self).port_bound(
+                        port, net_uuid, network_type, physical_network,
+                        segmentation_id, fixed_ips, device_owner,
+                        ovs_restarted, port_tags)
+                except TypeError:
+                    super(GBPOvsAgent, self).port_bound(
+                        port, net_uuid, network_type, physical_network,
+                        segmentation_id, fixed_ips, device_owner,
+                        ovs_restarted)
         elif network_type in self.supported_pt_network_types:
             # PT cleanup is needed before writing the new endpoint files
             self.mapping_cleanup(port.vif_id, cleanup_vrf=False)
@@ -551,6 +560,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         # details list.
 
         skipped_devices = []
+        need_binding_devices = []
         try:
             devices_details_list = self.plugin_rpc.get_devices_details_list(
                 self.context,
@@ -568,6 +578,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             device = details['device']
             LOG.debug("Processing port: %s", device)
             port = self.int_br.get_vif_port_by_id(device)
+            port_tags = self.int_br.get_port_tag_dict()
             if not port:
                 # The port disappeared and cannot be processed
                 LOG.info(_("Port %s was not found on the integration bridge "
@@ -584,15 +595,21 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                          {'device': device, 'details': details})
                 # Inject GBP details
                 port.gbp_details = gbp_details
-                self.treat_vif_port(port, details['port_id'],
-                                    details['network_id'],
-                                    details['network_type'],
-                                    details['physical_network'],
-                                    details['segmentation_id'],
-                                    details['admin_state_up'],
-                                    details['fixed_ips'],
-                                    details['device_owner'],
-                                    ovs_restarted)
+                try:
+                    need_binding = self.treat_vif_port(
+                        port, details['port_id'], details['network_id'],
+                        details['network_type'], details['physical_network'],
+                        details['segmentation_id'], details['admin_state_up'],
+                        details['fixed_ips'], details['device_owner'],
+                        ovs_restarted, port_tags)
+                except TypeError:
+                    need_binding = []
+                    self.treat_vif_port(
+                        port, details['port_id'], details['network_id'],
+                        details['network_type'], details['physical_network'],
+                        details['segmentation_id'], details['admin_state_up'],
+                        details['fixed_ips'], details['device_owner'],
+                        ovs_restarted)
                 # update plugin about port status
                 # FIXME(salv-orlando): Failures while updating device status
                 # must be handled appropriately. Otherwise this might prevent
@@ -607,11 +624,18 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                     self.plugin_rpc.update_device_down(
                         self.context, device, self.agent_id, cfg.CONF.host)
                 LOG.info(_("Configuration for device %s completed."), device)
+
+                if need_binding:
+                    details['vif_port'] = port
+                    need_binding_devices.append(details)
             else:
                 LOG.warn(_("Device %s not defined on plugin"), device)
                 if (port and port.ofport != -1):
                     self.port_dead(port)
-        return skipped_devices
+        if need_binding_devices:
+            return skipped_devices, need_binding_devices
+        else:
+            return skipped_devices
 
     def _write_endpoint_file(self, port_id, mapping_dict):
         return self._write_file(port_id, mapping_dict, self.epg_mapping_file)
