@@ -779,6 +779,17 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.agent.treat_devices_added_or_updated(['some_device'], True)
         self.agent.port_dead.assert_called_once_with(port)
 
+    def test_missing_port(self):
+        self.agent.of_rpc.get_gbp_details_list = mock.Mock(
+            return_value=[{'device': 'some_device'}])
+        self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
+            return_value=[{'device': 'some_device', 'port_id': 'portid'}])
+        self.agent.int_br.get_vif_port_by_id = mock.Mock(return_value=None)
+        self.agent.mapping_cleanup = mock.Mock()
+
+        self.agent.treat_devices_added_or_updated(['some_device'], True)
+        self.agent.mapping_cleanup.assert_called_once_with('some_device')
+
     def test_admin_disabled_port(self):
         # Set port's admin_state_up to False => mapping file should be removed
         mapping = self._get_gbp_details(device='some_device')
