@@ -353,7 +353,7 @@ class EpWatcher(FileWatcher):
                 if nnetwork is None:
                     continue
 
-                ips = ep.get('ip')
+                ips = ep.get('anycast-return-ip')
                 if ips is None:
                     ips = []
 
