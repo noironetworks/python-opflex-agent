@@ -24,6 +24,7 @@ import sys
 import time
 import uuid
 
+from neutron.agent.common import config
 from neutron.common import config as common_config
 from neutron.common import utils
 from neutron.plugins.openvswitch.common import config as ovs_config  # noqa
@@ -353,7 +354,7 @@ class EpWatcher(FileWatcher):
                 if nnetwork is None:
                     continue
 
-                ips = ep.get('ip')
+                ips = ep.get('anycast-return-ip')
                 if ips is None:
                     ips = []
 
@@ -736,6 +737,7 @@ class AsMetadataManager(object):
 
 
 def init_env():
+    config.register_root_helper(cfg.CONF)
     # importing ovs_config got OVS registered
     cfg.CONF.register_opts(gbp_opts, "OPFLEX")
     common_config.init(sys.argv[1:])

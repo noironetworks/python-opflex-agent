@@ -326,6 +326,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 LOG.info(_("Port %s was not found on the integration bridge "
                            "and will therefore not be processed"), device)
                 skipped_devices.append(device)
+                # Delete EP file
+                self.ep_manager.undeclare_endpoint(device)
                 continue
 
             gbp_details = gbp_details_per_device.get(details['device'], {})

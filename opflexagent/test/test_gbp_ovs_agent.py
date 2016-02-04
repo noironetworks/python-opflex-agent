@@ -220,6 +220,7 @@ class TestGBPOpflexAgent(base.BaseTestCase):
             "domain-name": 'name_of_l3p',
             "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
                    '192.169.8.253', '192.169.8.254'],
+            "anycast-return-ip": ['192.168.0.2', '192.168.1.2'],
             # FIP mapping will be in the file
             "ip-address-mapping": [
                 {'uuid': '1', 'mapped-ip': '192.168.0.2',
@@ -475,6 +476,8 @@ class TestGBPOpflexAgent(base.BaseTestCase):
                     "ip": ['192.168.0.2', '192.168.1.2', '192.169.0.4',
                            '192.169.0.6', '192.169.8.1', '192.169.8.253',
                            '192.169.8.254', '192.180.0.1', '192.180.0.2'],
+                    "anycast-return-ip": ['192.168.0.2', '192.168.1.2',
+                                          '192.169.0.4', '192.169.0.6'],
                     # FIP mapping will be in the file except for FIP 3 and 4
                     "ip-address-mapping": [
                         {'uuid': '1', 'mapped-ip': '192.168.0.2',
@@ -490,12 +493,12 @@ class TestGBPOpflexAgent(base.BaseTestCase):
                          'endpoint-group-name': 'profile_name|nat-epg-name',
                          'policy-space-name': 'nat-epg-tenant'},
                         {'uuid': mock.ANY, 'mapped-ip': '192.169.0.4',
-                         'floating-ip': '169.254.0.3',
+                         'floating-ip': '169.254.0.0',
                          'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
                          'endpoint-group-name': 'profile_name|nat-epg-name',
                          'policy-space-name': 'nat-epg-tenant'},
                         {'uuid': mock.ANY, 'mapped-ip': '192.169.0.6',
-                         'floating-ip': '169.254.0.4',
+                         'floating-ip': '169.254.0.1',
                          'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
                          'endpoint-group-name': 'profile_name|nat-epg-name',
                          'policy-space-name': 'nat-epg-tenant'},
@@ -504,12 +507,12 @@ class TestGBPOpflexAgent(base.BaseTestCase):
                          'endpoint-group-name': 'profile_name|nat-epg-name',
                          'policy-space-name': 'nat-epg-tenant'},
                         {'uuid': mock.ANY, 'mapped-ip': '192.169.8.253',
-                         'floating-ip': '169.254.0.0',
+                         'floating-ip': '169.254.0.2',
                          'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
                          'endpoint-group-name': 'profile_name|nat-epg-name',
                          'policy-space-name': 'nat-epg-tenant'},
                         {'uuid': mock.ANY, 'mapped-ip': '192.169.8.254',
-                         'floating-ip': '169.254.0.1',
+                         'floating-ip': '169.254.0.3',
                          'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
                          'endpoint-group-name': 'profile_name|nat-epg-name',
                          'policy-space-name': 'nat-epg-tenant'},
@@ -518,7 +521,7 @@ class TestGBPOpflexAgent(base.BaseTestCase):
                          'endpoint-group-name': 'profile_name|nat-epg-name',
                          'policy-space-name': 'nat-epg-tenant'},
                         {'uuid': mock.ANY, 'mapped-ip': '192.180.0.2',
-                         'floating-ip': '169.254.0.2',
+                         'floating-ip': '169.254.0.4',
                          'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
                          'endpoint-group-name': 'profile_name|nat-epg-name',
                          'policy-space-name': 'nat-epg-tenant'}],
@@ -551,6 +554,7 @@ class TestGBPOpflexAgent(base.BaseTestCase):
                     # Main IP address based on active AAP
                     "ip": ['192.169.0.2', '192.169.0.7', '192.170.0.1',
                            '192.170.0.2'],
+                    "anycast-return-ip": ['192.169.0.2', '192.169.0.7'],
                     # Only FIP number 4 and 171 here
                     "ip-address-mapping": [
                         {'uuid': '4', 'mapped-ip': '192.169.0.2',
@@ -558,7 +562,7 @@ class TestGBPOpflexAgent(base.BaseTestCase):
                          'endpoint-group-name': 'profile_name|nat-epg-name',
                          'policy-space-name': 'nat-epg-tenant'},
                         {'uuid': mock.ANY, 'mapped-ip': '192.169.0.7',
-                         'floating-ip': '169.254.0.6',
+                         'floating-ip': '169.254.0.5',
                          'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
                          'endpoint-group-name': 'profile_name|nat-epg-name',
                          'policy-space-name': 'nat-epg-tenant'},
@@ -567,7 +571,7 @@ class TestGBPOpflexAgent(base.BaseTestCase):
                          'endpoint-group-name': 'profile_name|nat-epg-name',
                          'policy-space-name': 'nat-epg-tenant'},
                         {'uuid': mock.ANY, 'mapped-ip': '192.170.0.2',
-                         'floating-ip': '169.254.0.5',
+                         'floating-ip': '169.254.0.6',
                          'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
                          'endpoint-group-name': 'profile_name|nat-epg-name',
                          'policy-space-name': 'nat-epg-tenant'}],
@@ -770,6 +774,19 @@ class TestGBPOpflexAgent(base.BaseTestCase):
         self.agent.bridge_manager.port_dead = mock.Mock()
         self.agent.treat_devices_added_or_updated(['some_device'], True)
         self.agent.bridge_manager.port_dead.assert_called_once_with(port)
+
+    def test_missing_port(self):
+        self.agent.of_rpc.get_gbp_details_list = mock.Mock(
+            return_value=[{'device': 'some_device'}])
+        self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
+            return_value=[{'device': 'some_device', 'port_id': 'portid'}])
+        self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
+            return_value=None)
+        with mock.patch.object(gbp_ovs_agent.ep_manager.EndpointFileManager,
+                               'undeclare_endpoint'):
+            self.agent.treat_devices_added_or_updated(['some_device'], True)
+            self.agent.ep_manager.undeclare_endpoint.assert_called_once_with(
+                'some_device')
 
     def test_admin_disabled_port(self):
         # Set port's admin_state_up to False => mapping file should be removed

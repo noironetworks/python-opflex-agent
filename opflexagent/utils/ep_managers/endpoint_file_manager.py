@@ -275,20 +275,23 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                'subnets' in mapping):
                     self._map_dhcp_info(fixed_ips, mapping['subnets'],
                                         mapping_dict)
+        ips_aap = []
         for aap in mapping.get('allowed_address_pairs', []):
             if aap.get('ip_address'):
                 virtual_ips.append(
                     {'ip': aap['ip_address'],
                      'mac': aap.get('mac_address', mac)})
                 if aap.get('active'):
-                    ips_ext.append(aap['ip_address'])
-        if ips or ips_ext:
-            mapping_dict['ip'] = sorted(ips + ips_ext)
+                    ips_aap.append(aap['ip_address'])
+        if ips or ips_aap or ips_ext:
+            mapping_dict['ip'] = sorted(ips + ips_aap + ips_ext)
             # Mac should only exist when the ip field is actually set
             mapping_dict['mac'] = mac
         if virtual_ips:
             mapping_dict['virtual-ip'] = sorted(virtual_ips,
                                                 key=lambda x: x['ip'])
+        if ips or ips_aap:
+            mapping_dict['anycast-return-ip'] = sorted(ips + ips_aap)
 
         if 'vm-name' in mapping:
             mapping_dict['attributes'] = {'vm-name': mapping['vm-name']}
@@ -299,7 +302,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             mapping_dict['attestation'] = mapping['attestation']
 
         self._handle_host_snat_ip(mapping.get('host_snat_ips', []))
-        self._fill_ip_mapping_info(port.vif_id, mac, mapping, ips + ips_ext,
+        self._fill_ip_mapping_info(port.vif_id, mac, mapping,
+                                   sorted(ips + ips_aap + ips_ext),
                                    mapping_dict)
         # Create one file per MAC address.
         LOG.debug("Final endpoint file for port %(port)s: \n %(mapping)s" %
