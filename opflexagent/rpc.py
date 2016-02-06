@@ -11,9 +11,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from neutron.common import log
 from neutron.common import rpc as n_rpc
 from neutron.common import topics
+from oslo_log import helpers as log
 from oslo_log import log as logging
 import oslo_messaging
 
@@ -61,31 +61,31 @@ class GBPServerRpcApiMixin(object):
                 topic=topic, version=self.GBP_RPC_VERSION)
         self.client = n_rpc.get_client(target)
 
-    @log.log
+    @log.log_method_call
     def get_gbp_details(self, context, agent_id, device=None, host=None):
         cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
         return cctxt.call(context, 'get_gbp_details', agent_id=agent_id,
                           device=device, host=host)
 
-    @log.log
+    @log.log_method_call
     def get_gbp_details_list(self, context, agent_id, devices=None, host=None):
         cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
         return cctxt.call(context, 'get_gbp_details_list', agent_id=agent_id,
                           devices=devices, host=host)
 
-    @log.log
+    @log.log_method_call
     def get_vrf_details(self, context, agent_id, vrf_id=None, host=None):
         cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
         return cctxt.call(context, 'get_vrf_details', agent_id=agent_id,
                           vrf_id=vrf_id, host=host)
 
-    @log.log
+    @log.log_method_call
     def get_vrf_details_list(self, context, agent_id, vrf_ids=None, host=None):
         cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
         return cctxt.call(context, 'get_vrf_details_list', agent_id=agent_id,
                           vrf_ids=vrf_ids, host=host)
 
-    @log.log
+    @log.log_method_call
     def ip_address_owner_update(self, context, agent_id, ip_owner_info,
                                 host=None):
         self.fanout_cast(context,
