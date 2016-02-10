@@ -11,6 +11,7 @@ BuildArch:	noarch
 BuildRequires:	python2-devel
 BuildRequires:	python-pbr
 BuildRequires:	python-setuptools
+Requires:	gawk
 Requires:	openstack-neutron >= 2015.1
 Requires:	openstack-neutron < 2015.2
 Requires:   python-inotify
