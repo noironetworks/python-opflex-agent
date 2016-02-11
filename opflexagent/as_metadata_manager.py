@@ -408,7 +408,7 @@ class StateWatcher(FileWatcher):
                 else:
                     if not self.as_equal(asvc, curr_alloc[domain_uuid]):
                         updated = True
-                        self.as_create(curr_alloc[domain_uuid])
+                        self.as_write(curr_alloc[domain_uuid])
                     del curr_alloc[domain_uuid]
 
         for domain_uuid in curr_alloc:
