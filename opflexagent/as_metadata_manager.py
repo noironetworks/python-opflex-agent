@@ -610,7 +610,7 @@ class AsMetadataManager(object):
     def get_asport_mac(self):
         return self.sh(
             "ip netns exec %s ip link show %s | "
-            "awk -e '/link\/ether/ {print $2}'" %
+            "gawk -e '/link\/ether/ {print $2}'" %
             (SVC_NS, SVC_NS_PORT))
 
     def init_host(self, integ_br):
