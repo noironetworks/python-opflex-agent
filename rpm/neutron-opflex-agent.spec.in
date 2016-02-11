@@ -87,7 +87,7 @@ usermod -a -G opflexep neutron
 %{_unitdir}/%{opflex_agent}
 
 %changelog
-* Wed Feb 10 2015 Amit Bose <bose@noironetworks.com> - 2015.2.0-1
+* Wed Feb 10 2016 Amit Bose <bose@noironetworks.com> - 2015.2.0-1
 - [Placeholder for liberty]
 
 * Mon May 18 2015 Amit Bose <bose@noironetworks.com> - 2015.1.0-1
