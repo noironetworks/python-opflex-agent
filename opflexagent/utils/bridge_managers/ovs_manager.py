@@ -11,9 +11,9 @@
 #    under the License.
 
 from neutron.agent.common import ovs_lib
-from neutron.common import constants as n_constants
 from neutron.i18n import _LW
-from neutron.plugins.openvswitch.common import constants
+from neutron.plugins.common import constants as n_constants
+from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from oslo_log import log as logging
 
 from opflexagent.utils.bridge_managers import bridge_manager_base

@@ -20,10 +20,10 @@ from opflexagent import gbp_ovs_agent
 from opflexagent.utils.bridge_managers import ovs_manager
 
 from neutron.agent.dhcp import config as dhcp_config
-from neutron.openstack.common import uuidutils
-from neutron.plugins.openvswitch.common import constants
+from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from neutron.tests import base
 from oslo_config import cfg
+from oslo_utils import uuidutils
 
 _uuid = uuidutils.generate_uuid
 EP_DIR = '.%s_endpoints/'

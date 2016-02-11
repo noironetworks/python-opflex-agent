@@ -21,9 +21,9 @@ import contextlib
 from opflexagent import gbp_ovs_agent
 
 from neutron.agent.dhcp import config as dhcp_config
-from neutron.openstack.common import uuidutils
 from neutron.tests import base
-from oslo.config import cfg
+from oslo_config import cfg
+from oslo_utils import uuidutils
 
 _uuid = uuidutils.generate_uuid
 NOTIFIER = 'neutron.plugins.ml2.rpc.AgentNotifierApi'
@@ -98,18 +98,17 @@ class TestGBPOpflexAgent(base.BaseTestCase):
             mock.patch('opflexagent.utils.bridge_managers.ovs_manager.'
                        'OvsManager.setup_integration_bridge',
                        return_value=mock.Mock()),
-            mock.patch('neutron.agent.linux.ovs_lib.OVSBridge.'
+            mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
                        'create'),
-            mock.patch('neutron.agent.linux.ovs_lib.OVSBridge.'
+            mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
                        'set_secure_mode'),
-            mock.patch('neutron.agent.linux.ovs_lib.OVSBridge.'
+            mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
                        'get_local_port_mac',
                        return_value='00:00:00:00:00:01'),
             mock.patch('neutron.agent.linux.utils.get_interface_mac',
                        return_value='00:00:00:00:00:01'),
-            mock.patch('neutron.agent.linux.ovs_lib.BaseOVS.get_bridges'),
-            mock.patch('neutron.openstack.common.loopingcall.'
-                       'FixedIntervalLoopingCall',
+            mock.patch('neutron.agent.common.ovs_lib.BaseOVS.get_bridges'),
+            mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
                        new=MockFixedIntervalLoopingCall),
             mock.patch('opflexagent.gbp_ovs_agent.GBPOpflexAgent.'
                        '_report_state')):

@@ -27,8 +27,9 @@ import uuid
 from neutron.agent.common import config
 from neutron.common import config as common_config
 from neutron.common import utils
-from neutron.plugins.openvswitch.common import config as ovs_config  # noqa
-from oslo.config import cfg
+from neutron.plugins.ml2.drivers.openvswitch.agent.common import (  # noqa
+    config as ovs_config)
+from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
 

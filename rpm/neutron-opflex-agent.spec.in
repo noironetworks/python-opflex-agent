@@ -12,8 +12,8 @@ BuildRequires:	python2-devel
 BuildRequires:	python-pbr
 BuildRequires:	python-setuptools
 Requires:	gawk
-Requires:	openstack-neutron >= 2015.1
-Requires:	openstack-neutron < 2015.2
+Requires:	openstack-neutron >= 2015.2
+Requires:	openstack-neutron < 2016.1
 Requires:   python-inotify
 Requires:   supervisor
 Requires(post): systemd-units
@@ -87,5 +87,8 @@ usermod -a -G opflexep neutron
 %{_unitdir}/%{opflex_agent}
 
 %changelog
+* Wed Feb 10 2015 Amit Bose <bose@noironetworks.com> - 2015.2.0-1
+- [Placeholder for liberty]
+
 * Mon May 18 2015 Amit Bose <bose@noironetworks.com> - 2015.1.0-1
 - [Placeholder]
