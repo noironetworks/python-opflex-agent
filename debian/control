@@ -10,7 +10,7 @@ Vcs-Git: git://github.com/noironetworks/python-opflex-agent.git
 
 Package: neutron-opflex-agent
 Architecture: all
-Depends: gawk, neutron-server (>=2015.2), python-pyinotify, supervisor,
+Depends: gawk, neutron-server, python-pyinotify, supervisor,
          ${misc:Depends}, ${python:Depends}
 Description: Neutron agent for OpFlex based policy enforcement
  Neutron agent that provides edge policy enforcement
