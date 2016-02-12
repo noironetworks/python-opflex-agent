@@ -104,13 +104,10 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         if not mapping:
             return
         else:
-            # PT cleanup is needed before writing the new endpoint files
-            # TODO(ivar): only cleanup what's not needed.
-            self._mapping_cleanup(port.vif_id, cleanup_vrf=False)
-
             # Multiple files will be created based on how many MAC
             # addresses are owned by the specific port.
             mapping_copy = copy.deepcopy(mapping)
+            macs = set()
             mac_aap_map = {}
             mapping_copy['allowed_address_pairs'] = []
             mapping_copy['floating_ip'] = []
@@ -157,6 +154,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                         aap['mac_address'], []).append(aap)
             # Create mapping file for base MAC address
             LOG.debug("Main file mapping %s", mapping_copy)
+            macs.add(mapping_copy.get('mac_address') or port.vif_mac)
             self._mapping_to_file(port, mapping_copy, port.fixed_ips)
             # Reset for AAP EP files
             mapping_copy['allowed_address_pairs'] = []
@@ -187,7 +185,12 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 # For this mac, set all the allowed address pairs.
                 mapping_copy['allowed_address_pairs'] = aaps
                 LOG.debug("Secondary file mapping %s", mapping_copy)
+                macs.add(mapping_copy.get('mac_address'))
                 self._mapping_to_file(port, mapping_copy, [])
+
+            # PT cleanup is needed after the new endpoint files
+            self._mapping_cleanup(port.vif_id, cleanup_vrf=False,
+                                  mac_exceptions=macs)
 
     def undeclare_endpoint(self, port_id):
         LOG.info(_LI("Endpoint undeclare requested for port %s"), port_id)
@@ -219,9 +222,10 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         if not created:
             self.snat_iptables.cleanup_snat_all()
 
-    def _mapping_cleanup(self, vif_id, cleanup_vrf=True):
+    def _mapping_cleanup(self, vif_id, cleanup_vrf=True, mac_exceptions=None):
+        mac_exceptions = mac_exceptions or set()
         LOG.debug('Cleaning mapping for vif id %s', vif_id)
-        self._delete_endpoint_files(vif_id)
+        self._delete_endpoint_files(vif_id, mac_exceptions=mac_exceptions)
         if cleanup_vrf:
             self._dissociate_port_from_es(vif_id)
             self._release_int_fip(4, vif_id)
@@ -629,16 +633,18 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
     def _delete_endpoint_file(self, port_id):
         return self._delete_file(port_id, self.epg_mapping_file)
 
-    def _delete_endpoint_files(self, port_id):
+    def _delete_endpoint_files(self, port_id, mac_exceptions=None):
+        mac_exceptions = mac_exceptions or set()
         # Delete all files for this specific port_id
         directory = os.path.dirname(self.epg_mapping_file)
         # Remove all existing EPs mapping for port_id
         for f in os.listdir(directory):
             if f.endswith('.' + FILE_EXTENSION) and port_id in f:
-                try:
-                    os.remove(os.path.join(directory, f))
-                except OSError as e:
-                    LOG.exception(e)
+                if not any(x for x in mac_exceptions if x in f):
+                    try:
+                        os.remove(os.path.join(directory, f))
+                    except OSError as e:
+                        LOG.exception(e)
 
     def _write_vrf_file(self, vrf_id, mapping_dict):
         return self._write_file(vrf_id, mapping_dict, self.vrf_mapping_file)

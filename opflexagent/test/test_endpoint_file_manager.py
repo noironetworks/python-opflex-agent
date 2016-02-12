@@ -10,6 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import os
 import shutil
 import sys
 
@@ -313,12 +314,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
              'nat_epg_tenant': 'nat-epg-tenant',
              'nat_epg_name': 'nat-epg-name'}])
 
-        self.manager.snat_iptables.setup_snat_for_es.return_value = tuple(
-            ['foo-if', 'foo-mac'])
-        self.manager._release_int_fip = mock.Mock()
         port = self._port()
-        self.manager.declare_endpoint(port, mapping)
-
         # Build expected calls.
         # 3 calls are expected, one for unique MAC (AA:AA, BB:BB and main)
         expected_calls = [
@@ -475,8 +471,18 @@ class TestEndpointFileManager(base.OpflexTestBase):
                           'promiscuous-mode': True,
                           'endpoint-group-name': 'profile_name|nat-epg-name',
                           'uuid': mock.ANY})]
-        self._check_call_list(expected_calls,
-                              self.manager._write_endpoint_file.call_args_list)
+        self.manager.snat_iptables.setup_snat_for_es.return_value = tuple(
+            ['foo-if', 'foo-mac'])
+        self.manager._release_int_fip = mock.Mock()
+        with mock.patch.object(endpoint_file_manager.EndpointFileManager,
+                               '_delete_endpoint_files'):
+            self.manager.declare_endpoint(port, mapping)
+            self._check_call_list(
+                expected_calls,
+                self.manager._write_endpoint_file.call_args_list)
+            self.manager._delete_endpoint_files.assert_called_once_with(
+                port.vif_id,
+                mac_exceptions=set(['AA:AA', 'BB:BB', 'aa:bb:cc:00:11:22']))
 
     def test_port_unbound_delete_vrf_file(self):
         # Bind 2 ports on same VRF
@@ -518,3 +524,14 @@ class TestEndpointFileManager(base.OpflexTestBase):
         port = self._port()
         self.manager.declare_endpoint(port, None)
         self.assertFalse(self.manager._write_endpoint_file.called)
+
+    def test_delete_endpoint_files(self):
+        self.manager._write_file('uuid1_AA', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid1_BB', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid1_CC', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid2_BB', {}, self.manager.epg_mapping_file)
+        self.manager._delete_endpoint_files(
+            'uuid1', mac_exceptions=set(['AA', 'CC']))
+        ls = os.listdir(self.ep_dir)
+        self.assertEqual(set(['uuid1_AA.ep', 'uuid1_CC.ep', 'uuid2_BB.ep']),
+                         set(ls))
