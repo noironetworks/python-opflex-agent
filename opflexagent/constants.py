@@ -14,6 +14,8 @@
 # limitations under the License.
 
 AGENT_TYPE_OPFLEX_OVS = 'OpFlex Open vSwitch agent'
+# TODO(tbachman) Figure out a better/common place for this
+HYPERVISOR_VCENTER = "VMware vCenter"
 TYPE_OPFLEX = 'opflex'
 
 METADATA_DEFAULT_IP = '169.254.169.254'

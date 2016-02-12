@@ -60,6 +60,12 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
     agent-ovs, which renders policies from an OpFlex-based SDN controller
     (like Cisco ACI) into OpenFlow rules for OVS.
 
+    This agent implements two strategies for security groups,
+    depending on the device:owner:
+    1) Security Groups using vCenter Traffic Filter APIs
+       This is for instances that are managed by vCenter.
+    2) Security groups for Open vSwitch
+
     The GBP Opflex Agent
     """
 
@@ -72,6 +78,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.root_helper = root_helper
         self.notify_worker = opflex_notify.worker()
         self.host = cfg.CONF.host
+        self.hypervisor_type = kwargs['hypervisor_type']
 
         self.agent_state = {
             'binary': 'neutron-opflex-agent',
@@ -81,6 +88,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                                'opflex_networks': self.opflex_networks},
             'agent_type': ofcst.AGENT_TYPE_OPFLEX_OVS,
             'start_flag': True}
+        if self.hypervisor_type:
+            self.agent_state['configurations']['hypervisor_type'] = (
+                self.hypervisor_type)
 
         # Initialize OVS Manager
         self.bridge_manager = ovs_manager.OvsManager().initialize(self.host,
@@ -110,8 +120,11 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.quitting_rpc_timeout = kwargs['quitting_rpc_timeout']
         # Initialize the Endpoint Manager.
         # TODO(ivar): make this component pluggable.
-        self.ep_manager = ep_manager.EndpointFileManager().initialize(
-            self.host, self.bridge_manager, kwargs)
+        if self.hypervisor_type == ofcst.HYPERVISOR_VCENTER:
+            self.ep_manager = ep_manager.EndpointFileManagerDvs()
+        else:
+            self.ep_manager = ep_manager.EndpointFileManager()
+        self.ep_manager.initialize(self.host, self.bridge_manager, kwargs)
 
     def setup_report(self):
         report_interval = cfg.CONF.AGENT.report_interval
@@ -143,8 +156,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.of_rpc = GBPOvsPluginApi(rpc.TOPIC_OPFLEX)
         self.plugin_rpc = ovs.OVSPluginApi(topics.PLUGIN)
         self.sg_plugin_rpc = sg_rpc.SecurityGroupServerRpcApi(topics.PLUGIN)
-        self.sg_agent = sg_rpc.SecurityGroupAgentRpc(
-            self.context, self.sg_plugin_rpc, defer_refresh_firewall=True)
+        self.sg_agent = rpc.OpflexSecurityGroupAgentRpc(
+            self.context, self.sg_plugin_rpc, defer_refresh_firewall=True,
+            strategy_fn=strategy_fn)
 
         self.state_rpc = agent_rpc.PluginReportStateAPI(topics.PLUGIN)
         self.topic = topics.AGENT
@@ -550,6 +564,7 @@ def create_agent_config_map(conf):
     agent_config = ovs.create_agent_config_map(conf)
     agent_config['epg_mapping_dir'] = conf.OPFLEX.epg_mapping_dir
     agent_config['opflex_networks'] = conf.OPFLEX.opflex_networks
+    agent_config['hypervisor_type'] = cfg.CONF.OPFLEX.hypervisor_type
     agent_config['internal_floating_ip_pool'] = (
         conf.OPFLEX.internal_floating_ip_pool)
     agent_config['internal_floating_ip6_pool'] = (
@@ -604,6 +619,23 @@ def main():
 
     LOG.info(_("Agent initialized successfully, now running... "))
     agent.daemon_loop()
+
+
+def strategy_fn(port, firewall_map):
+    """Strategy function for OpFlex agent
+
+       The strategy function implementation gets the
+       key to use to index the firewall_map, and returns
+       the firewall based on that key. This strategy looks
+       specifically for the 'dvs_port_group' key in the
+       'binding:vif_details' property of the port.
+    """
+    if not port["binding:vif_details"]:
+        return None
+    vif_details = port.get("binding:vif_details", None)
+    if 'dvs_port_group' in vif_details:
+        return 'dvs_port_group'
+    return None
 
 
 if __name__ == "__main__":

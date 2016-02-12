@@ -30,6 +30,16 @@ gbp_opts = [
                 default=['*'],
                 help=_("List of the physical networks managed by this agent. "
                        "Use * for binding any opflex network to this agent")),
+    cfg.ListOpt('firewall_map',
+                default=[('dvs_port_key',
+                    'opflexagent.utils.fw_drivers.dvs.DVSFirewallDriver'), ],
+                help=_("List of tuples containing firewall driver and the "
+                       "key that selects it")),
+    cfg.StrOpt('hypervisor_type',
+               default='KVM',
+               help=_("Hypervisor of the host running this agent. Only needed "
+                      "on hosts running nova-compute. Set to 'VMware vCenter' "
+                      "for hosts running nova-compute for vCenter")),
     cfg.ListOpt('internal_floating_ip_pool',
                default=['169.254.0.0/16'],
                help=_("IP pool used for intermediate floating-IPs with SNAT")),

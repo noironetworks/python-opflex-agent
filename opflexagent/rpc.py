@@ -11,9 +11,12 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from neutron.agent import securitygroups_rpc as sg_rpc
 from neutron.common import log
 from neutron.common import rpc as n_rpc
 from neutron.common import topics
+from opflexagent import firewall_wrapper
+from oslo_config import cfg
 from oslo_log import log as logging
 import oslo_messaging
 
@@ -157,3 +160,46 @@ class GbpNeutronAgentRpcCallbackMixin(object):
         self.updated_vrf.add(subnet['tenant_id'])
         LOG.debug("subnet_update message processed for subnet %s",
                   subnet['id'])
+
+
+class OpflexSecurityGroupAgentRpc(sg_rpc.SecurityGroupAgentRpc):
+
+    def __init__(self, context, plugin_rpc,
+                 defer_refresh_firewall=False, strategy_fn=None):
+        self._strategy_fn = strategy_fn
+        super(OpflexSecurityGroupAgentRpc, self).__init__(context, plugin_rpc,
+            defer_refresh_firewall=defer_refresh_firewall)
+
+    def init_firewall(self, defer_refresh_firewall=False):
+        """Initialize Firewall driver with multiple strategies
+
+        This adds the ability to support muiltiple firewall
+        drivers. A wrapper implementation is installed as the
+        firewall driver, and the actual firewall drivers are
+        stored in a dictionary, which is indexed using a key
+        that's defined by a strategy. If the firewall map is
+        empty (in OPFLEX config file), then the default strategy
+        will be used (defined by the SECURITYGROUP config file).
+        If a key is not available for a given API, then all drivers
+        are called
+        """
+        firewall_driver = cfg.CONF.SECURITYGROUP.firewall_driver
+        LOG.debug("Init firewall settings (driver=%s)", firewall_driver)
+        if not sg_rpc._is_valid_driver_combination():
+            LOG.warn(_("Driver configuration doesn't match "
+                       "with enable_security_group"))
+        self.firewall_map = cfg.CONF.OPFLEX.firewall_map
+        self.firewall = firewall_wrapper.FirewallDriverWrapper()
+
+        self.firewall.set_strategy_and_map(cfg.CONF.OPFLEX.firewall_map,
+                                           self._strategy_fn, firewall_driver)
+
+        # The following flag will be set to true if port filter must not be
+        # applied as soon as a rule or membership notification is received
+        self.defer_refresh_firewall = defer_refresh_firewall
+        # Stores devices for which firewall should be refreshed when
+        # deferred refresh is enabled.
+        self.devices_to_refilter = set()
+        # Flag raised when a global refresh is needed
+        self.global_refresh_firewall = False
+        self._use_enhanced_rpc = None
