@@ -34,6 +34,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 import oslo_messaging
 from oslo_service import loopingcall
+from oslo_utils import importutils
 
 from opflexagent import as_metadata_manager
 from opflexagent import config as ofcfg  # noqa
@@ -60,6 +61,12 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
     agent-ovs, which renders policies from an OpFlex-based SDN controller
     (like Cisco ACI) into OpenFlow rules for OVS.
 
+    This agent implements two strategies for security groups,
+    depending on the device:owner:
+    1) Security Groups using vCenter Traffic Filter APIs
+       This is for instances that are managed by vCenter.
+    2) Security groups for Open vSwitch
+
     The GBP Opflex Agent
     """
 
@@ -72,6 +79,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.root_helper = root_helper
         self.notify_worker = opflex_notify.worker()
         self.host = cfg.CONF.host
+        self.hypervisor_type = cfg.CONF.OPFLEX.hypervisor_type
 
         self.agent_state = {
             'binary': 'neutron-opflex-agent',
@@ -81,6 +89,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                                'opflex_networks': self.opflex_networks},
             'agent_type': ofcst.AGENT_TYPE_OPFLEX_OVS,
             'start_flag': True}
+        if self.hypervisor_type:
+            self.agent_state['configurations']['hypervisor_type'] = (
+                cfg.CONF.hypervisor_type)
 
         # Initialize OVS Manager
         self.bridge_manager = ovs_manager.OvsManager().initialize(self.host,
@@ -112,6 +123,20 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # TODO(ivar): make this component pluggable.
         self.ep_manager = ep_manager.EndpointFileManager().initialize(
             self.host, self.bridge_manager, kwargs)
+        self.init_firewall()
+
+    def _invoke_ep_mgr(self, port):
+        """Call the Endpoint Manager to handle the EP
+
+           We don't create endpoint files when we're running
+           on a host that's acting as a Hypervisor for vCenter,
+           and if the port belongs to an instance.
+        """
+        if (self.hypervisor_type and
+            self.hypervisor_type == ofcst.HYPERVISOR_VCENTER):
+            if not port or port['device_owner'] == 'compute:nova':
+                return False
+        return True
 
     def setup_report(self):
         report_interval = cfg.CONF.AGENT.report_interval
@@ -182,7 +207,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             # Mapping is empty, this port left the Opflex policy space.
             LOG.warn("Mapping for port %s is None, undeclaring the Endpoint",
                      port.vif_id)
-            self.ep_manager.undeclare_endpoint(port.vif_id)
+            if self._invoke_ep_mgr(None):
+                self.ep_manager.undeclare_endpoint(port.vif_id)
         elif network_type in self.supported_pt_network_types:
             if ((self.opflex_networks is None) or
                     (physical_network in self.opflex_networks)):
@@ -190,7 +216,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 LOG.debug("Processing the endpoint mapping "
                           "for port %(port)s: \n mapping: %(mapping)s" % {
                               'port': port.vif_id, 'mapping': mapping})
-                self.ep_manager.declare_endpoint(port, mapping)
+                if self._invoke_ep_mgr(port):
+                    self.ep_manager.declare_endpoint(port, mapping)
             else:
                 LOG.error(_("Cannot provision OPFLEX network for "
                             "net-id=%(net_uuid)s - no bridge for "
@@ -209,11 +236,13 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
         :param vif_id: the id of the vif
         """
-        self.ep_manager.undeclare_endpoint(vif_id)
+        if self._invoke_ep_mgr(None):
+            self.ep_manager.undeclare_endpoint(vif_id)
 
     def port_dead(self, port):
         self.bridge_manager.port_dead(port)
-        self.ep_manager.undeclare_endpoint(port.vif_id)
+        if self._invoke_ep_mgr(None):
+            self.ep_manager.undeclare_endpoint(port.vif_id)
 
     def process_network_ports(self, port_info, ovs_restarted):
         resync_a = False
@@ -328,7 +357,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                            "and will therefore not be processed"), device)
                 skipped_devices.append(device)
                 # Delete EP file
-                self.ep_manager.undeclare_endpoint(device)
+                if self._invoke_ep_mgr(None):
+                    self.ep_manager.undeclare_endpoint(device)
                 continue
 
             gbp_details = gbp_details_per_device.get(details['device'], {})
@@ -531,6 +561,40 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         for rpc_api in (self.plugin_rpc, self.sg_plugin_rpc, self.state_rpc):
             rpc_api.client.timeout = timeout
 
+    def init_firewall(self, defer_refresh_firewall=False):
+        """Initialize Firewall driver with multiple strategies
+
+           This adds the ability to support muiltiple firewall
+           drivers. A wrapper implementation is installed as the
+           firewall driver, and the actual firewall drivers are
+           stored in a dictionary, which is indexed using a
+           key that's defined by a strategy. If the firewall
+           map is empty (in OPFLEX config file), then the
+           default strategy will be used (defined by the
+           SECURITYGROUP config file)
+        """
+        firewall_driver = cfg.CONF.SECURITYGROUP.firewall_driver
+        LOG.debug("Init firewall settings (driver=%s)", firewall_driver)
+        if not sg_rpc._is_valid_driver_combination():
+            LOG.warn(_LW("Driver configuration doesn't match "
+                         "with enable_security_group"))
+        self.firewall_map = cfg.CONF.OPFLEX.firewall_map
+        self.firewall = importutils.import_object(
+            'opflexagent.firewall_wrapper.FirewallDriverWrapper')
+
+        self.firewall.set_strategy_and_map(cfg.CONF.OPFLEX.firewall_map,
+                                           strategy_fn, firewall_driver)
+
+        # The following flag will be set to true if port filter must not be
+        # applied as soon as a rule or membership notification is received
+        self.defer_refresh_firewall = defer_refresh_firewall
+        # Stores devices for which firewall should be refreshed when
+        # deferred refresh is enabled.
+        self.devices_to_refilter = set()
+        # Flag raised when a global refresh is needed
+        self.global_refresh_firewall = False
+        self._use_enhanced_rpc = None
+
 
 def create_agent_config_map(conf):
     agent_config = ovs.create_agent_config_map(conf)
@@ -590,6 +654,23 @@ def main():
 
     LOG.info(_("Agent initialized successfully, now running... "))
     agent.daemon_loop()
+
+
+def strategy_fn(port, firewall_map):
+    """Strategy function for OpFlex agent
+
+       The strategy function implementation gets the
+       key to use to index the firewall_map, and returns
+       the firewall based on that key. This strategy looks
+       specifically for the 'dvs_port_group' key in the
+       'binding:vif_details' property of the port.
+    """
+    if not port["binding:vif_details"]:
+        return None
+    vif_details = port.get("binding:vif_details", None)
+    if 'dvs_port_group' in vif_details:
+        return 'dvs_port_group'
+    return None
 
 
 if __name__ == "__main__":
