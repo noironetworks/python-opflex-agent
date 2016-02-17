@@ -419,6 +419,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             self.port_unbound(port_id)
         # Flush firewall rules
         self.sg_agent.remove_devices_filter(deleted_ports)
+        # Process deleted ports
+        for port_id in port_info['removed']:
+            self.port_unbound(port_id)
 
     def rpc_loop(self, polling_manager):
         sync = True
@@ -453,58 +456,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             ovs_restarted |= (ovs_status == constants.OVS_RESTARTED)
             if self._agent_has_updates(polling_manager) or ovs_restarted:
                 try:
-                    LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
-                              "starting polling. Elapsed:%(elapsed).3f",
-                              {'iter_num': self.iter_num,
-                               'elapsed': time.time() - start})
-                    # Save updated ports dict to perform rollback in
-                    # case resync would be needed, and then clear
-                    # self.updated_ports. As the greenthread should not yield
-                    # between these two statements, this will be thread-safe
-                    updated_ports_copy = self.updated_ports
-                    self.updated_ports = set()
-                    reg_ports = (set() if ovs_restarted else ports)
-                    port_info = self.bridge_manager.scan_ports(
-                        reg_ports, updated_ports_copy)
-
-                    updated_vrf_copy = self.updated_vrf
-                    self.updated_vrf = set()
-                    vrf_info = updated_vrf_copy & set(
-                        self.ep_manager.vrf_dict.keys())
-                    port_info['vrf_updated'] = vrf_info
-
-                    self.process_deleted_ports(port_info)
-                    LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
-                              "port information retrieved. "
-                              "Elapsed:%(elapsed).3f",
-                              {'iter_num': self.iter_num,
-                               'elapsed': time.time() - start})
-                    # Secure and wire/unwire VIFs and update their status
-                    # on Neutron server
-                    if (self._info_has_changes(port_info) or
-                        self.sg_agent.firewall_refresh_needed() or
-                        ovs_restarted):
-                        LOG.debug("Starting to process devices in:%s",
-                                  port_info)
-                        # If treat devices fails - must resync with plugin
-                        sync = self.process_network_ports(port_info,
-                                                          ovs_restarted)
-                        LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
-                                  "ports processed. Elapsed:%(elapsed).3f",
-                                  {'iter_num': self.iter_num,
-                                   'elapsed': time.time() - start})
-                        port_stats['regular']['added'] = (
-                            len(port_info.get('added', [])))
-                        port_stats['regular']['updated'] = (
-                            len(port_info.get('updated', [])))
-                        port_stats['regular']['removed'] = (
-                            len(port_info.get('removed', [])))
-                    ports = port_info['current']
-                    polling_manager.polling_completed()
-                    # Keep this flag in the last line of "try" block,
-                    # so we can sure that no other Exception occurred.
-                    if not sync:
-                        ovs_restarted = False
+                    ports, sync, ovs_restarted = self._main_loop(
+                        ports, ovs_restarted, start, port_stats,
+                        polling_manager, sync)
                 except Exception:
                     LOG.exception(_LE("Error while processing VIF ports"))
                     # Put the ports back in self.updated_port
@@ -513,6 +467,66 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                     sync = True
 
             self.loop_count_and_wait(start, port_stats)
+
+    def _main_loop(self, ports, ovs_restarted, start, port_stats,
+                   polling_manager, sync):
+        LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
+                  "starting polling. Elapsed:%(elapsed).3f",
+                  {'iter_num': self.iter_num,
+                   'elapsed': time.time() - start})
+        # Save updated ports dict to perform rollback in
+        # case resync would be needed, and then clear
+        # self.updated_ports. As the greenthread should not yield
+        # between these two statements, this will be thread-safe
+        updated_ports_copy = self.updated_ports
+        self.updated_ports = set()
+        reg_ports = (set() if ovs_restarted else ports)
+        port_info = self.bridge_manager.scan_ports(
+            reg_ports, updated_ports_copy)
+        removed_eps = (self.ep_manager.get_registered_endpoints() -
+                       port_info['current'])
+        if removed_eps:
+            port_info['removed'] = port_info.get('removed',
+                                                 set()) | removed_eps
+        updated_vrf_copy = self.updated_vrf
+        self.updated_vrf = set()
+        vrf_info = updated_vrf_copy & set(
+            self.ep_manager.vrf_dict.keys())
+        port_info['vrf_updated'] = vrf_info
+
+        self.process_deleted_ports(port_info)
+        LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
+                  "port information retrieved. "
+                  "Elapsed:%(elapsed).3f",
+                  {'iter_num': self.iter_num,
+                   'elapsed': time.time() - start})
+        # Secure and wire/unwire VIFs and update their status
+        # on Neutron server
+        if (self._info_has_changes(port_info) or
+            self.sg_agent.firewall_refresh_needed() or
+            ovs_restarted):
+            LOG.debug("Starting to process devices in:%s",
+                      port_info)
+            # If treat devices fails - must resync with plugin
+            sync = self.process_network_ports(port_info,
+                                              ovs_restarted)
+            LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
+                      "ports processed. Elapsed:%(elapsed).3f",
+                      {'iter_num': self.iter_num,
+                       'elapsed': time.time() - start})
+            port_stats['regular']['added'] = (
+                len(port_info.get('added', [])))
+            port_stats['regular']['updated'] = (
+                len(port_info.get('updated', [])))
+            port_stats['regular']['removed'] = (
+                len(port_info.get('removed', [])))
+        ports = port_info['current']
+        polling_manager.polling_completed()
+        # Keep this flag in the last line of "try" block,
+        # so we can sure that no other Exception occurred.
+        if not sync:
+            ovs_restarted = False
+        return ports, sync, ovs_restarted
 
     def daemon_loop(self):
         with polling.get_polling_manager(
