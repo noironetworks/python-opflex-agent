@@ -91,6 +91,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
         self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
             bridge_manager.int_br)
+        self._registered_endpoints = set()
         self._setup_ep_directory()
         self.host = host
         return self
@@ -191,10 +192,15 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             # PT cleanup is needed after the new endpoint files
             self._mapping_cleanup(port.vif_id, cleanup_vrf=False,
                                   mac_exceptions=macs)
+            self._registered_endpoints.add(port.vif_id)
 
     def undeclare_endpoint(self, port_id):
         LOG.info(_LI("Endpoint undeclare requested for port %s"), port_id)
         self._mapping_cleanup(port_id)
+        self._registered_endpoints.discard(port_id)
+
+    def get_registered_endpoints(self):
+        return self._registered_endpoints
 
     # Private Methods
 
@@ -211,13 +217,13 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 created = True
                 os.makedirs(directory)
                 continue
-            # Remove all existing EPs mapping
+            # Calculate registered endpoints
             for f in os.listdir(directory):
-                if f.endswith('.' + FILE_EXTENSION) or f.endswith(
-                        '.' + VRF_FILE_EXTENSION):
+                if f.endswith('.' + FILE_EXTENSION):
                     try:
-                        os.remove(os.path.join(directory, f))
-                    except OSError as e:
+                        port_id = f.split('_')[0]
+                        self._registered_endpoints.add(port_id)
+                    except IndexError as e:
                         LOG.debug(e.message)
         if not created:
             self.snat_iptables.cleanup_snat_all()

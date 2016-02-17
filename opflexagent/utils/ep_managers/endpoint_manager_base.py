@@ -61,3 +61,11 @@ class EndpointManagerBase(object):
 
         :return: None
         """
+
+    @abc.abstractmethod
+    def get_registered_endpoints(self):
+        """ Get registered endpoints.
+
+        :return: set of port IDs for each endpoint registered in the EP
+        directory
+        """

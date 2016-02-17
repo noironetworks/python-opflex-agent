@@ -19,7 +19,9 @@ sys.modules["pyinotify"] = mock.Mock()
 
 import contextlib
 from opflexagent import gbp_ovs_agent
+from opflexagent import snat_iptables_manager
 from opflexagent.test import base
+from opflexagent.utils.ep_managers import endpoint_file_manager
 
 from neutron.agent.dhcp import config as dhcp_config
 from oslo_config import cfg
@@ -45,23 +47,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         cfg.CONF.set_default('quitting_rpc_timeout', 10, 'AGENT')
         self.ep_dir = EP_DIR % _uuid()
         self.agent = self._initialize_agent()
-        # Mock EP manager methods
-        self.agent.ep_manager._write_endpoint_file = mock.Mock()
-        self.agent.ep_manager._write_vrf_file = mock.Mock()
-        self.agent.ep_manager._delete_endpoint_file = mock.Mock()
-        self.agent.ep_manager._delete_vrf_file = mock.Mock()
-        self.agent.ep_manager.snat_iptables = mock.Mock()
-        self.agent.ep_manager.snat_iptables.setup_snat_for_es = mock.Mock(
-            return_value = tuple([None, None]))
-        self.agent.ep_manager._release_int_fip = mock.Mock()
-
-        self.agent.opflex_networks = ['phys_net']
-        # Mock bridge
-        self.agent.bridge_manager.int_br = mock.Mock()
-        self.agent.bridge_manager.int_br.get_vif_port_set = mock.Mock(
-            return_value=set())
-        self.agent.of_rpc.get_gbp_details = mock.Mock()
-        self.agent.notify_worker.terminate()
+        self._mock_agent(self.agent)
         self.addCleanup(self._purge_endpoint_dir)
         self.addCleanup(self.agent.bridge_manager.int_br.reset_mock)
         self.addCleanup(self.agent.of_rpc.get_gbp_details)
@@ -122,6 +108,25 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             agent.tun_br = mock.Mock()
         agent.sg_agent = mock.Mock()
         return agent
+
+    def _mock_agent(self, agent):
+        # Mock EP manager methods
+        agent.ep_manager._write_endpoint_file = mock.Mock()
+        agent.ep_manager._write_vrf_file = mock.Mock()
+        agent.ep_manager._delete_endpoint_file = mock.Mock()
+        agent.ep_manager._delete_vrf_file = mock.Mock()
+        agent.ep_manager.snat_iptables = mock.Mock()
+        agent.ep_manager.snat_iptables.setup_snat_for_es = mock.Mock(
+            return_value = tuple([None, None]))
+        agent.ep_manager._release_int_fip = mock.Mock()
+
+        agent.opflex_networks = ['phys_net']
+        # Mock bridge
+        agent.bridge_manager.int_br = mock.Mock()
+        agent.bridge_manager.int_br.get_vif_port_set = mock.Mock(
+            return_value=set())
+        agent.of_rpc.get_gbp_details = mock.Mock()
+        agent.notify_worker.terminate()
 
     def test_port_unbound_snat_cleanup(self):
         self.agent.int_br = mock.Mock()
@@ -263,3 +268,34 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         port_details['admin_state_up'] = True
         self.agent.treat_devices_added_or_updated(['some_device'], False)
         self.assertTrue(self.agent.ep_manager._mapping_to_file.called)
+
+    def test_stale_endpoints(self):
+        self.agent.ep_manager._write_file(
+            'uuid1_AA', {}, self.agent.ep_manager.epg_mapping_file)
+        self.agent.ep_manager._write_file(
+            'uuid1_BB', {}, self.agent.ep_manager.epg_mapping_file)
+        self.agent.ep_manager._write_file(
+            'uuid1_CC', {}, self.agent.ep_manager.epg_mapping_file)
+        self.agent.ep_manager._write_file(
+            'uuid2_BB', {}, self.agent.ep_manager.epg_mapping_file)
+        self.agent.ep_manager._write_file(
+            'uuid2_BB', {}, self.agent.ep_manager.epg_mapping_file)
+        with contextlib.nested(
+                mock.patch.object(
+                    snat_iptables_manager.SnatIptablesManager,
+                    'cleanup_snat_all'),
+                mock.patch.object(
+                    endpoint_file_manager.EndpointFileManager,
+                    'undeclare_endpoint')):
+            port_stats = {'regular': {'added': 0,
+                                      'updated': 0,
+                                      'removed': 0},
+                          'ancillary': {'added': 0,
+                                        'removed': 0}}
+            agent = self._initialize_agent()
+            self._mock_agent(agent)
+            agent.bridge_manager.int_br.get_vif_port_set = mock.Mock(
+                return_value=set(['uuid1']))
+            agent._main_loop(set(), True, 1, port_stats, mock.Mock(), True)
+            agent.ep_manager.undeclare_endpoint.assert_called_once_with(
+                'uuid2')

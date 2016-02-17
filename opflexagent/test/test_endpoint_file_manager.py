@@ -19,6 +19,7 @@ sys.modules["apicapi"] = mock.Mock()
 sys.modules["pyinotify"] = mock.Mock()
 
 from opflexagent import gbp_ovs_agent
+from opflexagent import snat_iptables_manager
 from opflexagent.test import base
 from opflexagent.utils.ep_managers import endpoint_file_manager
 
@@ -38,13 +39,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
         cfg.CONF.set_default('quitting_rpc_timeout', 10, 'AGENT')
         self.ep_dir = EP_DIR % _uuid()
         self.manager = self._initialize_agent()
-        self.manager._write_endpoint_file = mock.Mock()
-        self.manager._write_vrf_file = mock.Mock()
-        self.manager._delete_endpoint_file = mock.Mock()
-        self.manager._delete_vrf_file = mock.Mock()
-        self.manager.snat_iptables = mock.Mock()
-        self.manager.snat_iptables.setup_snat_for_es = mock.Mock(
-            return_value = tuple([None, None]))
+        self._mock_agent(self.manager)
         self.addCleanup(self._purge_endpoint_dir)
 
     def _purge_endpoint_dir(self):
@@ -59,6 +54,15 @@ class TestEndpointFileManager(base.OpflexTestBase):
         agent = endpoint_file_manager.EndpointFileManager().initialize(
             'h1', mock.Mock(), kwargs)
         return agent
+
+    def _mock_agent(self, agent):
+        agent._write_endpoint_file = mock.Mock()
+        agent._write_vrf_file = mock.Mock()
+        agent._delete_endpoint_file = mock.Mock()
+        agent._delete_vrf_file = mock.Mock()
+        agent.snat_iptables = mock.Mock()
+        agent.snat_iptables.setup_snat_for_es = mock.Mock(
+            return_value = tuple([None, None]))
 
     def _port(self):
         port = mock.Mock()
@@ -535,3 +539,27 @@ class TestEndpointFileManager(base.OpflexTestBase):
         ls = os.listdir(self.ep_dir)
         self.assertEqual(set(['uuid1_AA.ep', 'uuid1_CC.ep', 'uuid2_BB.ep']),
                          set(ls))
+
+    def test_registered_endpoints(self):
+        # Init directory
+        self.manager._write_file('uuid1_AA', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid1_BB', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid1_CC', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid2_BB', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid2_BB', {}, self.manager.epg_mapping_file)
+        with mock.patch.object(snat_iptables_manager.SnatIptablesManager,
+                               'cleanup_snat_all'):
+            manager = self._initialize_agent()
+            self._mock_agent(manager)
+            self.assertEqual(set(['uuid1', 'uuid2']),
+                             manager.get_registered_endpoints())
+
+            manager.undeclare_endpoint('uuid1')
+            self.assertEqual(set(['uuid2']),
+                             manager.get_registered_endpoints())
+
+            mapping = self._get_gbp_details()
+            port = self._port()
+            manager.declare_endpoint(port, mapping)
+            self.assertEqual(set(['uuid2', port.vif_id]),
+                             manager.get_registered_endpoints())
