@@ -421,7 +421,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # Flush firewall rules
         self.sg_agent.remove_devices_filter(deleted_ports)
         # Process deleted ports
-        for port_id in port_info['removed']:
+        for port_id in port_info.get('removed', []):
             self.port_unbound(port_id)
 
     def rpc_loop(self, polling_manager):

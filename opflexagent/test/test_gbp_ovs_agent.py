@@ -299,3 +299,24 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             agent._main_loop(set(), True, 1, port_stats, mock.Mock(), True)
             agent.ep_manager.undeclare_endpoint.assert_called_once_with(
                 'uuid2')
+
+    def test_process_deleted_ports(self):
+        with mock.patch.object(
+                endpoint_file_manager.EndpointFileManager,
+                'undeclare_endpoint'):
+            port_info = {'current': set(['1', '2']),
+                         'removed': set(['3', '5'])}
+            self.agent.deleted_ports.add('3')
+            self.agent.deleted_ports.add('4')
+            self.agent.process_deleted_ports(port_info)
+            # 3, 4 and 5 are undeclared once
+            expected = [mock.call('3'), mock.call('4'), mock.call('5')]
+            self._check_call_list(
+                expected,
+                self.agent.ep_manager.undeclare_endpoint.call_args_list)
+
+            self.agent.ep_manager.undeclare_endpoint.reset_mock()
+            port_info = {'current': set(['1', '2'])}
+            self.agent.process_deleted_ports(port_info)
+            # Nothing to do
+            self.assertFalse(self.agent.ep_manager.undeclare_endpoint.called)
