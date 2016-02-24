@@ -18,6 +18,7 @@ sys.modules["apicapi"] = mock.Mock()
 sys.modules["pyinotify"] = mock.Mock()
 
 import contextlib
+from opflexagent import constants as ofcst
 from opflexagent import gbp_ovs_agent
 from opflexagent import snat_iptables_manager
 from opflexagent.test import base
@@ -320,3 +321,14 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             self.agent.process_deleted_ports(port_info)
             # Nothing to do
             self.assertFalse(self.agent.ep_manager.undeclare_endpoint.called)
+
+
+class TestGBPOpflexAgentDvs(TestGBPOpflexAgent):
+
+    def setUp(self):
+        cfg.CONF.set_override('hypervisor_type',
+                              ofcst.HYPERVISOR_VCENTER, 'OPFLEX')
+        super(TestGBPOpflexAgentDvs, self).setUp()
+
+    def test_hypervisor_type_dvs(self):
+        self.assertTrue(self.agent.hypervisor_type == ofcst.HYPERVISOR_VCENTER)

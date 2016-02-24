@@ -31,11 +31,11 @@ _uuid = uuidutils.generate_uuid
 EP_DIR = '.%s_endpoints/'
 
 
-class TestEndpointFileManager(base.OpflexTestBase):
+class TestEndpointFileManagerBase(base.OpflexTestBase):
 
     def setUp(self):
         cfg.CONF.register_opts(dhcp_config.DHCP_OPTS)
-        super(TestEndpointFileManager, self).setUp()
+        super(TestEndpointFileManagerBase, self).setUp()
         cfg.CONF.set_default('quitting_rpc_timeout', 10, 'AGENT')
         self.ep_dir = EP_DIR % _uuid()
         self.manager = self._initialize_agent()
@@ -64,17 +64,17 @@ class TestEndpointFileManager(base.OpflexTestBase):
         agent.snat_iptables.setup_snat_for_es = mock.Mock(
             return_value = tuple([None, None]))
 
-    def _port(self):
+    def _port(self, device_owner='compute:nova'):
         port = mock.Mock()
         port.vif_id = uuidutils.generate_uuid()
         port.net_uuid = 'net_uuid'
         port.fixed_ips = [{'subnet_id': 'id1', 'ip_address': '192.168.0.2'},
                           {'subnet_id': 'id2', 'ip_address': '192.168.1.2'}]
-        port.device_owner = 'compute:'
+        port.device_owner = device_owner
         port.port_name = 'name'
         return port
 
-    def test_port_bound(self):
+    def _setup_port_bound_state(self):
         mapping = self._get_gbp_details()
         self.manager.snat_iptables.setup_snat_for_es.return_value = tuple(
             ['foo-if', 'foo-mac'])
@@ -131,6 +131,97 @@ class TestEndpointFileManager(base.OpflexTestBase):
                         'promiscuous-mode': True,
                         'endpoint-group-name': 'profile_name|nat-epg-name',
                         'uuid': mock.ANY}
+        return mapping, port, port_id, ep_name, ep_file, snat_ep_file
+
+    def _setup_multiple_ep_files_state(self):
+        # Prepare AAP list
+        aaps = {'allowed_address_pairs': [
+            # Non active with MAC
+            {'ip_address': '192.169.0.1',
+             'mac_address': 'AA:AA'},
+            # Active with MAC
+            {'ip_address': '192.169.0.2',
+             'mac_address': 'BB:BB',
+             'active': True},
+            # Another address for this mac (BB:BB)
+            {'ip_address': '192.169.0.7',
+             'mac_address': 'BB:BB',
+             'active': True},
+            # Non active No MAC
+            {'ip_address': '192.169.0.3'},
+            # Active no MAC
+            {'ip_address': '192.169.0.4',
+             'active': True},
+            # Non active same MAC as main
+            {'ip_address': '192.169.0.5',
+             'mac_address': 'aa:bb:cc:00:11:22'},
+            # Active same MAC as main
+            {'ip_address': '192.169.0.6',
+             'mac_address': 'aa:bb:cc:00:11:22',
+             'active': True}]}
+        # Prepare extra details for the AAPs
+        extra_details = {'BB:BB': {'extra_ips': ['192.170.0.1',
+                                                 '192.170.0.2'],
+                                   'floating_ip': [
+                                       {'id': '171',
+                                        'floating_ip_address': '173.10.0.1',
+                                        'floating_network_id': 'ext_net',
+                                        'router_id': 'ext_rout',
+                                        'port_id': 'port_id',
+                                        'fixed_ip_address': '192.170.0.1',
+                                        'nat_epg_tenant': 'nat-epg-tenant',
+                                        'nat_epg_name': 'nat-epg-name'}],
+                                   'ip_mapping': [
+                                       {'external_segment_name': 'EXT-1',
+                                        'nat_epg_tenant': 'nat-epg-tenant',
+                                        'nat_epg_name': 'nat-epg-name'}]},
+                         # AA won't be here because not active
+                         'aa:bb:cc:00:11:22': {
+                             'extra_ips': ['192.180.0.1', '192.180.0.2'],
+                             'floating_ip': [
+                                 {'id': '181',
+                                  'floating_ip_address': '173.11.0.1',
+                                  'floating_network_id': 'ext_net',
+                                  'router_id': 'ext_rout',
+                                  'port_id': 'port_id',
+                                  'fixed_ip_address': '192.180.0.1',
+                                  'nat_epg_tenant': 'nat-epg-tenant',
+                                  'nat_epg_name': 'nat-epg-name'}],
+                             'ip_mapping': []}}
+        aaps['extra_details'] = extra_details
+        aaps['promiscuous_mode'] = True
+        mapping = self._get_gbp_details(**aaps)
+        # Add a floating IPs
+        mapping['floating_ip'].extend([
+            # For non active with MAC AA:AA
+            {'id': '3', 'floating_ip_address': '172.10.0.3',
+             'floating_network_id': 'ext_net',
+             'router_id': 'ext_rout', 'port_id': 'port_id',
+             'fixed_ip_address': '192.169.0.1',
+             'nat_epg_tenant': 'nat-epg-tenant',
+             'nat_epg_name': 'nat-epg-name'},
+            # For active with MAC BB:BB
+            {'id': '4', 'floating_ip_address': '172.10.0.4',
+             'floating_network_id': 'ext_net',
+             'router_id': 'ext_rout', 'port_id': 'port_id',
+             'fixed_ip_address': '192.169.0.2',
+             'nat_epg_tenant': 'nat-epg-tenant',
+             'nat_epg_name': 'nat-epg-name'},
+            # For non-active no MAC specified address
+            {'id': '5', 'floating_ip_address': '172.10.0.5',
+             'floating_network_id': 'ext_net',
+             'router_id': 'ext_rout', 'port_id': 'port_id',
+             'fixed_ip_address': '192.169.0.3',
+             'nat_epg_tenant': 'nat-epg-tenant',
+             'nat_epg_name': 'nat-epg-name'}])
+        return aaps, extra_details, mapping
+
+
+class TestEndpointFileManager(TestEndpointFileManagerBase):
+
+    def test_port_bound(self):
+        mapping, port, port_id, ep_name, ep_file, snat_ep_file = (
+            self._setup_port_bound_state())
         snat_ep_uuid = [x[0][1]['uuid']
             for x in self.manager._write_endpoint_file.call_args_list
             if x[0][0] == 'EXT-1']
@@ -237,87 +328,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
             None, 'foo-mac')
 
     def test_port_multiple_ep_files(self):
-        # Prepare AAP list
-        aaps = {'allowed_address_pairs': [
-            # Non active with MAC
-            {'ip_address': '192.169.0.1',
-             'mac_address': 'AA:AA'},
-            # Active with MAC
-            {'ip_address': '192.169.0.2',
-             'mac_address': 'BB:BB',
-             'active': True},
-            # Another address for this mac (BB:BB)
-            {'ip_address': '192.169.0.7',
-             'mac_address': 'BB:BB',
-             'active': True},
-            # Non active No MAC
-            {'ip_address': '192.169.0.3'},
-            # Active no MAC
-            {'ip_address': '192.169.0.4',
-             'active': True},
-            # Non active same MAC as main
-            {'ip_address': '192.169.0.5',
-             'mac_address': 'aa:bb:cc:00:11:22'},
-            # Active same MAC as main
-            {'ip_address': '192.169.0.6',
-             'mac_address': 'aa:bb:cc:00:11:22',
-             'active': True}]}
-        # Prepare extra details for the AAPs
-        extra_details = {'BB:BB': {'extra_ips': ['192.170.0.1',
-                                                 '192.170.0.2'],
-                                   'floating_ip': [
-                                       {'id': '171',
-                                        'floating_ip_address': '173.10.0.1',
-                                        'floating_network_id': 'ext_net',
-                                        'router_id': 'ext_rout',
-                                        'port_id': 'port_id',
-                                        'fixed_ip_address': '192.170.0.1',
-                                        'nat_epg_tenant': 'nat-epg-tenant',
-                                        'nat_epg_name': 'nat-epg-name'}],
-                                   'ip_mapping': [
-                                       {'external_segment_name': 'EXT-1',
-                                        'nat_epg_tenant': 'nat-epg-tenant',
-                                        'nat_epg_name': 'nat-epg-name'}]},
-                         # AA won't be here because not active
-                         'aa:bb:cc:00:11:22': {
-                             'extra_ips': ['192.180.0.1', '192.180.0.2'],
-                             'floating_ip': [
-                                 {'id': '181',
-                                  'floating_ip_address': '173.11.0.1',
-                                  'floating_network_id': 'ext_net',
-                                  'router_id': 'ext_rout',
-                                  'port_id': 'port_id',
-                                  'fixed_ip_address': '192.180.0.1',
-                                  'nat_epg_tenant': 'nat-epg-tenant',
-                                  'nat_epg_name': 'nat-epg-name'}],
-                             'ip_mapping': []}}
-        aaps['extra_details'] = extra_details
-        aaps['promiscuous_mode'] = True
-        mapping = self._get_gbp_details(**aaps)
-        # Add a floating IPs
-        mapping['floating_ip'].extend([
-            # For non active with MAC AA:AA
-            {'id': '3', 'floating_ip_address': '172.10.0.3',
-             'floating_network_id': 'ext_net',
-             'router_id': 'ext_rout', 'port_id': 'port_id',
-             'fixed_ip_address': '192.169.0.1',
-             'nat_epg_tenant': 'nat-epg-tenant',
-             'nat_epg_name': 'nat-epg-name'},
-            # For active with MAC BB:BB
-            {'id': '4', 'floating_ip_address': '172.10.0.4',
-             'floating_network_id': 'ext_net',
-             'router_id': 'ext_rout', 'port_id': 'port_id',
-             'fixed_ip_address': '192.169.0.2',
-             'nat_epg_tenant': 'nat-epg-tenant',
-             'nat_epg_name': 'nat-epg-name'},
-            # For non-active no MAC specified address
-            {'id': '5', 'floating_ip_address': '172.10.0.5',
-             'floating_network_id': 'ext_net',
-             'router_id': 'ext_rout', 'port_id': 'port_id',
-             'fixed_ip_address': '192.169.0.3',
-             'nat_epg_tenant': 'nat-epg-tenant',
-             'nat_epg_name': 'nat-epg-name'}])
-
+        aaps, extra_details, mapping = self._setup_multiple_ep_files_state()
         port = self._port()
         # Build expected calls.
         # 3 calls are expected, one for unique MAC (AA:AA, BB:BB and main)
@@ -563,3 +574,200 @@ class TestEndpointFileManager(base.OpflexTestBase):
             manager.declare_endpoint(port, mapping)
             self.assertEqual(set(['uuid2', port.vif_id]),
                              manager.get_registered_endpoints())
+
+
+class TestEndpointFileManagerDvs(TestEndpointFileManager):
+
+    def _initialize_agent(self):
+        cfg.CONF.set_override('epg_mapping_dir', self.ep_dir, 'OPFLEX')
+        kwargs = gbp_ovs_agent.create_agent_config_map(cfg.CONF)
+        agent = endpoint_file_manager.EndpointFileManagerDvs().initialize(
+            'h1', mock.Mock(), kwargs)
+        return agent
+
+    def _net_port(self, device_owner='compute:nova'):
+        return super(TestEndpointFileManagerDvs, self)._port(
+            device_owner='network:dhcp')
+
+    def test_port_bound_dvs(self):
+        mapping, port, port_id, ep_name, ep_file, snat_ep_file = (
+            self._setup_port_bound_state())
+        snat_ep_uuid = [x[0][1]['uuid']
+            for x in self.manager._write_endpoint_file.call_args_list
+            if x[0][0] == 'EXT-1']
+        self.assertTrue(self.manager._write_endpoint_file.call_args_list == [])
+        snat_ep_file['uuid'] = snat_ep_uuid[0] if snat_ep_uuid else None
+
+        self.manager.snat_iptables.setup_snat_for_es.assert_not_called()
+        self.manager._write_vrf_file.assert_not_called()
+
+        # Send same port info again
+        self.manager._write_vrf_file.reset_mock()
+        self.manager.snat_iptables.setup_snat_for_es.reset_mock()
+
+        self.manager.declare_endpoint(port, mapping)
+        self.manager._write_endpoint_file.assert_not_called()
+        self.assertFalse(self.manager._write_vrf_file.called)
+        self.assertFalse(self.manager.snat_iptables.setup_snat_for_es.called)
+
+        # Remove an extra-ip
+        self.manager._write_vrf_file.reset_mock()
+        mapping.update({'extra_ips': ['192.169.8.1', '192.169.8.253']})
+        ep_file["ip"].remove('192.169.8.254')
+        ep_file["ip-address-mapping"] = [x
+            for x in ep_file["ip-address-mapping"]
+                if x['mapped-ip'] != '192.169.8.254']
+
+        self.manager.declare_endpoint(port, mapping)
+        self.manager._write_endpoint_file.assert_not_called()
+        self.manager._release_int_fip.assert_not_called()
+
+        # Remove SNAT external segment
+        self.manager._write_vrf_file.reset_mock()
+        self.manager._release_int_fip.reset_mock()
+        mapping.update({'ip_mapping': []})
+
+        ep_file["ip-address-mapping"] = [x
+            for x in ep_file["ip-address-mapping"] if not x.get('next-hop-if')]
+        self.manager.declare_endpoint(port, mapping)
+        self.manager._write_endpoint_file.assert_not_called()
+        self.manager._release_int_fip.assert_not_called()
+
+        self.manager._write_vrf_file.reset_mock()
+        self.manager.snat_iptables.setup_snat_for_es.reset_mock()
+
+        # Bind another port for the same L3P, VRF file is not written
+        port = self._port()
+        self.manager.declare_endpoint(port, mapping)
+        self.assertFalse(self.manager._write_vrf_file.called)
+        self.assertFalse(self.manager.snat_iptables.setup_snat_for_es.called)
+        self.manager._write_vrf_file.reset_mock()
+
+        # Bind another port on a different L3P, new VRF file added
+        port = self._port()
+        mapping = self._get_gbp_details(l3_policy_id='newid')
+        self.manager.declare_endpoint(port, mapping)
+        self.manager._write_vrf_file.assert_not_called()
+        self.manager.snat_iptables.setup_snat_for_es.assert_not_called()
+        self.manager._write_vrf_file.reset_mock()
+        self.manager._write_endpoint_file.reset_mock()
+        self.manager.snat_iptables.setup_snat_for_es.reset_mock()
+
+        # Bind another port on a same L3P, but subnets changed.
+        # Also change the host SNAT IP
+        port = self._port()
+        mapping = self._get_gbp_details(
+            l3_policy_id='newid', vrf_subnets=['192.170.0.0/16'],
+            host_snat_ips=[{'external_segment_name': 'EXT-1',
+                            'host_snat_ip': '200.0.0.11',
+                            'gateway_ip': '200.0.0.2',
+                            'prefixlen': 8}])
+        snat_ep_file['ip'] = ['200.0.0.11']
+        self.manager.declare_endpoint(port, mapping)
+        self.manager._write_vrf_file.assert_not_called()
+        self.assertTrue(self.manager._write_endpoint_file.call_args_list == [])
+        self.manager.snat_iptables.setup_snat_for_es.assert_not_called()
+
+    def test_port_multiple_ep_files_dvs(self):
+        aaps, extra_details, mapping = self._setup_multiple_ep_files_state()
+        port = self._port()
+        expected_calls = []
+        self.manager.snat_iptables.setup_snat_for_es.return_value = tuple(
+            ['foo-if', 'foo-mac'])
+        self.manager._release_int_fip = mock.Mock()
+        with mock.patch.object(endpoint_file_manager.EndpointFileManager,
+                               '_delete_endpoint_files'):
+            self.manager.declare_endpoint(port, mapping)
+            self._check_call_list(
+                expected_calls,
+                self.manager._write_endpoint_file.call_args_list)
+            self.manager._delete_endpoint_files.assert_not_called()
+
+    def test_port_unbound_delete_vrf_file_dvs(self):
+        # Bind 2 ports on same VRF
+
+        # Port 1
+        mapping = self._get_gbp_details()
+        port_1 = self._port()
+
+        self.manager.declare_endpoint(port_1, mapping)
+
+        # Port 2
+        port_2 = self._port()
+        self.manager.declare_endpoint(port_2, mapping)
+
+        self.manager._delete_vrf_file.reset_mock()
+        self.manager.undeclare_endpoint(port_1.vif_id)
+        # VRF file not deleted
+        self.assertFalse(self.manager._delete_vrf_file.called)
+
+        self.manager._delete_vrf_file.reset_mock()
+        self.manager.undeclare_endpoint(port_2.vif_id)
+        # VRF file deleted
+        self.manager._delete_vrf_file.assert_not_called()
+
+        self.manager._write_vrf_file.reset_mock()
+        # At this point, creation of a new port on that VRF will recreate the
+        # file
+        port_3 = self._port()
+        self.manager.declare_endpoint(port_3, mapping)
+        self.manager._write_vrf_file.assert_not_called()
+
+    def test_registered_endpoints_dvs(self):
+        # Init directory
+        self.manager._write_file('uuid1_AA', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid1_BB', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid1_CC', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid2_BB', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid2_BB', {}, self.manager.epg_mapping_file)
+        with mock.patch.object(snat_iptables_manager.SnatIptablesManager,
+                               'cleanup_snat_all'):
+            manager = self._initialize_agent()
+            self._mock_agent(manager)
+            self.assertEqual(set(['uuid1', 'uuid2']),
+                             manager.get_registered_endpoints())
+
+            manager.undeclare_endpoint('uuid1')
+            self.assertEqual(set(['uuid2']),
+                             manager.get_registered_endpoints())
+
+            mapping = self._get_gbp_details()
+            port = self._port()
+            manager.declare_endpoint(port, mapping)
+            # declare won't take effect for compute:nova ports on DVS agent
+            self.assertNotEqual(set(['uuid2', port.vif_id]),
+                                manager.get_registered_endpoints())
+
+    def test_port_bound(self):
+        """Test port bound for non-compute ports"""
+        self._port_save = self._port
+
+        self._port = self._net_port
+        super(TestEndpointFileManagerDvs, self).test_port_bound()
+        self._port = self._port_save
+
+    def test_port_multiple_ep_files(self):
+        """Test multiple EP files for non-compute ports"""
+        self._port_save = self._port
+
+        self._port = self._net_port
+        super(TestEndpointFileManagerDvs, self).test_port_multiple_ep_files()
+        self._port = self._port_save
+
+    def test_port_unbound_delete_vrf_file(self):
+        """Test unbound deletefiles for non-compute ports"""
+        self._port_save = self._port
+
+        self._port = self._net_port
+        super(TestEndpointFileManagerDvs,
+            self).test_port_unbound_delete_vrf_file()
+        self._port = self._port_save
+
+    def test_registered_endpoints(self):
+        """Test unbound deletefiles for non-compute ports"""
+        self._port_save = self._port
+
+        self._port = self._net_port
+        super(TestEndpointFileManagerDvs,
+            self).test_registered_endpoints()
+        self._port = self._port_save

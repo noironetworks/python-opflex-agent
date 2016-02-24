@@ -670,3 +670,16 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             os.remove(file_format % port_id)
         except OSError as e:
             LOG.debug(e.message)
+
+
+class EndpointFileManagerDvs(EndpointFileManager):
+    """ File Based endpoint manager for DVS
+
+    File based interface between the GBP Opflex agent and the opflex OVS
+    agent. This version won't create endpoints if the port owner is
+    compute:nova, since those EPs can't be managed by our agent when
+    using a VMware DVS.
+    """
+    def declare_endpoint(self, port, mapping):
+        if port.device_owner != 'compute:nova':
+            super(EndpointFileManagerDvs, self).declare_endpoint(port, mapping)
