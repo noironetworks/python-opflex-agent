@@ -283,7 +283,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         else:
             if (mapping.get('enable_dhcp_optimization', False) and
                'subnets' in mapping):
-                    self._map_dhcp_info(fixed_ips, mapping['subnets'],
+                    self._map_dhcp_info(fixed_ips, mapping,
                                         mapping_dict)
         ips_aap = []
         for aap in mapping.get('allowed_address_pairs', []):
@@ -353,8 +353,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 nh.next_hop_iface = None
                 LOG.info(_("Add/update SNAT info: %s"), nh)
 
-    def _map_dhcp_info(self, fixed_ips, subnets, mapping_dict):
+    def _map_dhcp_info(self, fixed_ips, mapping, mapping_dict):
         """ Add DHCP specific info to the EP file."""
+        subnets = mapping['subnets']
         v4subnets = {k['id']: k for k in subnets
                      if k['ip_version'] == 4 and k['enable_dhcp']}
         v6subnets = {k['id']: k for k in subnets
@@ -379,11 +380,16 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                      'next-hop': hr['nexthop']})
             if 'dhcp_server_ips' in sn and sn['dhcp_server_ips']:
                 dhcp4['server-ip'] = sn['dhcp_server_ips'][0]
+            if 'interface_mtu' in mapping:
+                dhcp4['interface-mtu'] = mapping['interface_mtu']
             mapping_dict['dhcp4'] = dhcp4
             break
         if len(v6subnets) > 0 and v6subnets[0]['dns_nameservers']:
             mapping_dict['dhcp6'] = {
                 'dns-servers': v6subnets[0]['dns_nameservers']}
+            if 'interface_mtu' in mapping:
+                mapping_dict['dhcp6']['interface-mtu'] = mapping[
+                    'interface_mtu']
 
     def _load_es_next_hop_info(self, es_cfg):
         def parse_range(val):
