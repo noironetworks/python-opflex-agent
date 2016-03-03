@@ -30,7 +30,9 @@ class FlatTypeTest(testlib_api.SqlTestCase):
         config.cfg.CONF.set_override('opflex_networks', OPFLEX_NETWORKS,
                                      group='OPFLEX')
         self.driver = type_opflex.OpflexTypeDriver()
-        self.driver.physnet_mtus = []
+
+    def test_physnet_mtus_initiated(self):
+        self.assertIsNotNone(getattr(self.driver, 'physnet_mtus', None))
 
     def test_get_mtu(self):
         config.cfg.CONF.set_override('segment_mtu', 1475, group='ml2')
