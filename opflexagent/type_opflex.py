@@ -48,24 +48,35 @@ class OpflexTypeDriver(helpers.BaseTypeDriver):
     def validate_provider_segment(self, segment):
         physical_network = segment.get(api.PHYSICAL_NETWORK)
         if not physical_network:
-            msg = _("physical_network required for flat provider network")
+            msg = _("physical_network required for opflex provider network")
             raise exc.InvalidInput(error_message=msg)
 
         for key, value in segment.iteritems():
             if value and key not in [api.NETWORK_TYPE,
-                                     api.PHYSICAL_NETWORK]:
+                                     api.PHYSICAL_NETWORK,
+                                     api.MTU]:
                 msg = _("%s prohibited for opflex provider network") % key
                 raise exc.InvalidInput(error_message=msg)
 
     def reserve_provider_segment(self, session, segment):
         # No resources to reserve
+        segment[api.MTU] = self.get_mtu(segment[api.PHYSICAL_NETWORK])
         return segment
 
     def allocate_tenant_segment(self, session):
-        result = {api.NETWORK_TYPE: constants.TYPE_OPFLEX}
-        result[api.PHYSICAL_NETWORK] = self.default_opflex_network
-        return result
+        return {api.NETWORK_TYPE: constants.TYPE_OPFLEX,
+                api.PHYSICAL_NETWORK: self.default_opflex_network,
+                api.MTU: self.get_mtu(self.default_opflex_network)}
 
     def release_segment(self, session, segment):
         # No resources to release
         pass
+
+    def get_mtu(self, physical_network):
+        seg_mtu = super(OpflexTypeDriver, self).get_mtu()
+        mtu = []
+        if seg_mtu > 0:
+            mtu.append(seg_mtu)
+        if physical_network in self.physnet_mtus:
+            mtu.append(int(self.physnet_mtus[physical_network]))
+        return min(mtu) if mtu else 0
