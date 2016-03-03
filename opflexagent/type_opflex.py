@@ -35,6 +35,7 @@ class OpflexTypeDriver(helpers.BaseTypeDriver):
         LOG.info(_("ML2 OpflexTypeDriver initialization complete"))
         self.default_opflex_network = (cfg.CONF.ml2_type_opflex.
                                        default_opflex_network)
+        super(OpflexTypeDriver, self).__init__()
 
     def get_type(self):
         return constants.TYPE_OPFLEX
