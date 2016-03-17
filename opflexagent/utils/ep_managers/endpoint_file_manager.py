@@ -598,6 +598,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         return (nh.next_hop_iface, nh.next_hop_mac)
 
     def vrf_info_to_file(self, mapping, vif_id=None):
+        if not vif_id and not mapping['l3_policy_id'] in self.vrf_dict:
+            # VRF not owned
+            return
         if 'vrf_subnets' in mapping:
             vrf_info = {
                 'domain-policy-space': mapping['vrf_tenant'],
@@ -615,6 +618,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             if vif_id:
                 curr_vrf['vifs'].add(vif_id)
                 self.vif_to_vrf[vif_id] = mapping['l3_policy_id']
+        else:
+            self._delete_vrf_file(mapping['l3_policy_id'])
 
     def _create_host_endpoint_file(self, ipm, nh):
         ips = []

@@ -320,3 +320,35 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             self.agent.process_deleted_ports(port_info)
             # Nothing to do
             self.assertFalse(self.agent.ep_manager.undeclare_endpoint.called)
+
+    def test_process_vrf_update(self):
+        self.agent.ep_manager._delete_vrf_file = mock.Mock()
+        self.agent.of_rpc.get_vrf_details_list = mock.Mock(
+            return_value=[{'l3_policy_id': 'tenant-id',
+                           'vrf_tenant': 'tn-tenant',
+                           'vrf_name': 'ctx'}])
+        self.agent.process_vrf_update(set(['tenant_id']))
+        # not called because VRF is not owned
+        self.assertFalse(self.agent.ep_manager._delete_vrf_file.called)
+
+        # now create a port for this vrf
+        mapping = self._get_gbp_details(l3_policy_id='tenant-id')
+        self.agent.of_rpc.get_gbp_details.return_value = mapping
+
+        args = self._port_bound_args('opflex')
+        args['port'].gbp_details = mapping
+        self.agent.ep_manager._write_vrf_file = mock.Mock()
+        self.agent.port_bound(**args)
+        self.agent.ep_manager._write_vrf_file.assert_called_once_with(
+            'tenant-id', {
+                "domain-policy-space": mapping['vrf_tenant'],
+                "domain-name": mapping['vrf_name'],
+                "internal-subnets": sorted(['192.168.0.0/16',
+                                            '192.169.0.0/16',
+                                            '169.254.0.0/16'])})
+        self.assertFalse(self.agent.ep_manager._delete_vrf_file.called)
+
+        # Now simulate a deletion
+        self.agent.process_vrf_update(set(['tenant_id']))
+        self.agent.ep_manager._delete_vrf_file.assert_called_once_with(
+            'tenant-id')
