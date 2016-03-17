@@ -269,7 +269,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         if port_info.get('vrf_updated'):
             self.process_vrf_update(port_info['vrf_updated'])
         # If one of the above operations fails => resync with plugin
-        return (resync_a | resync_b)
+        return resync_a | resync_b
 
     def treat_devices_removed(self, devices):
         resync = False
