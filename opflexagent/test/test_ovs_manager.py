@@ -16,7 +16,6 @@ import mock
 sys.modules["apicapi"] = mock.Mock()
 sys.modules["pyinotify"] = mock.Mock()
 
-from opflexagent import gbp_ovs_agent
 from opflexagent.utils.bridge_managers import ovs_manager
 
 from neutron.agent.dhcp import config as dhcp_config
@@ -48,9 +47,8 @@ class TestOVSManager(base.BaseTestCase):
                 msg='There are more calls than expected: %s' % str(observed))
 
     def _initialize_agent(self):
-        kwargs = gbp_ovs_agent.create_agent_config_map(cfg.CONF)
         mock.patch('neutron.agent.common.ovs_lib.OVSBridge').start()
-        agent = ovs_manager.OvsManager().initialize('h1', kwargs)
+        agent = ovs_manager.OvsManager().initialize('h1', cfg.CONF.OVS)
         return agent
 
     def test_bridge_status(self):

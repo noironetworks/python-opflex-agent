@@ -23,6 +23,7 @@ from neutron.agent import securitygroups_rpc as sg_rpc
 from neutron.common import config as common_config
 from neutron.common import constants as n_constants
 from neutron.common import eventlet_utils
+from neutron.common import exceptions
 from neutron.common import topics
 from neutron.common import utils as q_utils
 from neutron.i18n import _LE, _LI, _LW
@@ -51,6 +52,12 @@ class GBPOvsPluginApi(rpc.GBPServerRpcApiMixin):
     pass
 
 
+# TODO(bose) Remove when we switch to using RPC method
+# get_devices_details_list_and_failed_devices
+class DeviceListRetrievalError(exceptions.NeutronException):
+    message = _("Unable to retrieve port details for devices: %(devices)s ")
+
+
 class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                      rpc.GbpNeutronAgentRpcCallbackMixin):
     """Group Based Policy Opflex Agent.
@@ -72,19 +79,26 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.root_helper = root_helper
         self.notify_worker = opflex_notify.worker()
         self.host = cfg.CONF.host
+        agent_conf = cfg.CONF.AGENT
+        ovs_conf = cfg.CONF.OVS
+
+        try:
+            bridge_mappings = q_utils.parse_mappings(ovs_conf.bridge_mappings)
+        except ValueError as e:
+            raise ValueError(_("Parsing bridge_mappings failed: %s.") % e)
 
         self.agent_state = {
             'binary': 'neutron-opflex-agent',
             'host': self.host,
             'topic': n_constants.L2_AGENT_TOPIC,
-            'configurations': {'bridge_mappings': kwargs['bridge_mappings'],
+            'configurations': {'bridge_mappings': bridge_mappings,
                                'opflex_networks': self.opflex_networks},
             'agent_type': ofcst.AGENT_TYPE_OPFLEX_OVS,
             'start_flag': True}
 
         # Initialize OVS Manager
-        self.bridge_manager = ovs_manager.OvsManager().initialize(self.host,
-                                                                  kwargs)
+        self.bridge_manager = ovs_manager.OvsManager().initialize(
+            self.host, ovs_conf)
         # Stores port update notifications for processing in main rpc loop
         self.updated_ports = set()
         # Stores port delete notifications
@@ -92,12 +106,12 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # Stores VRF update notifications
         self.updated_vrf = set()
         self.setup_rpc()
-        self.local_ip = kwargs['local_ip']
-        self.polling_interval = kwargs['polling_interval']
-        self.minimize_polling = kwargs['minimize_polling']
-        self.ovsdb_monitor_respawn_interval = (kwargs.get(
-            'ovsdb_monitor_respawn_interval') or
-             constants.DEFAULT_OVSDBMON_RESPAWN)
+        self.local_ip = ovs_conf.local_ip
+        self.polling_interval = agent_conf.polling_interval
+        self.minimize_polling = agent_conf.minimize_polling
+        self.ovsdb_monitor_respawn_interval = (
+            agent_conf.ovsdb_monitor_respawn_interval or
+            constants.DEFAULT_OVSDBMON_RESPAWN)
         self.setup_report()
         self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
 
@@ -107,7 +121,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # The initialization is complete; we can start receiving messages
         self.connection.consume_in_threads()
 
-        self.quitting_rpc_timeout = kwargs['quitting_rpc_timeout']
+        self.quitting_rpc_timeout = agent_conf.quitting_rpc_timeout
         # Initialize the Endpoint Manager.
         # TODO(ivar): make this component pluggable.
         self.ep_manager = ep_manager.EndpointFileManager().initialize(
@@ -253,7 +267,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 # have been actually processed.
                 port_info['current'] = (port_info['current'] -
                                         set(skipped_devices))
-            except ovs.DeviceListRetrievalError:
+            except DeviceListRetrievalError:
                 # Need to resync as there was an error with server
                 # communication.
                 LOG.exception(_LE("process_network_ports - iteration:%d - "
@@ -304,6 +318,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
         skipped_devices = []
         try:
+            # TODO(bose) Use get_devices_details_list_and_failed_devices()
             devices_details_list = self.plugin_rpc.get_devices_details_list(
                 self.context,
                 devices,
@@ -315,7 +330,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             gbp_details_per_device = {x['device']: x for x in
                                       devices_gbp_details_list if x}
         except Exception as e:
-            raise ovs.DeviceListRetrievalError(devices=devices, error=e)
+            raise DeviceListRetrievalError(devices=devices, error=e)
         for details in devices_details_list:
             device = details['device']
             LOG.debug("Processing port: %s", device)
@@ -547,7 +562,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
 
 def create_agent_config_map(conf):
-    agent_config = ovs.create_agent_config_map(conf)
+    agent_config = {}
     agent_config['epg_mapping_dir'] = conf.OPFLEX.epg_mapping_dir
     agent_config['opflex_networks'] = conf.OPFLEX.opflex_networks
     agent_config['internal_floating_ip_pool'] = (
