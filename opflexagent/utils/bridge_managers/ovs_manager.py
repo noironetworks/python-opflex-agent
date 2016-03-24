@@ -25,9 +25,9 @@ DEAD_VLAN_TAG = n_constants.MAX_VLAN_TAG + 1
 class OvsManager(bridge_manager_base.BridgeManagerBase):
     """ Bridge Manager for OpenVSwitch."""
 
-    def initialize(self, host, config):
+    def initialize(self, host, ovs_config):
         self.int_br_device_count = 0
-        self.int_br = ovs_lib.OVSBridge(config['integ_br'])
+        self.int_br = ovs_lib.OVSBridge(ovs_config.integration_bridge)
         self.setup_integration_bridge()
         return self
 
