@@ -1,6 +1,12 @@
-neutron-opflex-agent (@VERSION@-@REVISION@) trusty; urgency=low
+neutron-opflex-agent (2:@VERSION@-@REVISION@) trusty; urgency=low
 
-  * [Placeholder]
+  * Update to Mitaka
+
+ -- Amit Bose <bose@noironetworks.com>  Tue, 17 May 2016 17:48:31 +0000
+
+neutron-opflex-agent (2015.2.0-1) trusty; urgency=low
+
+  * Update to Liberty
 
  -- Amit Bose <bose@noironetworks.com>  Wed, 11 Feb 2016 17:21:44 +0000
 
