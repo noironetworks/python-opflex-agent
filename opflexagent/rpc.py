@@ -88,12 +88,9 @@ class GBPServerRpcApiMixin(object):
     @log.log_method_call
     def ip_address_owner_update(self, context, agent_id, ip_owner_info,
                                 host=None):
-        self.fanout_cast(context,
-                         self.make_msg('ip_address_owner_update',
-                                       agent_id=agent_id,
-                                       ip_owner_info=ip_owner_info,
-                                       host=host),
-                         version=self.GBP_RPC_VERSION)
+        cctxt = self.client.prepare(fanout=True)
+        cctxt.cast(context, 'ip_address_owner_update', agent_id=agent_id,
+                   ip_owner_info=ip_owner_info, host=host)
 
 
 class GBPServerRpcCallback(object):
