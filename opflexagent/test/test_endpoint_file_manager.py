@@ -600,3 +600,43 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.assertIsNotNone(ep_file)
         self.assertTrue('dhcp4' in ep_file)
         self.assertEqual(ep_file['dhcp4']['interface-mtu'], 1800)
+
+    def _test_snat_next_hop_info(self, es_name, mapping_info, expected):
+        mapping = self._get_gbp_details()
+        for es in mapping['ip_mapping']:
+            if es['external_segment_name'] == es_name:
+                es.update(mapping_info)
+        self.manager._write_endpoint_file.reset_mock()
+        port = self._port()
+        self.manager.declare_endpoint(port, mapping)
+
+        snat_ep_file = [c[0][1]
+            for c in self.manager._write_endpoint_file.call_args_list
+            if c[0][0] == es_name]
+        self.assertEqual(1, len(snat_ep_file))
+        snat_ep_file = snat_ep_file[0]
+
+        for k, v in expected.iteritems():
+            self.assertEqual(v, snat_ep_file[k])
+
+        self.manager.undeclare_endpoint(port.vif_id)
+
+    def test_snat_next_hop_epg(self):
+        self.manager.snat_iptables.setup_snat_for_es.return_value = tuple(
+            ['foo-if', 'foo-mac'])
+        self.manager._release_int_fip = mock.Mock()
+
+        self._test_snat_next_hop_info('EXT-1',
+            {'next_hop_ep_epg': 'foo'},
+            {'policy-space-name': 'nat-epg-tenant',
+             'endpoint-group-name': 'profile_name|foo'})
+
+        self._test_snat_next_hop_info('EXT-1',
+            {'next_hop_ep_tenant': 'other'},
+            {'policy-space-name': 'other',
+             'endpoint-group-name': 'profile_name|nat-epg-name'})
+
+        self._test_snat_next_hop_info('EXT-1',
+            {'next_hop_ep_epg': 'foo', 'next_hop_ep_app_profile': 'lab'},
+            {'policy-space-name': 'nat-epg-tenant',
+             'endpoint-group-name': 'lab|foo'})
