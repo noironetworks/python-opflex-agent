@@ -127,7 +127,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
         snat_ep_file = {'mac': 'foo-mac', 'interface-name': 'foo-if',
                         'ip': ['200.0.0.10'],
                         'policy-space-name': 'nat-epg-tenant',
-                        'attributes': mock.ANY,
+                        'attributes': {'vm-name': 'snat|h1|EXT-1'},
                         'promiscuous-mode': True,
                         'endpoint-group-name': 'profile_name|nat-epg-name',
                         'uuid': mock.ANY}

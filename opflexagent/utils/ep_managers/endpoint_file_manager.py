@@ -635,8 +635,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             "attributes": {
                 "vm-name": (
                     "snat|" +
-                    self.host + "|" + ipm["nat_epg_tenant"] + "|" +
-                    ipm["nat_epg_name"]
+                    self.host + "|" + ipm["external_segment_name"]
                 )
             },
             "policy-space-name": (ipm.get('next_hop_ep_tenant') or
