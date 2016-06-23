@@ -813,3 +813,44 @@ class TestGbpOvsAgent(base.BaseTestCase):
         port_details['admin_state_up'] = True
         self.agent.treat_devices_added_or_updated(['some_device'], False)
         self.assertTrue(self.agent.mapping_to_file.called)
+
+    def _test_snat_next_hop_info(self, es_name, mapping_info, expected):
+        mapping = self._get_gbp_details()
+        for es in mapping['ip_mapping']:
+            if es['external_segment_name'] == es_name:
+                es.update(mapping_info)
+        self.agent._write_endpoint_file.reset_mock()
+        args = self._port_bound_args('opflex')
+        args['port'].gbp_details = mapping
+        self.agent.port_bound(**args)
+
+        snat_ep_file = [c[0][1]
+            for c in self.agent._write_endpoint_file.call_args_list
+            if c[0][0] == es_name]
+        self.assertEqual(1, len(snat_ep_file))
+        snat_ep_file = snat_ep_file[0]
+
+        for k, v in expected.iteritems():
+            self.assertEqual(v, snat_ep_file[k])
+
+        self.agent.port_unbound(args['port'].vif_id)
+
+    def test_snat_next_hop_epg(self):
+        self.agent.snat_iptables.setup_snat_for_es.return_value = tuple(
+            ['foo-if', 'foo-mac'])
+        self.agent._release_int_fip = mock.Mock()
+
+        self._test_snat_next_hop_info('EXT-1',
+            {'next_hop_ep_epg': 'foo'},
+            {'policy-space-name': 'nat-epg-tenant',
+             'endpoint-group-name': 'profile_name|foo'})
+
+        self._test_snat_next_hop_info('EXT-1',
+            {'next_hop_ep_tenant': 'other'},
+            {'policy-space-name': 'other',
+             'endpoint-group-name': 'profile_name|nat-epg-name'})
+
+        self._test_snat_next_hop_info('EXT-1',
+            {'next_hop_ep_epg': 'foo', 'next_hop_ep_app_profile': 'lab'},
+            {'policy-space-name': 'nat-epg-tenant',
+             'endpoint-group-name': 'lab|foo'})

@@ -679,10 +679,15 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 not ipm.get('nat_epg_name')):
                 continue
             es = ipm['external_segment_name']
-            epg = (ipm.get('nat_epg_app_profile',
-                           gbp_details['app_profile_name']) + "|" +
-                   ipm['nat_epg_name'])
+            nat_app_prof = ipm.get('nat_epg_app_profile',
+                                   gbp_details['app_profile_name'])
+            epg = nat_app_prof + "|" + ipm['nat_epg_name']
             ipm['nat_epg_name'] = epg
+            if ipm.get('next_hop_ep_epg'):
+                nh_epg = (ipm.get('next_hop_ep_app_profile', nat_app_prof) +
+                          "|" + ipm['next_hop_ep_epg'])
+                ipm['next_hop_ep_epg'] = nh_epg
+
             next_hop_if, next_hop_mac = self._get_next_hop_info_for_es(ipm)
             if not next_hop_if or not next_hop_mac:
                 continue
@@ -809,12 +814,13 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 "vm-name": (
                     "snat|" +
                     cfg.CONF.host + "|" +
-                    ipm["nat_epg_tenant"] + "|" +
-                    ipm["nat_epg_name"]
+                    ipm["external_segment_name"]
                 )
             },
-            "policy-space-name": ipm['nat_epg_tenant'],
-            "endpoint-group-name": ipm['nat_epg_name'],
+            "policy-space-name": (ipm.get('next_hop_ep_tenant') or
+                                  ipm['nat_epg_tenant']),
+            "endpoint-group-name": (ipm.get('next_hop_ep_epg') or
+                                    ipm['nat_epg_name']),
             "interface-name": nh.next_hop_iface,
             "ip": [str(x) for x in ips],
             "mac": nh.next_hop_mac,
