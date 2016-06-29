@@ -139,8 +139,13 @@ class SnatIptablesManager(object):
         next_hop_if = next_hop_if or self._get_hash_for_es(es_name)
         self._cleanup(next_hop_if, next_hop_if)
 
-    def cleanup_snat_all(self):
-        ports = self.int_br.get_port_name_list()
-        ports = filter(lambda x: x.startswith(self.IFACE_PREFIX), ports)
+    def cleanup_snat_all(self, exclude_es=[]):
+        exclude_ports = set([self._get_hash_for_es(e) for e in exclude_es])
+        ports = [p for p in self.int_br.get_port_name_list()
+                 if p.startswith(self.IFACE_PREFIX) and p not in exclude_ports]
         for ifn in ports:
             self._cleanup(ifn, ifn)
+
+    def check_if_exists(self, es_name):
+        ns_name = self._get_hash_for_es(es_name)
+        return ip_lib.IPWrapper().netns.exists(ns_name)

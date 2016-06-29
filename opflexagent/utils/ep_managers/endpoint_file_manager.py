@@ -68,14 +68,10 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
     def initialize(self, host, bridge_manager, config):
         LOG.info(_LI("Initializing the Endpoint File Manager. \n %s"), config)
-        separator = (config['epg_mapping_dir'][-1] if
-                     config['epg_mapping_dir'] else '')
-        self.epg_mapping_file = (config['epg_mapping_dir'] +
-                                 ('/' if separator != '/' else '') +
-                                 FILE_NAME_FORMAT)
-        self.vrf_mapping_file = (config['epg_mapping_dir'] +
-                                 ('/' if separator != '/' else '') +
-                                 VRF_FILE_NAME_FORMAT)
+        self.epg_mapping_file = os.path.join(config['epg_mapping_dir'],
+                                             FILE_NAME_FORMAT)
+        self.vrf_mapping_file = os.path.join(config['epg_mapping_dir'],
+                                             VRF_FILE_NAME_FORMAT)
         self.file_formats = [self.epg_mapping_file, self.vrf_mapping_file]
         self.dhcp_domain = config['dhcp_domain']
         self.es_port_dict = {}
@@ -211,8 +207,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         removed
         """
         created = False
-        for file_format in self.file_formats:
-            directory = os.path.dirname(file_format)
+        snat_excl = []
+        dirs = set([os.path.dirname(f) for f in self.file_formats])
+        for directory in dirs:
             if not os.path.exists(directory):
                 created = True
                 os.makedirs(directory)
@@ -220,13 +217,20 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             # Calculate registered endpoints
             for f in os.listdir(directory):
                 if f.endswith('.' + FILE_EXTENSION):
-                    try:
-                        port_id = f.split('_')[0]
-                        self._registered_endpoints.add(port_id)
-                    except IndexError as e:
-                        LOG.debug(e.message)
+                    filename = f[:-len(FILE_EXTENSION) - 1]
+                    if '_' in f:
+                        self._registered_endpoints.add(f.split('_')[0])
+                    elif self.snat_iptables.check_if_exists(filename):
+                        # check if EP file is for SNAT EP. If so mark it for
+                        # exclusion from clean-up; also don't register the EP
+                        # file, otherwise it will be removed as stale
+                        snat_excl.append(filename)
+                    else:
+                        # 'register' unknown EP file so that it will removed
+                        # as stale
+                        self._registered_endpoints.add(f)
         if not created:
-            self.snat_iptables.cleanup_snat_all()
+            self.snat_iptables.cleanup_snat_all(exclude_es=snat_excl)
 
     def _mapping_cleanup(self, vif_id, cleanup_vrf=True, mac_exceptions=None):
         mac_exceptions = mac_exceptions or set()

@@ -564,6 +564,24 @@ class TestEndpointFileManager(base.OpflexTestBase):
             self.assertEqual(set(['uuid2', port.vif_id]),
                              manager.get_registered_endpoints())
 
+    def test_existing_snat_endpoints(self):
+        # Init directory
+        self.manager._write_file('uuid1_AA', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('EXT-1', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('EXT-2', {}, self.manager.epg_mapping_file)
+
+        def dummy_check(self, es):
+            return True if es == 'EXT-1' else False
+
+        with mock.patch.multiple(snat_iptables_manager.SnatIptablesManager,
+                                 cleanup_snat_all=mock.DEFAULT,
+                                 check_if_exists=dummy_check):
+            manager = self._initialize_agent()
+            self.assertEqual(set(['uuid1', 'EXT-2.ep']),
+                             manager.get_registered_endpoints())
+            manager.snat_iptables.cleanup_snat_all.assert_called_once_with(
+                exclude_es=['EXT-1'])
+
     def test_interface_mtu(self):
         mapping = self._get_gbp_details(enable_dhcp_optimization=False,
                                         interface_mtu=0)
