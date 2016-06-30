@@ -50,7 +50,6 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self._mock_agent(self.agent)
         self.addCleanup(self._purge_endpoint_dir)
         self.addCleanup(self.agent.bridge_manager.int_br.reset_mock)
-        self.addCleanup(self.agent.of_rpc.get_gbp_details)
 
     def _port_bound_args(self, net_type='net_type'):
         port = mock.Mock()
@@ -63,8 +62,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                                'ip_address': '192.168.0.2'},
                               {'subnet_id': 'id2',
                                'ip_address': '192.168.1.2'}],
-                'device_owner': 'compute:',
-                'ovs_restarted': True}
+                'device_owner': 'compute:'}
 
     def _purge_endpoint_dir(self):
         try:
@@ -157,7 +155,6 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
     def test_port_bound_no_mapping(self):
         self.agent.int_br = mock.Mock()
-        self.agent.of_rpc.get_gbp_details.return_value = None
         args = self._port_bound_args('opflex')
         args['port'].gbp_details = None
         self.agent.port_bound(**args)
@@ -183,7 +180,6 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         fake_sub = {'tenant_id': 'tenant-id', 'id': 'someid'}
 
         mapping = self._get_gbp_details(l3_policy_id='tenant-id')
-        self.agent.of_rpc.get_gbp_details.return_value = mapping
         self.agent.of_rpc.get_vrf_details_list = mock.Mock(
             return_value=[{'l3_policy_id': 'tenant-id',
                            'vrf_tenant': mapping['vrf_tenant'],
@@ -212,36 +208,27 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                                             '169.254.0.0/16'])})
 
     def test_dead_port(self):
-        self.agent.of_rpc.get_gbp_details_list = mock.Mock(
-            return_value=[{'device': 'some_device'}])
-        self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
-            return_value=[{'device': 'some_device', 'port_id': 'portid'}])
         port = mock.Mock(ofport=1)
         self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
             return_value=port)
 
         self.agent.bridge_manager.port_dead = mock.Mock()
-        self.agent.treat_devices_added_or_updated(['some_device'], True)
+        self.agent.treat_devices_added_or_updated({'device': 'some_device'})
         self.agent.bridge_manager.port_dead.assert_called_once_with(port)
 
     def test_missing_port(self):
-        self.agent.of_rpc.get_gbp_details_list = mock.Mock(
-            return_value=[{'device': 'some_device'}])
-        self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
-            return_value=[{'device': 'some_device', 'port_id': 'portid'}])
         self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
             return_value=None)
         with mock.patch.object(gbp_ovs_agent.ep_manager.EndpointFileManager,
                                'undeclare_endpoint'):
-            self.agent.treat_devices_added_or_updated(['some_device'], True)
+            self.agent.treat_devices_added_or_updated(
+                {'device': 'some_device'})
             self.agent.ep_manager.undeclare_endpoint.assert_called_once_with(
                 'some_device')
 
     def test_admin_disabled_port(self):
         # Set port's admin_state_up to False => mapping file should be removed
         mapping = self._get_gbp_details(device='some_device')
-        self.agent.of_rpc.get_gbp_details_list = mock.Mock(
-            return_value=[mapping])
         port_details = {'device': 'some_device',
                         'admin_state_up': False,
                         'port_id': mapping['port_id'],
@@ -251,8 +238,6 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                         'segmentation_id': '',
                         'fixed_ips': [],
                         'device_owner': 'some-vm'}
-        self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
-            return_value=[port_details])
         self.agent.plugin_rpc.update_device_up = mock.Mock()
         self.agent.plugin_rpc.update_device_down = mock.Mock()
         port = mock.Mock(ofport=1, vif_id=mapping['port_id'])
@@ -261,12 +246,16 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.ep_manager._mapping_cleanup = mock.Mock()
         self.agent.ep_manager._mapping_to_file = mock.Mock()
 
-        self.agent.treat_devices_added_or_updated(['some_device'], False)
+        self.agent.treat_devices_added_or_updated(
+            {'device': 'some_device', 'neutron_details': port_details,
+             'gbp_details': mapping, 'port_id': 'port_id'})
         self.agent.ep_manager._mapping_cleanup.assert_called_once_with(
             mapping['port_id'])
 
         port_details['admin_state_up'] = True
-        self.agent.treat_devices_added_or_updated(['some_device'], False)
+        self.agent.treat_devices_added_or_updated(
+            {'device': 'some_device', 'neutron_details': port_details,
+             'gbp_details': mapping, 'port_id': 'port_id'})
         self.assertTrue(self.agent.ep_manager._mapping_to_file.called)
 
     def test_stale_endpoints(self):
