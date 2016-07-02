@@ -158,7 +158,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             mapping_copy['fixed_ips'] = []
             mapping_copy['subnets'] = []
             mapping_copy['enable_dhcp_optimization'] = False
-            mapping_copy['enable_metadata_optimization'] = False
+            mapping_copy['enable_metadata_optimization'] = True
             mapping_copy['promiscuous_mode'] = False
             # Map to file based on the AAP with a MAC address
             for mac, aaps in mac_aap_map.iteritems():
