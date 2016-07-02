@@ -311,6 +311,7 @@ class EpWatcher(FileWatcher):
     def process(self, files):
         LOG.debug("EP files: %s" % files)
 
+        curr_metadata_optimization = True
         curr_svc = read_jsonfile(self.svcfile)
         ip_pool = AddressPool(SVC_IP_BASE, SVC_IP_SIZE)
         for domain_uuid in curr_svc:
@@ -329,6 +330,13 @@ class EpWatcher(FileWatcher):
             filename = "%s/%s" % (epfiledir, filename)
             ep = read_jsonfile(filename)
             if ep:
+                metadata_optimization = ep.get(
+                    'neutron-metadata-optimization',
+                    curr_metadata_optimization)
+                if metadata_optimization is False:
+                    # as it is a global property, False wins
+                    curr_metadata_optimization = False
+
                 domain_name = ep.get('domain-name')
                 domain_tenant = ep.get('domain-policy-space')
                 if domain_name is None or domain_tenant is None:
@@ -366,6 +374,10 @@ class EpWatcher(FileWatcher):
 
         if curr_svc:
             updated = True
+
+        if curr_metadata_optimization is False:
+            updated = True
+            new_svc = {}
 
         if updated:
             write_jsonfile(self.svcfile, new_svc)
