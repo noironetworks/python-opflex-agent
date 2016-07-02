@@ -82,8 +82,10 @@ class OpflexTestBase(base.BaseTestCase):
                                       'gateway_ip': '200.0.0.1',
                                       'prefixlen': 8}],
                    'owned_addresses': ['192.168.0.2'],
-                   'attestation': [{'name': 'some_name',
-                                    'validator': 'base64string', 'mac': 'mac'}],
+                   'attestation': [{
+                       'name': 'some_name',
+                       'validator': 'base64string', 'mac': 'mac',
+                   }],
                    'enable_metadata_optimization': True,
                    }
         pattern.update(**kwargs)
