@@ -93,6 +93,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
                    "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
                    "attributes": {'vm-name': 'somename'},
                    "neutron-network": port.net_uuid,
+                   "neutron-metadata-optimization": True,
                    "domain-policy-space": 'apic_tenant',
                    "domain-name": 'name_of_l3p',
                    "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
@@ -334,6 +335,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
                     "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
                     "attributes": {'vm-name': 'somename'},
                     "neutron-network": "net_uuid",
+                    "neutron-metadata-optimization": True,
                     "domain-policy-space": 'apic_tenant',
                     "domain-name": 'name_of_l3p',
                     # Also active AAPs are set
@@ -413,6 +415,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
                     "uuid": port.vif_id + '|BB-BB',
                     "attributes": {'vm-name': 'somename'},
                     "neutron-network": "net_uuid",
+                    "neutron-metadata-optimization": True,
                     "domain-policy-space": 'apic_tenant',
                     "domain-name": 'name_of_l3p',
                     # Main IP address based on active AAP
@@ -454,6 +457,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
                     "uuid": port.vif_id + '|AA-AA',
                     "attributes": {'vm-name': 'somename'},
                     "neutron-network": "net_uuid",
+                    "neutron-metadata-optimization": True,
                     "domain-policy-space": 'apic_tenant',
                     "domain-name": 'name_of_l3p',
                     # No main IP address
