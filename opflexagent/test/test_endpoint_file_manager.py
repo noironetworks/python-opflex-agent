@@ -492,7 +492,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
         # Bind 2 ports on same VRF
 
         # Port 1
-        mapping = self._get_gbp_details()
+        mapping = self._get_gbp_details(enable_metadata_optimization=False)
         port_1 = self._port()
 
         self.manager.declare_endpoint(port_1, mapping)
