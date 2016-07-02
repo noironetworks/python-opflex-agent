@@ -272,7 +272,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             "promiscuous-mode": mapping.get('promiscuous_mode') or False,
             "uuid": '%s|%s' % (port.vif_id, mac.replace(':', '-')),
             'neutron-network': port.net_uuid,
-            'neutron-metadata-optimization': mapping['enable_metadata_optimization'],
+            'neutron-metadata-optimization':
+                mapping['enable_metadata_optimization'],
         }
 
         ips = [x['ip_address'] for x in fixed_ips]
