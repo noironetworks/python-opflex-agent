@@ -11,8 +11,10 @@
 #    under the License.
 
 import copy
+import hashlib
 import netaddr
 import os
+import uuid
 
 from neutron.common import constants as n_constants
 from neutron.i18n import _LI
@@ -34,7 +36,7 @@ VRF_FILE_NAME_FORMAT = "%s." + VRF_FILE_EXTENSION
 
 class ExtSegNextHopInfo(object):
 
-    def __init__(self, es_name):
+    def __init__(self, es_name, host):
         self.es_name = es_name
         self.ip_start = None
         self.ip_end = None
@@ -45,7 +47,8 @@ class ExtSegNextHopInfo(object):
         self.next_hop_iface = None
         self.next_hop_mac = None
         self.from_config = False
-        self.uuid = uuidutils.generate_uuid()
+        self.uuid = str(
+            uuid.UUID(hex=hashlib.md5(es_name + host).hexdigest()))
 
     def __str__(self):
         return ("%s: ipv4 (%s-%s,%s), ipv6 (%s-%s,%s), if %s, mac %s, (%s)" %
@@ -77,6 +80,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         self.es_port_dict = {}
         self.vrf_dict = {}
         self.vif_to_vrf = {}
+        self.host = host
         self._load_es_next_hop_info(config['external_segment'])
         self.int_fip_alloc = {4: {}, 6: {}}
         self.int_fip_pool = {
@@ -89,7 +93,6 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             bridge_manager.int_br)
         self._registered_endpoints = set()
         self._setup_ep_directory()
-        self.host = host
         return self
 
     def declare_endpoint(self, port, mapping):
@@ -334,9 +337,10 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             es = hsi.get('external_segment_name')
             if not es:
                 continue
-            nh = self.ext_seg_next_hop.setdefault(es, ExtSegNextHopInfo(es))
+            nh = self.ext_seg_next_hop.setdefault(
+                es, ExtSegNextHopInfo(es, self.host))
             if nh.from_config:
-                continue    # ignore auto-allocation if manually set
+                continue  # ignore auto-allocation if manually set
             ip = hsi.get('host_snat_ip')
             gw = ("%s/%s" % (hsi['gateway_ip'], hsi['prefixlen'])
                 if (hsi.get('gateway_ip') and hsi.get('prefixlen')) else None)
@@ -411,7 +415,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
         self.ext_seg_next_hop = {}
         for es_name, es_info in es_cfg.iteritems():
-            nh = ExtSegNextHopInfo(es_name)
+            nh = ExtSegNextHopInfo(es_name, self.host)
             nh.from_config = True
             for key, value in es_info:
                 if key == 'ip_address_range':

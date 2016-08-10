@@ -10,9 +10,11 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import hashlib
 import os
 import shutil
 import sys
+import uuid
 
 import mock
 sys.modules["apicapi"] = mock.Mock()
@@ -62,7 +64,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
         agent._delete_vrf_file = mock.Mock()
         agent.snat_iptables = mock.Mock()
         agent.snat_iptables.setup_snat_for_es = mock.Mock(
-            return_value = tuple([None, None]))
+            return_value=tuple([None, None]))
 
     def _port(self):
         port = mock.Mock()
@@ -131,14 +133,11 @@ class TestEndpointFileManager(base.OpflexTestBase):
                         'attributes': {'vm-name': 'snat|h1|EXT-1'},
                         'promiscuous-mode': True,
                         'endpoint-group-name': 'profile_name|nat-epg-name',
-                        'uuid': mock.ANY}
-        snat_ep_uuid = [x[0][1]['uuid']
-            for x in self.manager._write_endpoint_file.call_args_list
-            if x[0][0] == 'EXT-1']
+                        'uuid': str(uuid.UUID(
+                            hex=hashlib.md5('EXT-1h1').hexdigest()))}
         self._check_call_list(
             [mock.call(ep_name, ep_file), mock.call('EXT-1', snat_ep_file)],
             self.manager._write_endpoint_file.call_args_list)
-        snat_ep_file['uuid'] = snat_ep_uuid[0] if snat_ep_uuid else None
 
         self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
             'EXT-1', '200.0.0.10', None, '200.0.0.1/8', None, None,
