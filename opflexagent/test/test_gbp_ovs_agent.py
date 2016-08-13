@@ -341,3 +341,6 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.process_vrf_update(set(['tenant_id']))
         self.agent.ep_manager._delete_vrf_file.assert_called_once_with(
             'tenant-id')
+
+    def test_apply_config_interval(self):
+        self.assertEqual(0.5, self.agent.config_apply_interval)

@@ -40,11 +40,11 @@ gbp_opts = [
     cfg.IntOpt('endpoint_request_timeout', default=10,
                help=_("Value in seconds that defines after how long the agent "
                       "should reschedule port info on missing response.")),
-    cfg.IntOpt('config_apply_interval', default=0.5,
-               help=_("Value in seconds (fraction of a second is allowed as "
-                      "well) that defines how often the agent checks for RPC "
-                      "responses and applies them if any were received while "
-                      "in idle.")),
+    cfg.FloatOpt('config_apply_interval', default=0.5,
+                 help=_("Value in seconds (fraction of a second is allowed "
+                        "as well) that defines how often the agent checks for "
+                        "RPC responses and applies them if any were received "
+                        "while in idle.")),
 ]
 
 cfg.CONF.register_opts(gbp_opts, "OPFLEX")
