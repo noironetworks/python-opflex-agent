@@ -62,7 +62,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
         agent._delete_vrf_file = mock.Mock()
         agent.snat_iptables = mock.Mock()
         agent.snat_iptables.setup_snat_for_es = mock.Mock(
-            return_value = tuple([None, None]))
+            return_value=tuple([None, None]))
 
     def _port(self):
         port = mock.Mock()
@@ -662,3 +662,55 @@ class TestEndpointFileManager(base.OpflexTestBase):
             {'next_hop_ep_epg': 'foo', 'next_hop_ep_app_profile': 'lab'},
             {'policy-space-name': 'nat-epg-tenant',
              'endpoint-group-name': 'lab|foo'})
+
+    def test_endpoint_vrf_change(self):
+        mapping = self._get_gbp_details()
+        port_1 = self._port()
+        port_2 = self._port()
+
+        self.manager.declare_endpoint(port_1, mapping)
+        self.assertEqual('l3p_id', self.manager.vif_to_vrf[port_1.vif_id])
+        self.assertEqual(set([port_1.vif_id]),
+                         self.manager.vrf_dict['l3p_id']['vifs'])
+
+        self.manager.declare_endpoint(port_2, mapping)
+        self.assertEqual('l3p_id', self.manager.vif_to_vrf[port_2.vif_id])
+        self.assertEqual(set([port_1.vif_id, port_2.vif_id]),
+                         self.manager.vrf_dict['l3p_id']['vifs'])
+
+        # no VRF change
+        self.manager._write_vrf_file.reset_mock()
+        self.manager.declare_endpoint(port_1, mapping)
+        self.manager._write_vrf_file.assert_not_called()
+        self.manager._delete_vrf_file.assert_not_called()
+        self.assertEqual('l3p_id', self.manager.vif_to_vrf[port_1.vif_id])
+        self.assertEqual(set([port_1.vif_id, port_2.vif_id]),
+                         self.manager.vrf_dict['l3p_id']['vifs'])
+
+        # port_1 VRF changes to 'l3p_id_1'
+        mapping['l3_policy_id'] = 'l3p_id_1'
+        self.manager.declare_endpoint(port_1, mapping)
+        self.manager._delete_vrf_file.assert_not_called()
+        self.manager._write_vrf_file.assert_called_once_with(
+            'l3p_id_1', {
+                "domain-policy-space": 'apic_tenant',
+                "domain-name": 'name_of_l3p',
+                "internal-subnets": sorted(['192.168.0.0/16',
+                                            '192.169.0.0/16',
+                                            '169.254.0.0/16'])})
+        self.assertEqual('l3p_id_1', self.manager.vif_to_vrf[port_1.vif_id])
+        self.assertEqual('l3p_id', self.manager.vif_to_vrf[port_2.vif_id])
+        self.assertEqual(set([port_1.vif_id]),
+                         self.manager.vrf_dict['l3p_id_1']['vifs'])
+        self.assertEqual(set([port_2.vif_id]),
+                         self.manager.vrf_dict['l3p_id']['vifs'])
+
+        # port_2 VRF changes to 'l3p_id_1'
+        self.manager._write_vrf_file.reset_mock()
+        self.manager.declare_endpoint(port_2, mapping)
+        self.manager._delete_vrf_file.assert_called_once_with('l3p_id')
+        self.manager._write_vrf_file.assert_not_called()
+        self.assertEqual('l3p_id_1', self.manager.vif_to_vrf[port_1.vif_id])
+        self.assertEqual('l3p_id_1', self.manager.vif_to_vrf[port_2.vif_id])
+        self.assertEqual(set([port_1.vif_id, port_2.vif_id]),
+                         self.manager.vrf_dict['l3p_id_1']['vifs'])
