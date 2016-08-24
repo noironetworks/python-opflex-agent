@@ -240,15 +240,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             self._dissociate_port_from_es(vif_id)
             self._release_int_fip(4, vif_id)
             self._release_int_fip(6, vif_id)
-        vrf_id = self.vif_to_vrf.get(vif_id)
-        vrf = self.vrf_dict.get(vrf_id)
-        if vrf and cleanup_vrf:
-            del self.vif_to_vrf[vif_id]
-            vrf['vifs'].discard(vif_id)
-            if not vrf['vifs']:
-                del self.vrf_dict[vrf_id]
-                # No more endpoints for this VRF here
-                self._delete_vrf_file(vrf_id)
+            self._update_vif_to_vrf(vif_id, None)
 
     def _mapping_to_file(self, port, mapping, fixed_ips):
         """Mapping to file.
@@ -336,7 +328,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 continue
             nh = self.ext_seg_next_hop.setdefault(es, ExtSegNextHopInfo(es))
             if nh.from_config:
-                continue    # ignore auto-allocation if manually set
+                continue  # ignore auto-allocation if manually set
             ip = hsi.get('host_snat_ip')
             gw = ("%s/%s" % (hsi['gateway_ip'], hsi['prefixlen'])
                 if (hsi.get('gateway_ip') and hsi.get('prefixlen')) else None)
@@ -628,10 +620,26 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 self._write_vrf_file(mapping['l3_policy_id'], vrf_info_copy)
                 curr_vrf['info'] = vrf_info
             if vif_id:
-                curr_vrf['vifs'].add(vif_id)
-                self.vif_to_vrf[vif_id] = mapping['l3_policy_id']
+                self._update_vif_to_vrf(vif_id, mapping['l3_policy_id'])
         else:
             self._delete_vrf_file(mapping['l3_policy_id'])
+
+    def _update_vif_to_vrf(self, vif_id, new_vrf_id):
+        old_vrf_id = self.vif_to_vrf.get(vif_id)
+        if old_vrf_id == new_vrf_id:
+            return
+        if old_vrf_id:
+            del self.vif_to_vrf[vif_id]
+            vrf = self.vrf_dict.get(old_vrf_id)
+            if vrf:
+                vrf['vifs'].discard(vif_id)
+                if not vrf['vifs']:
+                    del self.vrf_dict[old_vrf_id]
+                    # No more endpoints for this VRF here
+                    self._delete_vrf_file(old_vrf_id)
+        if new_vrf_id:
+            self.vrf_dict[new_vrf_id]['vifs'].add(vif_id)
+            self.vif_to_vrf[vif_id] = new_vrf_id
 
     def _create_host_endpoint_file(self, ipm, nh):
         ips = []
