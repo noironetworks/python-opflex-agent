@@ -2,7 +2,8 @@ Source: neutron-opflex-agent
 Section: python
 Priority: optional
 Maintainer: Cisco Systems, Inc. <apicapi@noironetworks.com>
-Build-Depends: debhelper (>= 9), python-setuptools (>= 3.3), python-all (>= 2.7)
+Build-Depends: debhelper (>= 9), python-setuptools (>= 3.3), python-all (>= 2.7),
+               dh-systemd
 Standards-Version: 3.9.5
 Homepage: https://github.com/noironetworks/python-opflex-agent
 Vcs-Browser: https://github.com/noironetworks/python-opflex-agent
