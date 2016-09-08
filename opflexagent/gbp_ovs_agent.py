@@ -10,6 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import importlib
 import signal
 import sys
 import time
@@ -45,6 +46,8 @@ from opflexagent.utils.port_managers import async_port_manager as port_manager
 
 eventlet_utils.monkey_patch()
 LOG = logging.getLogger(__name__)
+
+DVS_AGENT_MODULE = 'vmware_dvs.agent.dvs_neutron_agent'
 
 
 class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
@@ -563,28 +566,104 @@ def main():
     common_config.setup_logging()
     q_utils.log_opt_values(LOG)
 
-    try:
-        agent_config = create_agent_config_map(cfg.CONF)
-    except ValueError as e:
-        LOG.error(_('%s Agent terminated!'), e)
+    agent_mode = cfg.CONF.OPFLEX.agent_mode
+    if agent_mode == 'dvs':
+        agent = main_dvs()
+    elif agent_mode == 'dvs_no_binding':
+        agent = main_dvs(no_binding=True)
+    else:
+        agent = main_opflex()
+    if not agent:
         sys.exit(1)
 
+    LOG.info(_("Agent initialized successfully, now running... "))
+    agent.daemon_loop()
+
+
+def agent_startup_helper(create_config_map_fn, agent_class, root_helper=None):
     try:
-        agent = GBPOpflexAgent(root_helper=cfg.CONF.AGENT.root_helper,
-                               **agent_config)
+        agent_config = create_config_map_fn(cfg.CONF)
+    except ValueError as e:
+        LOG.error(_("Couldn't create config map (%s), Agent terminated!"), e)
+        return None
+
+    try:
+        if root_helper:
+            agent = agent_class(root_helper, **agent_config)
+        else:
+            agent = agent_class(**agent_config)
+
     except RuntimeError as e:
-        LOG.error(_("%s Agent terminated!"), e)
-        sys.exit(1)
+        LOG.error(_("Couldn't create agent (%s), Agent terminated!"), e)
+        return None
     signal.signal(signal.SIGTERM, agent._handle_sigterm)
+    return agent
+
+
+def main_dvs(no_binding=False):
+    dvs_agent = None
+    try:
+        dvs_agent = importlib.import_module(DVS_AGENT_MODULE)
+    except ValueError as e:
+        LOG.error(_LE(
+            "Couldn't import DVS agent class (%s), Agent terminated!"), e)
+        return None
+
+    def dummy_function(config, pg_cache=False):
+        return {}
+
+    if no_binding:
+        dvs_agent.dvs_util.create_network_map_from_config = dummy_function
+
+    class DVSAgentNoBinding(dvs_agent.DVSAgent):
+
+        # Specialize the RPCs to be No-Ops
+        def create_network(self, context, current, segment):
+            pass
+
+        def delete_network(self, context, current, segment):
+            pass
+
+        def network_delete(self, context, network_id):
+            pass
+
+        def update_network(self, context, current, segment, original):
+            pass
+
+        def bind_port(self, context, current,
+                      network_segments, network_current):
+            pass
+
+        def post_update_port(self, context, current, original, segment):
+            pass
+
+        def delete_port(self, context, current, original, segment):
+            pass
+
+    if no_binding:
+        agent_class = DVSAgentNoBinding
+    else:
+        agent_class = dvs_agent.DVSAgent
+
+    create_config_map_fn = dvs_agent.create_agent_config_map
+    agent = agent_startup_helper(create_config_map_fn, agent_class)
+
+    return agent
+
+
+def main_opflex():
+    agent_class = GBPOpflexAgent
+    root_helper = cfg.CONF.AGENT.root_helper
+    create_config_map_fn = create_agent_config_map
+    agent = agent_startup_helper(create_config_map_fn, agent_class,
+                         root_helper=root_helper)
 
     # Start everything.
     LOG.info(_("Initializing metadata service ... "))
     helper = cfg.CONF.AGENT.root_helper
     metadata_mgr = as_metadata_manager.AsMetadataManager(LOG, helper)
     metadata_mgr.ensure_initialized()
-
-    LOG.info(_("Agent initialized successfully, now running... "))
-    agent.daemon_loop()
+    return agent
 
 
 if __name__ == "__main__":
