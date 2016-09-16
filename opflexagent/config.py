@@ -45,6 +45,10 @@ gbp_opts = [
                         "as well) that defines how often the agent checks for "
                         "RPC responses and applies them if any were received "
                         "while in idle.")),
+    cfg.StrOpt('agent_mode',
+               default='opflex',
+               help=_("Set the mode of the agent to be used. Options are: "
+                      "'opflex' (default), 'dvs', and 'dvs_no_binding'.")),
 ]
 
 cfg.CONF.register_opts(gbp_opts, "OPFLEX")
