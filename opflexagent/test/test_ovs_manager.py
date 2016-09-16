@@ -49,7 +49,8 @@ class TestOVSManager(base.BaseTestCase):
 
     def _initialize_agent(self):
         kwargs = gbp_ovs_agent.create_agent_config_map(cfg.CONF)
-        mock.patch('neutron.agent.common.ovs_lib.OVSBridge').start()
+        mock.patch(
+            'opflexagent.utils.bridge_managers.ovs_lib.OVSBridge').start()
         agent = ovs_manager.OvsManager().initialize('h1', kwargs)
         return agent
 
