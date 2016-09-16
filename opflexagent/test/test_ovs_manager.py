@@ -47,7 +47,8 @@ class TestOVSManager(base.BaseTestCase):
                 msg='There are more calls than expected: %s' % str(observed))
 
     def _initialize_agent(self):
-        mock.patch('neutron.agent.common.ovs_lib.OVSBridge').start()
+        mock.patch(
+            'opflexagent.utils.bridge_managers.ovs_lib.OVSBridge').start()
         agent = ovs_manager.OvsManager().initialize('h1', cfg.CONF.OVS)
         return agent
 
