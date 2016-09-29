@@ -309,6 +309,10 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             mapping_dict['domain-name'] = mapping['vrf_name']
         if 'attestation' in mapping:
             mapping_dict['attestation'] = mapping['attestation']
+        if 'segmentation_labels' in mapping:
+            lbls = [x.partition('=') for x in mapping['segmentation_labels']]
+            mapping_dict.setdefault('attributes', {}).update({
+                x[0].strip(): x[2].strip() for x in lbls})
 
         self._handle_host_snat_ip(mapping.get('host_snat_ips', []))
         self._fill_ip_mapping_info(port.vif_id, mac, mapping,
