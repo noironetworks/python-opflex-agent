@@ -75,7 +75,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
         return port
 
     def test_port_bound(self):
-        mapping = self._get_gbp_details()
+        mapping = self._get_gbp_details(
+            segmentation_labels=['zone = dmz', ' linux '])
         self.manager.snat_iptables.setup_snat_for_es.return_value = tuple(
             ['foo-if', 'foo-mac'])
         port = self._port()
@@ -91,7 +92,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
                    "mac": 'aa:bb:cc:00:11:22',
                    "promiscuous-mode": mapping['promiscuous_mode'],
                    "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
-                   "attributes": {'vm-name': 'somename'},
+                   "attributes": {'vm-name': 'somename', 'zone': 'dmz',
+                                  'linux': ''},
                    "neutron-network": port.net_uuid,
                    "neutron-metadata-optimization": True,
                    "domain-policy-space": 'apic_tenant',
