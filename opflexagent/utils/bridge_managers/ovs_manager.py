@@ -10,13 +10,14 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from neutron.agent.common import ovs_lib
 from neutron.i18n import _LW
 from neutron.plugins.common import constants as n_constants
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from oslo_log import log as logging
 
 from opflexagent.utils.bridge_managers import bridge_manager_base
+from opflexagent.utils.bridge_managers import ovs_lib
+
 
 LOG = logging.getLogger(__name__)
 DEAD_VLAN_TAG = n_constants.MAX_VLAN_TAG + 1
@@ -50,7 +51,7 @@ class OvsManager(bridge_manager_base.BridgeManagerBase):
         """Override parent setup integration bridge."""
         self.int_br.create()
         self.int_br.set_secure_mode()
-
+        self.int_br.reset_ofversion()
         # Add a canary flow to int_br to track OVS restarts
         self.int_br.add_flow(table=constants.CANARY_TABLE, priority=0,
                              actions="drop")
