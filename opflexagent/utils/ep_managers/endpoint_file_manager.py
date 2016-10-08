@@ -440,6 +440,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                     fip['fixed_ip_address'])
             mapping.setdefault('ip-address-mapping', []).append(fm)
 
+        host_snat_ip_es = {hsi['external_segment_name']
+                           for hsi in gbp_details.get('host_snat_ips', [])}
         es_using_int_fip = {4: set(), 6: set()}
         for ipm in gbp_details.get('ip_mapping', []):
             if (not ips or not ipm.get('external_segment_name') or
@@ -456,7 +458,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                           "|" + ipm['next_hop_ep_epg'])
                 ipm['next_hop_ep_epg'] = nh_epg
 
-            next_hop_if, next_hop_mac = self._get_next_hop_info_for_es(ipm)
+            next_hop_if, next_hop_mac = (
+                self._get_next_hop_info_for_es(ipm, host_snat_ip_es))
             if not next_hop_if or not next_hop_mac:
                 continue
             fip_alloc_es = {
@@ -581,10 +584,14 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                            "%(es)s: %(ex)s"),
                          {'es': es, 'ex': e})
 
-    def _get_next_hop_info_for_es(self, ipm):
+    def _get_next_hop_info_for_es(self, ipm, host_snat_ip_es):
         es_name = ipm['external_segment_name']
         nh = self.ext_seg_next_hop.get(es_name)
         if not nh or not nh.is_valid():
+            return (None, None)
+        # if this Ext Seg has auto-allocated SNAT IPs, then
+        # make sure we received host SNAT IP for the ES.
+        if not nh.from_config and (es_name not in host_snat_ip_es):
             return (None, None)
         # create ep file for endpoint and snat tables
         if not nh.next_hop_iface:

@@ -716,3 +716,22 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.assertEqual('l3p_id_1', self.manager.vif_to_vrf[port_2.vif_id])
         self.assertEqual(set([port_1.vif_id, port_2.vif_id]),
                          self.manager.vrf_dict['l3p_id_1']['vifs'])
+
+    def test_port_snat_info_reset(self):
+        write_ep = self.manager._write_endpoint_file
+
+        mapping = self._get_gbp_details(floating_ip=[])
+        port_1 = self._port()
+        self.manager.declare_endpoint(port_1, mapping)
+
+        self.assertTrue('EXT-1' in
+                        [x[0][0] for x in write_ep.call_args_list])
+
+        self.manager.undeclare_endpoint(port_1.vif_id)
+
+        write_ep.reset_mock()
+        mapping['host_snat_ips'] = []
+        self.manager.declare_endpoint(port_1, mapping)
+
+        self.assertFalse('EXT-1' in
+                         [x[0][0] for x in write_ep.call_args_list])
