@@ -150,9 +150,10 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.notify_worker = opflex_notify.worker()
         super(GBPOvsAgent, self).__init__(**kwargs)
         self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
-        self.setup_pt_directory()
+        self.cleanup_directory = True
+        self.setup_pt_directory(remove_existing=False)
 
-    def setup_pt_directory(self):
+    def setup_pt_directory(self, remove_existing=True):
         created = False
         for file_format in self.file_formats:
             directory = os.path.dirname(file_format)
@@ -161,14 +162,15 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 created = True
                 continue
             # Remove all existing EPs mapping
-            for f in os.listdir(directory):
-                if f.endswith('.' + FILE_EXTENSION) or f.endswith(
-                        '.' + VRF_FILE_EXTENSION):
-                    try:
-                        os.remove(os.path.join(directory, f))
-                    except OSError as e:
-                        LOG.debug(e.message)
-        if not created:
+            if remove_existing:
+                for f in os.listdir(directory):
+                    if f.endswith('.' + FILE_EXTENSION) or f.endswith(
+                            '.' + VRF_FILE_EXTENSION):
+                        try:
+                            os.remove(os.path.join(directory, f))
+                        except OSError as e:
+                            LOG.debug(e.message)
+        if not created and remove_existing:
             self.snat_iptables.cleanup_snat_all()
 
     def setup_rpc(self):
@@ -564,6 +566,9 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
             # Correlate port details
             gbp_details_per_device = {x['device']: x for x in
                                       devices_gbp_details_list if x}
+            if self.cleanup_directory:
+                self.setup_pt_directory()
+                self.cleanup_directory = False
         except Exception as e:
             raise ovs.DeviceListRetrievalError(devices=devices, error=e)
         for details in devices_details_list:

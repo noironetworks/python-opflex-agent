@@ -775,6 +775,27 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.agent.treat_devices_added_or_updated(['some_device'], True)
         self.agent.port_dead.assert_called_once_with(port)
 
+    def test_startup_directory_cleanup(self):
+        with mock.patch('opflexagent.gbp_ovs_agent.GBPOvsAgent.'
+                        'setup_pt_directory') as setup:
+            # get a brand new agent
+            agent = self._initialize_agent()
+            setup.assert_called_once_with(remove_existing=False)
+            setup.reset_mock()
+            agent.of_rpc.get_gbp_details_list = mock.Mock(
+                return_value=[{'device': 'some_device'}])
+            agent.plugin_rpc.get_devices_details_list = mock.Mock(
+                return_value=[{'device': 'some_device', 'port_id': 'portid'}])
+            port = mock.Mock(ofport=1)
+            agent.int_br.get_vif_port_by_id = mock.Mock(return_value=port)
+            agent.port_dead = mock.Mock()
+
+            self.agent.treat_devices_added_or_updated(['some_device'], True)
+            setup.assert_called_once_with()
+            setup.reset_mock()
+            self.agent.treat_devices_added_or_updated(['some_device'], True)
+            self.assertEqual(0, setup.call_count)
+
     def test_missing_port(self):
         self.agent.of_rpc.get_gbp_details_list = mock.Mock(
             return_value=[{'device': 'some_device'}])
