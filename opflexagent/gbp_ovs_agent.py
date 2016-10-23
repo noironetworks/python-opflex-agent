@@ -15,6 +15,7 @@ import netaddr
 import os
 import signal
 import sys
+import time
 
 from neutron.agent.linux import dhcp
 from neutron.agent.linux import ip_lib
@@ -556,13 +557,25 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
 
         skipped_devices = []
         try:
+            start = time.time()
             devices_details_list = self.plugin_rpc.get_devices_details_list(
                 self.context,
                 devices,
                 self.agent_id,
                 cfg.CONF.host)
+            LOG.debug(_("treat_devices_added_or_updated - iteration:"
+                        "%(iter_num)d -get_devices_details_list completed. "
+                        "Time elapsed: %(elapsed).3f"),
+                      {'iter_num': self.iter_num,
+                       'elapsed': time.time() - start})
+            start = time.time()
             devices_gbp_details_list = self.of_rpc.get_gbp_details_list(
                 self.context, self.agent_id, devices, cfg.CONF.host)
+            LOG.debug(_("treat_devices_added_or_updated - iteration:"
+                        "%(iter_num)d -get_gbp_details_list completed. "
+                        "Time elapsed: %(elapsed).3f"),
+                      {'iter_num': self.iter_num,
+                       'elapsed': time.time() - start})
             # Correlate port details
             gbp_details_per_device = {x['device']: x for x in
                                       devices_gbp_details_list if x}
@@ -571,10 +584,13 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 self.cleanup_directory = False
         except Exception as e:
             raise ovs.DeviceListRetrievalError(devices=devices, error=e)
+
+        start = time.time()
+        ports_map = self._get_vif_port_by_ids(self.int_br, devices)
         for details in devices_details_list:
             device = details['device']
+            port = ports_map.get(device)
             LOG.debug("Processing port: %s", device)
-            port = self.int_br.get_vif_port_by_id(device)
             if not port:
                 # The port disappeared and cannot be processed
                 LOG.info(_("Port %s was not found on the integration bridge "
@@ -620,7 +636,67 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 LOG.warn(_("Device %s not defined on plugin"), device)
                 if (port and port.ofport != -1):
                     self.port_dead(port)
+        LOG.debug(_("treat_devices_added_or_updated - iteration:"
+                    "%(iter_num)d -treat_vif_portS completed. "
+                    "Time elapsed: %(elapsed).3f"),
+                  {'iter_num': self.iter_num, 'elapsed': time.time() - start})
         return skipped_devices
+
+    def _get_vif_port_by_ids(self, int_br, port_ids):
+        args = ['--format=json', '--', '--columns=external_ids,name,ofport',
+                'find', 'Interface',
+                'external_ids:iface-id{<=}%s' % ','.join('"%s"' % x for
+                                                       x in port_ids)]
+        LOG.debug("_get_vif_port_by_ids args: %s", args)
+        iface_map = {}
+        results = int_br.run_vsctl(args)
+        if not results:
+            return
+        json_result = jsonutils.loads(results)
+        # Retrieve the indexes of the columns we're looking for
+        headings = json_result['headings']
+        ext_ids_idx = headings.index('external_ids')
+        name_idx = headings.index('name')
+        ofport_idx = headings.index('ofport')
+        for data in json_result['data']:
+            port_id = None
+            try:
+                # If data attribute is missing or empty the line below will
+                # raise an exeception which will be captured in this block.
+                ext_id_dict = dict((item[0], item[1]) for item in
+                                   data[ext_ids_idx][1])
+                LOG.debug('ext_id_dict: %s', ext_id_dict)
+                if 'iface-id' not in ext_id_dict:
+                    # Not an interface
+                    continue
+                port_name = data[name_idx]
+                port_id = ext_id_dict['iface-id']
+                # REVISIT(ivar): we assume iface-id won't collide
+                # (it's a UUID after all)
+                # switch = get_bridge_for_iface(self.root_helper, port_name)
+                # if switch != self.br_name:
+                #    LOG.info(_("Port: %(port_name)s is on %(switch)s,"
+                #               " not on %(br_name)s"),
+                #               {'port_name': port_name,
+                #                'switch': switch, 'br_name': self.br_name})
+                #    return
+                ofport = data[ofport_idx]
+                # ofport must be integer otherwise return None
+                if not isinstance(ofport, int) or ofport == -1:
+                    LOG.warn(_("ofport: %(ofport)s for VIF: %(vif)s is not a "
+                               "positive integer"), {'ofport': ofport,
+                                                     'vif': port_id})
+                    return
+                # Find VIF's mac address in external ids
+                vif_mac = ext_id_dict['attached-mac']
+                iface_map[port_id] = ovs.ovs_lib.VifPort(
+                    port_name, ofport, port_id, vif_mac, self)
+            except Exception as e:
+                LOG.warn(_("Unable to parse interface details. for port "
+                           "%(port)s Exception: %(exc)s"), {'port': port_id,
+                                                            'exc': e})
+                continue
+        return iface_map
 
     def _write_endpoint_file(self, port_id, mapping_dict):
         return self._write_file(port_id, mapping_dict, self.epg_mapping_file)

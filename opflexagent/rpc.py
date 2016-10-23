@@ -55,21 +55,25 @@ class GBPServerRpcApiMixin(n_rpc.RpcProxy):
             topic=topic, default_version=self.GBP_RPC_VERSION)
 
     @log.log
-    def get_gbp_details(self, context, agent_id, device=None, host=None):
+    def get_gbp_details(self, context, agent_id, device=None, host=None,
+                        recalculate=False):
         return self.call(context,
                          self.make_msg('get_gbp_details',
                                        agent_id=agent_id,
                                        device=device,
-                                       host=host),
+                                       host=host,
+                                       recalculate=recalculate),
                          version=self.GBP_RPC_VERSION)
 
     @log.log
-    def get_gbp_details_list(self, context, agent_id, devices=None, host=None):
+    def get_gbp_details_list(self, context, agent_id, devices=None, host=None,
+                             recalculate=False):
         return self.call(context,
                          self.make_msg('get_gbp_details_list',
                                        agent_id=agent_id,
                                        devices=devices,
-                                       host=host),
+                                       host=host,
+                                       recalculate=recalculate),
                          version=self.GBP_RPC_VERSION)
 
     @log.log

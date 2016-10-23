@@ -769,7 +769,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
             return_value=[{'device': 'some_device', 'port_id': 'portid'}])
         port = mock.Mock(ofport=1)
-        self.agent.int_br.get_vif_port_by_id = mock.Mock(return_value=port)
+        self.agent._get_vif_port_by_ids = mock.Mock(
+            return_value={'some_device': port})
         self.agent.port_dead = mock.Mock()
 
         self.agent.treat_devices_added_or_updated(['some_device'], True)
@@ -787,13 +788,14 @@ class TestGbpOvsAgent(base.BaseTestCase):
             agent.plugin_rpc.get_devices_details_list = mock.Mock(
                 return_value=[{'device': 'some_device', 'port_id': 'portid'}])
             port = mock.Mock(ofport=1)
-            agent.int_br.get_vif_port_by_id = mock.Mock(return_value=port)
+            agent._get_vif_port_by_ids = mock.Mock(
+                return_value={'some_device': port})
             agent.port_dead = mock.Mock()
 
-            self.agent.treat_devices_added_or_updated(['some_device'], True)
+            agent.treat_devices_added_or_updated(['some_device'], True)
             setup.assert_called_once_with()
             setup.reset_mock()
-            self.agent.treat_devices_added_or_updated(['some_device'], True)
+            agent.treat_devices_added_or_updated(['some_device'], True)
             self.assertEqual(0, setup.call_count)
 
     def test_missing_port(self):
@@ -801,7 +803,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
             return_value=[{'device': 'some_device'}])
         self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
             return_value=[{'device': 'some_device', 'port_id': 'portid'}])
-        self.agent.int_br.get_vif_port_by_id = mock.Mock(return_value=None)
+        self.agent._get_vif_port_by_ids = mock.Mock(return_value={})
         self.agent.mapping_cleanup = mock.Mock()
 
         self.agent.treat_devices_added_or_updated(['some_device'], True)
@@ -824,7 +826,8 @@ class TestGbpOvsAgent(base.BaseTestCase):
         self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
             return_value=[port_details])
         port = mock.Mock(ofport=1, vif_id=mapping['port_id'])
-        self.agent.int_br.get_vif_port_by_id = mock.Mock(return_value=port)
+        self.agent._get_vif_port_by_ids = mock.Mock(
+            return_value={'some_device': port})
 
         self.agent.mapping_cleanup = mock.Mock()
         self.agent.mapping_to_file = mock.Mock()
