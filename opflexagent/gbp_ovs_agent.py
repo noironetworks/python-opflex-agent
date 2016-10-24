@@ -75,6 +75,7 @@ FILE_EXTENSION = "ep"
 FILE_NAME_FORMAT = "%s." + FILE_EXTENSION
 VRF_FILE_EXTENSION = "rdconfig"
 VRF_FILE_NAME_FORMAT = "%s." + VRF_FILE_EXTENSION
+SYNC_FILE_NAME = "force.sync"
 METADATA_DEFAULT_IP = '169.254.169.254'
 METADATA_SUBNET = '169.254.0.0/16'
 
@@ -121,8 +122,14 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.vrf_mapping_file = (kwargs['epg_mapping_dir'] +
                                  ('/' if separator != '/' else '') +
                                  VRF_FILE_NAME_FORMAT)
+        separator = (kwargs['opflex_agent_dir'][-1] if
+                     kwargs['opflex_agent_dir'] else '')
+        self.force_sync_mapping_file = (kwargs['opflex_agent_dir'] +
+                                        ('/' if separator != '/' else '') +
+                                        SYNC_FILE_NAME)
         self.file_formats = [self.epg_mapping_file,
-                             self.vrf_mapping_file]
+                             self.vrf_mapping_file,
+                             self.force_sync_mapping_file]
         self.opflex_networks = kwargs['opflex_networks']
         if self.opflex_networks and self.opflex_networks[0] == '*':
             self.opflex_networks = None
@@ -142,6 +149,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         self.root_helper = cfg.CONF.AGENT.root_helper
         del kwargs['hybrid_mode']
         del kwargs['epg_mapping_dir']
+        del kwargs['opflex_agent_dir']
         del kwargs['opflex_networks']
         del kwargs['internal_floating_ip_pool']
         del kwargs['internal_floating_ip6_pool']
@@ -152,6 +160,7 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
         super(GBPOvsAgent, self).__init__(**kwargs)
         self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
         self.cleanup_directory = True
+        self.force_sync = False
         self.setup_pt_directory(remove_existing=False)
 
     def setup_pt_directory(self, remove_existing=True):
@@ -163,14 +172,20 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                 created = True
                 continue
             # Remove all existing EPs mapping
-            if remove_existing:
-                for f in os.listdir(directory):
-                    if f.endswith('.' + FILE_EXTENSION) or f.endswith(
-                            '.' + VRF_FILE_EXTENSION):
-                        try:
-                            os.remove(os.path.join(directory, f))
-                        except OSError as e:
-                            LOG.debug(e.message)
+            for f in os.listdir(directory):
+                if f.endswith('.' + FILE_EXTENSION) or f.endswith(
+                        '.' + VRF_FILE_EXTENSION) and remove_existing:
+                    try:
+                        os.remove(os.path.join(directory, f))
+                    except OSError as e:
+                        LOG.debug(e.message)
+                elif f == SYNC_FILE_NAME:
+                    LOG.debug("Force sync requested")
+                    self.force_sync = True
+                    try:
+                        os.remove(os.path.join(directory, f))
+                    except OSError as e:
+                        LOG.debug(e.message)
         if not created and remove_existing:
             self.snat_iptables.cleanup_snat_all()
 
@@ -570,7 +585,9 @@ class GBPOvsAgent(ovs.OVSNeutronAgent):
                        'elapsed': time.time() - start})
             start = time.time()
             devices_gbp_details_list = self.of_rpc.get_gbp_details_list(
-                self.context, self.agent_id, devices, cfg.CONF.host)
+                self.context, self.agent_id, devices, cfg.CONF.host,
+                recalculate=self.force_sync)
+            self.force_sync = False
             LOG.debug(_("treat_devices_added_or_updated - iteration:"
                         "%(iter_num)d -get_gbp_details_list completed. "
                         "Time elapsed: %(elapsed).3f"),
@@ -1007,6 +1024,7 @@ def create_agent_config_map(conf):
     agent_config = ovs.create_agent_config_map(conf)
     agent_config['hybrid_mode'] = conf.OPFLEX.hybrid_mode
     agent_config['epg_mapping_dir'] = conf.OPFLEX.epg_mapping_dir
+    agent_config['opflex_agent_dir'] = conf.OPFLEX.opflex_agent_dir
     agent_config['opflex_networks'] = conf.OPFLEX.opflex_networks
     agent_config['internal_floating_ip_pool'] = (
         conf.OPFLEX.internal_floating_ip_pool)

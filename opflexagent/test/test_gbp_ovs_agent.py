@@ -81,6 +81,7 @@ class TestGbpOvsAgent(base.BaseTestCase):
 
     def _initialize_agent(self):
         cfg.CONF.set_override('epg_mapping_dir', self.ep_dir, 'OPFLEX')
+        cfg.CONF.set_override('opflex_agent_dir', self.ep_dir, 'OPFLEX')
         kwargs = gbp_ovs_agent.create_agent_config_map(cfg.CONF)
 
         class MockFixedIntervalLoopingCall(object):
