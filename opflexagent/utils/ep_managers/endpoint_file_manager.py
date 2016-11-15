@@ -310,7 +310,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         if 'attestation' in mapping:
             mapping_dict['attestation'] = mapping['attestation']
         if 'segmentation_labels' in mapping:
-            lbls = [x.partition('=') for x in mapping['segmentation_labels']]
+            lbls = [x.partition('=')
+                    for x in (mapping['segmentation_labels'] or [])]
             mapping_dict.setdefault('attributes', {}).update({
                 x[0].strip(): x[2].strip() for x in lbls})
 
