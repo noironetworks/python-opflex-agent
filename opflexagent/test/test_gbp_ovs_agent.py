@@ -218,8 +218,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
             return_value=[{'device': 'some_device', 'port_id': 'portid'}])
         port = mock.Mock(ofport=1)
-        self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
-            return_value=port)
+        self.agent.bridge_manager.get_vif_port_by_ids = mock.Mock(
+            return_value={'some_device': port})
 
         self.agent.bridge_manager.port_dead = mock.Mock()
         self.agent.treat_devices_added_or_updated(['some_device'], True)
@@ -230,8 +230,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             return_value=[{'device': 'some_device'}])
         self.agent.plugin_rpc.get_devices_details_list = mock.Mock(
             return_value=[{'device': 'some_device', 'port_id': 'portid'}])
-        self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
-            return_value=None)
+        self.agent.bridge_manager.get_vif_port_by_ids = mock.Mock(
+            return_value={})
         with mock.patch.object(gbp_ovs_agent.ep_manager.EndpointFileManager,
                                'undeclare_endpoint'):
             self.agent.treat_devices_added_or_updated(['some_device'], True)
@@ -257,8 +257,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.plugin_rpc.update_device_up = mock.Mock()
         self.agent.plugin_rpc.update_device_down = mock.Mock()
         port = mock.Mock(ofport=1, vif_id=mapping['port_id'])
-        self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
-            return_value=port)
+        self.agent.bridge_manager.get_vif_port_by_ids = mock.Mock(
+            return_value={'some_device': port})
         self.agent.ep_manager._mapping_cleanup = mock.Mock()
         self.agent.ep_manager._mapping_to_file = mock.Mock()
 
