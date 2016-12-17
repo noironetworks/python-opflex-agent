@@ -40,8 +40,8 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
         cfg.CONF.set_override('agent_mode', 'opflex', 'OPFLEX')
         with mock.patch('sys.argv'):
             gbp_ovs_agent.main()
-            opflex_patch.assert_called_once()
-            metadata_patch.assert_called_once()
+            self.assertEqual(1, opflex_patch.call_count)
+            self.assertEqual(1, metadata_patch.call_count)
         opflex_agent.stop()
         metadata_mgr.stop()
 
@@ -53,8 +53,9 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
         cfg.CONF.set_override('agent_mode', 'dvs', 'OPFLEX')
         with mock.patch('sys.argv'):
             gbp_ovs_agent.main()
-            import_patch.assert_called_once()
-            mock_dvs_instance.create_agent_config_map.assert_called_once()
+            self.assertEqual(1, import_patch.call_count)
+            self.assertEqual(
+                1, mock_dvs_instance.create_agent_config_map.call_count)
         import_mock.stop()
 
     def test_dvs_agent_no_binding_mode(self):
@@ -65,8 +66,9 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
         cfg.CONF.set_override('agent_mode', 'dvs_no_binding', 'OPFLEX')
         with mock.patch('sys.argv'):
             gbp_ovs_agent.main()
-            import_patch.assert_called_once()
-            mock_dvs_instance.create_agent_config_map.assert_called_once()
+            self.assertEqual(1, import_patch.call_count)
+            self.assertEqual(
+                1, mock_dvs_instance.create_agent_config_map.call_count)
         import_mock.stop()
 
     def test_dvs_agent_mode_no_package(self):
@@ -78,6 +80,6 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
             try:
                 gbp_ovs_agent.main()
             except AttributeError:
-                sys_patch.assert_called_once()
-            import_patch.assert_called_once()
+                self.assertEqual(1, sys_patch.call_count)
+            self.assertEqual(1, import_patch.call_count)
         import_mock.stop()

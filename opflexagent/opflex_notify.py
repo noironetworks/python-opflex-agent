@@ -28,7 +28,6 @@ from oslo_log import log as logging
 
 
 LOG = logging.getLogger(__name__)
-OPFLEX_NOTIFY_SOCKNAME = '/var/run/opflex-agent-ovs-notif.sock'
 
 
 class OpflexNotifyAgent(object):
@@ -36,7 +35,7 @@ class OpflexNotifyAgent(object):
         self.host = cfg.CONF.host
         self.agent_id = 'opflex-notify-agent-%s' % self.host
         self.context = context.get_admin_context_without_session()
-        self.sockname = OPFLEX_NOTIFY_SOCKNAME
+        self.sockname = cfg.CONF.OPFLEX.opflex_notify_socket_path
         self.of_rpc = opflexagent.rpc.GBPServerRpcApi(
             opflexagent.rpc.TOPIC_OPFLEX)
 

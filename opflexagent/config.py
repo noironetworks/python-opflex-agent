@@ -49,6 +49,9 @@ gbp_opts = [
                default='opflex',
                help=_("Set the mode of the agent to be used. Options are: "
                       "'opflex' (default), 'dvs', and 'dvs_no_binding'.")),
+    cfg.StrOpt('opflex_notify_socket_path',
+               default='/var/run/opflex-agent-ovs-notif.sock',
+               help=_("Path of the Opflex notification socket."))
 ]
 
 cfg.CONF.register_opts(gbp_opts, "OPFLEX")
