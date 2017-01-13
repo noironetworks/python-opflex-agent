@@ -315,12 +315,12 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                                       devices_gbp_details_list if x}
         except Exception as e:
             raise ovs.DeviceListRetrievalError(devices=devices, error=e)
-        start = time.time()
-        ports_map = self.bridge_manager.get_vif_port_by_ids(devices)
         for details in devices_details_list:
             device = details['device']
             LOG.debug("Processing port: %s", device)
-            port = ports_map.get(device)
+            # REVISIT(ivar): this is not a public facing API, we will move to
+            # the right method once the redesign is complete.
+            port = self.bridge_manager.int_br.get_vif_port_by_id(device)
             if not port:
                 # The port disappeared and cannot be processed
                 LOG.info(_("Port %s was not found on the integration bridge "
@@ -365,10 +365,6 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 LOG.warn(_("Device %s not defined on plugin"), device)
                 if (port and port.ofport != -1):
                     self.port_dead(port)
-        LOG.debug(_("treat_devices_added_or_updated - iteration:"
-                    "%(iter_num)d -treat_vif_portS completed. "
-                    "Time elapsed: %(elapsed).3f"),
-                  {'iter_num': self.iter_num, 'elapsed': time.time() - start})
         return skipped_devices
 
     def treat_vif_port(self, vif_port, port_id, network_id, network_type,
