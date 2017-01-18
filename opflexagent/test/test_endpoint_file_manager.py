@@ -611,7 +611,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
                                                   'ip_version': 4,
                                                   'dns_nameservers': [],
                                                   'cidr': '192.168.0.0/24',
-                                                  'host_routes': []}])
+                                                  'host_routes': []}],
+                                        dhcp_lease_time=100)
         port = self._port()
         self.manager._release_int_fip = mock.Mock()
         self.manager.declare_endpoint(port, mapping)
@@ -624,6 +625,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.assertIsNotNone(ep_file)
         self.assertTrue('dhcp4' in ep_file)
         self.assertEqual(ep_file['dhcp4']['interface-mtu'], 1800)
+        self.assertEqual(ep_file['dhcp4']['lease-time'], 100)
 
     def _test_snat_next_hop_info(self, es_name, mapping_info, expected):
         mapping = self._get_gbp_details()

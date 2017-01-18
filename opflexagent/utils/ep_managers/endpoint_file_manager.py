@@ -386,6 +386,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 dhcp4['server-ip'] = sn['dhcp_server_ips'][0]
             if 'interface_mtu' in mapping:
                 dhcp4['interface-mtu'] = mapping['interface_mtu']
+            if 'dhcp_lease_time' in mapping:
+                dhcp4['lease-time'] = mapping['dhcp_lease_time']
             mapping_dict['dhcp4'] = dhcp4
             break
         if len(v6subnets) > 0 and v6subnets[0]['dns_nameservers']:
