@@ -23,7 +23,7 @@ from opflexagent import snat_iptables_manager
 from opflexagent.test import base
 from opflexagent.utils.ep_managers import endpoint_file_manager
 
-from neutron.agent.dhcp import config as dhcp_config
+from neutron.conf.agent import dhcp as dhcp_config
 from oslo_config import cfg
 from oslo_utils import uuidutils
 
@@ -37,6 +37,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
     def setUp(self):
         cfg.CONF.register_opts(dhcp_config.DHCP_OPTS)
         super(TestGBPOpflexAgent, self).setUp()
+        cfg.CONF.set_override("ovsdb_interface", "vsctl", group="OVS")
         notifier_p = mock.patch(NOTIFIER)
         notifier_cls = notifier_p.start()
         self.notifier = mock.Mock()

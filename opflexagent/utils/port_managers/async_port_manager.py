@@ -12,10 +12,10 @@
 
 import time
 
+from neutron._i18n import _LE, _LI, _LW  # noqa
 from neutron.agent import rpc as agent_rpc
 from neutron.common import topics
 from neutron import context
-from neutron.i18n import _LE, _LI, _LW  # noqa
 from oslo_log import log as logging
 from oslo_utils import excutils
 from oslo_utils import uuidutils

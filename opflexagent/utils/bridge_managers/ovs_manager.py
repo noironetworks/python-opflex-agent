@@ -10,7 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from neutron.i18n import _LW
+from neutron._i18n import _LW
 from neutron.plugins.common import constants as n_constants
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from oslo_log import log as logging

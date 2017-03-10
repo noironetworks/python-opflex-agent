@@ -15,9 +15,9 @@ import signal
 import sys
 import time
 
+from neutron._i18n import _LE, _LI, _LW
 from neutron.agent.common import config
 from neutron.agent.common import polling
-from neutron.agent.dhcp import config as dhcp_config
 from neutron.agent.linux import ip_lib
 from neutron.agent import rpc as agent_rpc
 from neutron.agent import securitygroups_rpc as sg_rpc
@@ -27,7 +27,7 @@ from neutron.common import eventlet_utils
 from neutron.common import exceptions
 from neutron.common import topics
 from neutron.common import utils as q_utils
-from neutron.i18n import _LE, _LI, _LW
+from neutron.conf.agent import dhcp as dhcp_config
 from neutron import context
 from neutron.plugins.ml2.drivers.openvswitch.agent import (
     ovs_neutron_agent as ovs)
@@ -574,7 +574,8 @@ def create_agent_config_map(conf):
 
 def main():
     cfg.CONF.register_opts(ip_lib.OPTS)
-    cfg.CONF.register_opts(dhcp_config.DHCP_OPTS)
+    dhcp_config.register_agent_dhcp_opts(cfg.CONF)
+    cfg.CONF.set_override("ovsdb_interface", "vsctl", group="OVS")
     config.register_root_helper(cfg.CONF)
     common_config.init(sys.argv[1:])
     common_config.setup_logging()

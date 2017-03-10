@@ -14,8 +14,8 @@ import copy
 import netaddr
 import os
 
+from neutron._i18n import _LI
 from neutron.common import constants as n_constants
-from neutron.i18n import _LI
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
 from oslo_utils import uuidutils
