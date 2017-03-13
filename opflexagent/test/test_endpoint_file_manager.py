@@ -23,7 +23,7 @@ from opflexagent import snat_iptables_manager
 from opflexagent.test import base
 from opflexagent.utils.ep_managers import endpoint_file_manager
 
-from neutron.agent.dhcp import config as dhcp_config
+from neutron.conf.agent import dhcp as dhcp_config
 from oslo_config import cfg
 from oslo_utils import uuidutils
 
@@ -34,7 +34,7 @@ EP_DIR = '.%s_endpoints/'
 class TestEndpointFileManager(base.OpflexTestBase):
 
     def setUp(self):
-        cfg.CONF.register_opts(dhcp_config.DHCP_OPTS)
+        dhcp_config.register_agent_dhcp_opts(cfg.CONF)
         super(TestEndpointFileManager, self).setUp()
         cfg.CONF.set_default('quitting_rpc_timeout', 10, 'AGENT')
         self.ep_dir = EP_DIR % _uuid()

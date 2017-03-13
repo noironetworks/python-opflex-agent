@@ -18,7 +18,7 @@ sys.modules["pyinotify"] = mock.Mock()
 
 from opflexagent.utils.bridge_managers import ovs_manager
 
-from neutron.agent.dhcp import config as dhcp_config
+from neutron.conf.agent import dhcp as dhcp_config
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from neutron.tests import base
 from oslo_config import cfg
