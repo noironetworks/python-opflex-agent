@@ -260,6 +260,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             "policy-space-name": mapping['ptg_tenant'],
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                     mapping['endpoint_group_name']),
+            "eg-mapping-alias": "%s_%s_%s" % (mapping['ptg_tenant'],
+                                              mapping['app_profile_name'],
+                                              mapping['endpoint_group_name']),
             "interface-name": port.port_name,
             "promiscuous-mode": mapping.get('promiscuous_mode') or False,
             "uuid": '%s|%s' % (port.vif_id, mac.replace(':', '-')),
@@ -309,9 +312,11 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             mapping_dict['domain-name'] = mapping['vrf_name']
         if 'attestation' in mapping:
             mapping_dict['attestation'] = mapping['attestation']
+        has_eg_mapping_alias = False
         if 'segmentation_labels' in mapping:
             lbls = [x.partition('=')
                     for x in (mapping['segmentation_labels'] or [])]
+            has_eg_mapping_alias = bool(lbls)
             mapping_dict.setdefault('attributes', {}).update({
                 x[0].strip(): x[2].strip() for x in lbls})
 
@@ -319,6 +324,11 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         self._fill_ip_mapping_info(port.vif_id, mac, mapping,
                                    sorted(ips + ips_aap + ips_ext),
                                    mapping_dict)
+        if has_eg_mapping_alias:
+            mapping_dict.pop("policy-space-name", None)
+            mapping_dict.pop("endpoint-group-name", None)
+        else:
+            mapping_dict.pop("eg-mapping-alias", None)
         # Create one file per MAC address.
         LOG.debug("Final endpoint file for port %(port)s: \n %(mapping)s" %
                   {'port': port.vif_id, 'mapping': mapping_dict})
