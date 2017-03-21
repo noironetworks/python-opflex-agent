@@ -75,8 +75,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
         return port
 
     def test_port_bound(self):
-        mapping = self._get_gbp_details(
-            segmentation_labels=['zone = dmz', ' linux '])
+        mapping = self._get_gbp_details()
         self.manager.snat_iptables.setup_snat_for_es.return_value = tuple(
             ['foo-if', 'foo-mac'])
         port = self._port()
@@ -92,8 +91,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
                    "mac": 'aa:bb:cc:00:11:22',
                    "promiscuous-mode": mapping['promiscuous_mode'],
                    "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
-                   "attributes": {'vm-name': 'somename', 'zone': 'dmz',
-                                  'linux': ''},
+                   "attributes": {'vm-name': 'somename'},
                    "neutron-network": port.net_uuid,
                    "neutron-metadata-optimization": True,
                    "domain-policy-space": 'apic_tenant',
@@ -238,6 +236,42 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
             'EXT-1', '200.0.0.11', None, '200.0.0.2/8', None, None,
             None, 'foo-mac')
+
+    def test_port_segmentation_labels(self):
+        mapping = self._get_gbp_details(
+            segmentation_labels=['zone = dmz', ' linux '],
+            extra_ips=[],
+            vrf_name='name_of_l3p',
+            vrf_tenant='apic_tenant',
+            vrf_subnets=['192.168.0.0/16', '192.169.0.0/16'],
+            floating_ip=[],
+            ip_mapping=[],
+            host_snat_ips=[],
+            owned_addresses=[],
+            attestation=[])
+        port = self._port()
+        self.manager.declare_endpoint(port, mapping)
+
+        port_id = port.vif_id
+        ep_name = port_id + '_' + mapping['mac_address']
+        ep_file = {"eg-mapping-alias": (mapping['ptg_tenant'] + "_" +
+                                        mapping['app_profile_name'] + "_" +
+                                        mapping['endpoint_group_name']),
+                   "interface-name": port.port_name,
+                   "mac": 'aa:bb:cc:00:11:22',
+                   "promiscuous-mode": mapping['promiscuous_mode'],
+                   "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
+                   "attributes": {'vm-name': 'somename', 'zone': 'dmz',
+                                  'linux': ''},
+                   "neutron-network": port.net_uuid,
+                   "neutron-metadata-optimization": True,
+                   "domain-policy-space": 'apic_tenant',
+                   "domain-name": 'name_of_l3p',
+                   "ip": ['192.168.0.2', '192.168.1.2'],
+                   "anycast-return-ip": ['192.168.0.2', '192.168.1.2'],
+                   "attestation": []}
+        self.manager._write_endpoint_file.assert_called_once_with(
+                ep_name, ep_file)
 
     def test_port_multiple_ep_files(self):
         # Prepare AAP list
