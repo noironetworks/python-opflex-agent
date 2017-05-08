@@ -199,15 +199,17 @@ class GBPServerRpcCallback(object):
 
     def request_endpoint_details_list(self, context, **kwargs):
         result = []
-        for request in kwargs.pop('requests', []):
+        # TODO(ivar): have it configurable
+        batch_response = 5
+        for i, request in enumerate(kwargs.pop('requests', [])):
             details = self.gbp_driver.request_endpoint_details(
                 context, request=request, **kwargs)
             if details:
                 result.append(details)
-
-        # Notify the agent back once the answer is calculated
-        # Exclude empty answers as an error as occurred and the agent might
-        # want to retry
+            if result and (i + 1) % batch_response == 0:
+                self.agent_notifier.opflex_endpoint_update(
+                    context, result, host=kwargs.get('host'))
+                result = []
         if result:
             self.agent_notifier.opflex_endpoint_update(
                 context, result, host=kwargs.get('host'))

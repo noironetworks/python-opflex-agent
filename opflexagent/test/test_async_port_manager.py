@@ -132,6 +132,13 @@ class TestAsyncPortManager(base.BaseTestCase):
                 requests=self._sort_requests(
                     self._get_device_requests(['2', '4', '5']))))
 
+        self.manager.of_rpc.reset_mock()
+        # Verify expired and new ports requests
+        to_schedule = set(['1', '2', '3', '4', '5', '6'])
+        self.manager.schedule_update(to_schedule)
+        self.assertEqual(
+            2, self.manager.of_rpc.request_endpoint_details_list.call_count)
+
     def test_opflex_update(self):
         # Set up some requests
         to_schedule = set(['1', '2', '3', '4'])
