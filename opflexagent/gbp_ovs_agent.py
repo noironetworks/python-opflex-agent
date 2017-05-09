@@ -10,9 +10,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from neutron.common import eventlet_utils
-eventlet_utils.monkey_patch()
-
 import importlib
 import signal
 import sys
@@ -26,6 +23,7 @@ from neutron.agent import rpc as agent_rpc
 from neutron.agent import securitygroups_rpc as sg_rpc
 from neutron.common import config as common_config
 from neutron.common import constants as n_constants
+from neutron.common import eventlet_utils
 from neutron.common import exceptions
 from neutron.common import topics
 from neutron.common import utils as q_utils
@@ -47,6 +45,7 @@ from opflexagent.utils.bridge_managers import ovs_manager
 from opflexagent.utils.ep_managers import endpoint_file_manager as ep_manager
 from opflexagent.utils.port_managers import async_port_manager as port_manager
 
+eventlet_utils.monkey_patch()
 LOG = logging.getLogger(__name__)
 
 DVS_AGENT_MODULE = 'vmware_dvs.agent.dvs_neutron_agent'

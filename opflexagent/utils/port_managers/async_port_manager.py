@@ -128,15 +128,10 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
             self.pending_requests.update_request(request)
 
         LOG.debug('Scheduled requests: %s', requests)
-        # TODO(ivar): have it configurable
-        # Load balance across multiple servers
-        batch_requests = 5
-        while requests:
-            send = requests[:batch_requests]
-            requests = requests[batch_requests:]
+        if requests:
             self.of_rpc.request_endpoint_details_list(
                 self.context, agent_id=self.agent_id,
-                requests=sorted(send, key=lambda x: x['request_id']),
+                requests=sorted(requests, key=lambda x: x['request_id']),
                 host=self.host)
 
     def unschedule_update(self, device_ids=None):

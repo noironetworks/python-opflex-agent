@@ -37,7 +37,7 @@ gbp_opts = [
                default=['fe80::/64'],
                help=_("IPv6 pool used for intermediate floating-IPs "
                       "with SNAT")),
-    cfg.IntOpt('endpoint_request_timeout', default=30,
+    cfg.IntOpt('endpoint_request_timeout', default=10,
                help=_("Value in seconds that defines after how long the agent "
                       "should reschedule port info on missing response.")),
     cfg.FloatOpt('config_apply_interval', default=0.5,
