@@ -76,7 +76,7 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
         self._setup_rpc()
         self.pending_requests = RequestMap()
         self.response_by_device_id = {}
-        self.request_timeout = config['endpoint_request_timeout']
+        self.request_timeout = config['endpoint_request_timeout'] * 1000
         self.host = host
         return self
 
@@ -167,5 +167,5 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
             LOG.debug("Got response for port %(port_id)s in "
                       "%(secs)s seconds",
                       {'port_id': detail.get('device'),
-                       'secs': ((time.time() * 1000) -
-                                float(detail.get('timestamp', 0)))})
+                       'secs': (((time.time() * 1000) -
+                                 float(detail.get('timestamp', 0))) / 1000)})
