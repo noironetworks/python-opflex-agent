@@ -97,3 +97,14 @@ class TestOpflexRpc(base.OpflexTestBase):
             mock.ANY, host='h1', requests=range(3))
         self.assertFalse(
             self.callback.agent_notifier.opflex_vrf_update.called)
+
+    def test_request_endpoint_details_list_batch(self):
+        result = {'device': 'someid'}
+        self.callback.gbp_driver.request_endpoint_details = mock.Mock(
+            return_value=result)
+        self.assertEqual(
+            0, self.callback.agent_notifier.opflex_endpoint_update.call_count)
+        self.callback.request_endpoint_details_list(
+            mock.ANY, host='h1', requests=range(11))
+        self.assertEqual(
+            3, self.callback.agent_notifier.opflex_endpoint_update.call_count)
