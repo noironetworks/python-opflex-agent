@@ -34,7 +34,7 @@ class TestAsyncPortManager(base.BaseTestCase):
         cfg.CONF.register_opts(dhcp_config.DHCP_OPTS)
         super(TestAsyncPortManager, self).setUp()
         cfg.CONF.set_default('quitting_rpc_timeout', 10, 'AGENT')
-        cfg.CONF.set_default('endpoint_request_timeout', 10000, 'OPFLEX')
+        cfg.CONF.set_default('endpoint_request_timeout', 10, 'OPFLEX')
         self.manager = self._initialize_agent()
         self.agent = self.manager.gbp_agent
         self.manager.pending_requests_by_request_id = (
