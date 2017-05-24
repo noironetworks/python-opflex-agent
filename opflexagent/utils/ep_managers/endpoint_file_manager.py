@@ -400,9 +400,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 dhcp4['lease-time'] = mapping['dhcp_lease_time']
             mapping_dict['dhcp4'] = dhcp4
             break
-        if len(v6subnets) > 0 and v6subnets[0]['dns_nameservers']:
+        if len(v6subnets) > 0 and v6subnets.values()[0]['dns_nameservers']:
             mapping_dict['dhcp6'] = {
-                'dns-servers': v6subnets[0]['dns_nameservers']}
+                'dns-servers': v6subnets.values()[0]['dns_nameservers']}
             if 'interface_mtu' in mapping:
                 mapping_dict['dhcp6']['interface-mtu'] = mapping[
                     'interface_mtu']
