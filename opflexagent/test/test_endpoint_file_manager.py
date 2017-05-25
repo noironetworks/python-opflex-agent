@@ -771,3 +771,29 @@ class TestEndpointFileManager(base.OpflexTestBase):
 
         self.assertFalse('EXT-1' in
                          [x[0][0] for x in write_ep.call_args_list])
+
+    def test_v6_subnets(self):
+        # Enable DHCP optimization
+        V6_DNS = '2001:db8:1::10'
+        mapping = self._get_gbp_details(enable_dhcp_optimization=True,
+                                        interface_mtu=1800,
+                                        subnets=[{'id': 'id1',
+                                                  'enable_dhcp': True,
+                                                  'ip_version': 6,
+                                                  'dns_nameservers': [V6_DNS],
+                                                  'cidr': '2001:db8::/64',
+                                                  'host_routes': []}],
+                                        dhcp_lease_time=100)
+        port = self._port()
+        self.manager._release_int_fip = mock.Mock()
+        self.manager.declare_endpoint(port, mapping)
+        # no MTU set whatsoever
+        ep_file = None
+        for arg in self.manager._write_endpoint_file.call_args_list:
+            if port.vif_id in arg[0][0]:
+                self.assertIsNone(ep_file)
+                ep_file = arg[0][1]
+        self.assertIsNotNone(ep_file)
+        self.assertTrue('dhcp6' in ep_file)
+        self.assertEqual(ep_file['dhcp6']['interface-mtu'], 1800)
+        self.assertEqual(ep_file['dhcp6']['dns-servers'], [V6_DNS])
