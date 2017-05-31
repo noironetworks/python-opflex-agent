@@ -218,6 +218,16 @@ class TestEndpointFileManager(base.OpflexTestBase):
         port = self._port()
         mapping = self._get_gbp_details(
             l3_policy_id='newid', vrf_subnets=['192.170.0.0/16'],
+            route_leak_list=[{'src': '1.1.1.0/24',
+                              'dest': ['2.2.2.0/24', '3.3.3.0/24'],
+                              'ptg_tenant': '_noirolab_67890',
+                              'app_profile_name': 'noirolab',
+                              'endpoint_group_name': 'Leak-12345-epg'},
+                             {'src': '1.1.6.0/24',
+                              'dest': ['2.2.6.0/24', '3.3.6.0/24'],
+                              'ptg_tenant': '_noirolab_67890',
+                              'app_profile_name': 'noirolab',
+                              'endpoint_group_name': 'Leak-54321-epg'}],
             host_snat_ips=[{'external_segment_name': 'EXT-1',
                             'host_snat_ip': '200.0.0.11',
                             'gateway_ip': '200.0.0.2',
@@ -225,11 +235,21 @@ class TestEndpointFileManager(base.OpflexTestBase):
         snat_ep_file['ip'] = ['200.0.0.11']
         self.manager.declare_endpoint(port, mapping)
         self.manager._write_vrf_file.assert_called_once_with(
-            'newid', {
-                "domain-policy-space": 'apic_tenant',
-                "domain-name": 'name_of_l3p',
-                "internal-subnets": sorted(['192.170.0.0/16',
-                                            '169.254.0.0/16'])})
+            'newid',
+            {"domain-policy-space": 'apic_tenant',
+             "domain-name": 'name_of_l3p',
+             "internal-subnets": sorted(['192.170.0.0/16',
+                                         '169.254.0.0/16']),
+             "route-leak-list": [{'src': '1.1.1.0/24',
+                                  'dest': ['2.2.2.0/24', '3.3.3.0/24'],
+                                  'policy-space-name': '_noirolab_67890',
+                                  'endpoint-group-name':
+                                      'noirolab|Leak-12345-epg'},
+                                 {'src': '1.1.6.0/24',
+                                  'dest': ['2.2.6.0/24', '3.3.6.0/24'],
+                                  'policy-space-name': '_noirolab_67890',
+                                  'endpoint-group-name':
+                                      'noirolab|Leak-54321-epg'}]})
         self._check_call_list([mock.call('EXT-1', snat_ep_file)],
             self.manager._write_endpoint_file.call_args_list,
             False)

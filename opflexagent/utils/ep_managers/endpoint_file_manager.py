@@ -634,6 +634,19 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 'domain-policy-space': mapping['vrf_tenant'],
                 'domain-name': mapping['vrf_name'],
                 'internal-subnets': set(mapping['vrf_subnets'])}
+            if 'route_leak_list' in mapping:
+                route_leak_list = []
+                for route_leak_section in mapping['route_leak_list']:
+                    route_leak_item = {
+                        'src': route_leak_section['src'],
+                        'dest': route_leak_section['dest'],
+                        'policy-space-name': route_leak_section['ptg_tenant'],
+                        'endpoint-group-name':
+                            (route_leak_section['app_profile_name'] + "|" +
+                             route_leak_section['endpoint_group_name'])
+                    }
+                    route_leak_list.append(route_leak_item)
+                vrf_info['route-leak-list'] = route_leak_list
             curr_vrf = self.vrf_dict.setdefault(
                 mapping['l3_policy_id'], {'info': {}, 'vifs': set()})
             if curr_vrf['info'] != vrf_info:
