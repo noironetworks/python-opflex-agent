@@ -39,6 +39,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
         cfg.CONF.set_default('quitting_rpc_timeout', 10, 'AGENT')
         self.ep_dir = EP_DIR % _uuid()
         self.manager = self._initialize_agent()
+        self.manager.nat_mtu_size = 9000
         self._mock_agent(self.manager)
         self.addCleanup(self._purge_endpoint_dir)
 
@@ -142,7 +143,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
 
         self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
             'EXT-1', '200.0.0.10', None, '200.0.0.1/8', None, None,
-            None, None)
+            None, None, mtu=9000)
         self.manager._write_vrf_file.assert_called_once_with(
             'l3p_id', {
                 "domain-policy-space": 'apic_tenant',
@@ -208,7 +209,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
                                             '169.254.0.0/16'])})
         self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
             'EXT-1', '200.0.0.10', None, '200.0.0.1/8', None, None,
-            None, None)
+            None, None, mtu=9000)
         self.manager._write_vrf_file.reset_mock()
         self.manager._write_endpoint_file.reset_mock()
         self.manager.snat_iptables.setup_snat_for_es.reset_mock()
@@ -235,7 +236,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
             False)
         self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
             'EXT-1', '200.0.0.11', None, '200.0.0.2/8', None, None,
-            None, 'foo-mac')
+            None, 'foo-mac', mtu=9000)
 
     def test_port_segmentation_labels(self):
         mapping = self._get_gbp_details(

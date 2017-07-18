@@ -33,7 +33,7 @@ class SnatIptablesManager(object):
         if ip_wrapper_root.netns.exists(ns_name):
             ip_wrapper_root.netns.delete(ns_name)
 
-    def _add_port_and_netns(self, if_name, ns_name, if_mac=None):
+    def _add_port_and_netns(self, if_name, ns_name, if_mac=None, mtu=None):
         self.int_br.add_port(if_name, ('type', 'internal'))
         ip_wrapper_root = ip_lib.IPWrapper()
         if_dev = ip_wrapper_root.device(if_name)
@@ -48,6 +48,8 @@ class SnatIptablesManager(object):
                                   'net.ipv6.conf.all.forwarding=1'])
 
         if_dev.link.set_netns(ns_name)
+        if mtu:
+            if_dev.link.set_mtu(mtu)
         if_dev.link.set_up()
         return if_dev
 
@@ -102,7 +104,7 @@ class SnatIptablesManager(object):
     def setup_snat_for_es(self, es_name,
                           ip_start=None, ip_end=None, ip_gw=None,
                           ip6_start=None, ip6_end=None, ip6_gw=None,
-                          next_hop_mac=None):
+                          next_hop_mac=None, mtu=None):
         next_hop_if = self._get_hash_for_es(es_name)
         ns = next_hop_if
 
@@ -117,7 +119,7 @@ class SnatIptablesManager(object):
 
         self._cleanup(next_hop_if, ns)
         if_dev = self._add_port_and_netns(next_hop_if, ns,
-                                          if_mac=next_hop_mac)
+                                          if_mac=next_hop_mac, mtu=mtu)
         next_hop_mac = if_dev.link.address
         LOG.debug(_("Created namespace %(ns)s, and added port %(pt)s to it"),
                   {'ns': ns, 'pt': next_hop_if})

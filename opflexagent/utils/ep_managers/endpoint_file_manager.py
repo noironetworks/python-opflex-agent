@@ -90,6 +90,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         self._registered_endpoints = set()
         self._setup_ep_directory()
         self.host = host
+        self.nat_mtu_size = config['nat_mtu_size']
         return self
 
     def declare_endpoint(self, port, mapping):
@@ -613,7 +614,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                     self.snat_iptables.setup_snat_for_es(es_name,
                         nh.ip_start, nh.ip_end, nh.ip_gateway,
                         nh.ip6_start, nh.ip6_end, nh.ip6_gateway,
-                        nh.next_hop_mac))
+                        nh.next_hop_mac, mtu=self.nat_mtu_size))
                 LOG.info(_("Created SNAT iptables for %(es)s: "
                            "iface %(if)s, mac %(mac)s"),
                          {'es': es_name, 'if': nh.next_hop_iface,
