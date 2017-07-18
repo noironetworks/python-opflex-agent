@@ -569,6 +569,7 @@ def create_agent_config_map(conf):
                     es_info[es_name] = parsed_file[parsed_item].items()
     agent_config['external_segment'] = es_info
     agent_config['dhcp_domain'] = conf.dhcp_domain
+    agent_config['nat_mtu_size'] = conf.OPFLEX.nat_mtu_size
     return agent_config
 
 
