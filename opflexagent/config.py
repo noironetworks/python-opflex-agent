@@ -51,7 +51,9 @@ gbp_opts = [
                       "'opflex' (default), 'dvs', and 'dvs_no_binding'.")),
     cfg.StrOpt('opflex_notify_socket_path',
                default='/var/run/opflex-agent-ovs-notif.sock',
-               help=_("Path of the Opflex notification socket."))
+               help=_("Path of the Opflex notification socket.")),
+    cfg.IntOpt('nat_mtu_size', default=0,
+               help=_("MTU size of the NAT namespace interface.")),
 ]
 
 cfg.CONF.register_opts(gbp_opts, "OPFLEX")
