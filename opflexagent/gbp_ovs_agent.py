@@ -22,9 +22,7 @@ from neutron.agent.linux import ip_lib
 from neutron.agent import rpc as agent_rpc
 from neutron.agent import securitygroups_rpc as sg_rpc
 from neutron.common import config as common_config
-from neutron.common import constants as n_constants
 from neutron.common import eventlet_utils
-from neutron.common import exceptions
 from neutron.common import topics
 from neutron.common import utils as q_utils
 from neutron.conf.agent import dhcp as dhcp_config
@@ -32,6 +30,8 @@ from neutron import context
 from neutron.plugins.ml2.drivers.openvswitch.agent import (
     ovs_neutron_agent as ovs)
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
+from neutron_lib import constants as n_constants
+from neutron_lib import exceptions
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_service import loopingcall
@@ -568,7 +568,7 @@ def create_agent_config_map(conf):
                 if es_name:
                     es_info[es_name] = parsed_file[parsed_item].items()
     agent_config['external_segment'] = es_info
-    agent_config['dhcp_domain'] = conf.dhcp_domain
+    agent_config['dhcp_domain'] = conf.dns_domain
     agent_config['nat_mtu_size'] = conf.OPFLEX.nat_mtu_size
     return agent_config
 
