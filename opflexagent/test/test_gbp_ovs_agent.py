@@ -124,6 +124,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         agent.bridge_manager.int_br.get_vif_port_set = mock.Mock(
             return_value=set())
         agent.of_rpc.get_gbp_details = mock.Mock()
+        agent.port_manager.of_rpc.request_endpoint_details_list = mock.Mock()
         agent.notify_worker.terminate()
 
     def test_port_unbound_snat_cleanup(self):
