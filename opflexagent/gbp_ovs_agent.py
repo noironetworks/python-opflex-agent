@@ -19,6 +19,7 @@ from neutron._i18n import _LE, _LI, _LW
 from neutron.agent.common import config
 from neutron.agent.common import polling
 from neutron.agent.linux import ip_lib
+from neutron.agent.linux import iptables_firewall
 from neutron.agent import rpc as agent_rpc
 from neutron.agent import securitygroups_rpc as sg_rpc
 from neutron.common import config as common_config
@@ -35,6 +36,7 @@ from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_service import loopingcall
+from oslo_utils import excutils
 
 from opflexagent import as_metadata_manager
 from opflexagent import config as ofcfg  # noqa
@@ -309,6 +311,29 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             # the right method once the redesign is complete.
             self.ep_manager.vrf_info_to_file(details)
 
+    # NOTE(ivar): This method doesn't belong here or anywhere near the Neutron
+    # agent at all: Nova's compute agent creates the hybrid bridge and should
+    # configure it properly. However, because of support/issues/591 we need
+    # to make sure that LB aeging is set to 0.
+    def _set_hybrid_bridge_aeging_to_zero(self, device):
+        # Only execute if IPTables firewall driver is used
+        if isinstance(self.sg_agent.firewall,
+                      iptables_firewall.IptablesFirewallDriver):
+            # From nova.network.model.py
+            NIC_NAME_LEN = 14
+            # Naming convention from nova.virt.libvirt/vif.py
+            br_name = ("qbr" + device)[:NIC_NAME_LEN]
+            cmd = ['brctl', 'setageing', br_name, '0']
+            try:
+                self.sg_agent.firewall.iptables.execute(cmd, run_as_root=True)
+            except RuntimeError as e:
+                with excutils.save_and_reraise_exception() as ctx:
+                    if 'No such device' in e.message:
+                        # No need to rerise, port could be bound somehow else
+                        ctx.reraise = False
+                        LOG.warn("Device %s not found while disabling mac "
+                                 "learning" % br_name)
+
     def treat_devices_added_or_updated(self, details):
         """Process added or updated devices
         :param: Port details retrieved from the Neutron server
@@ -321,6 +346,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # the right method once the redesign is complete.
         port = self.bridge_manager.int_br.get_vif_port_by_id(device)
         if port:
+            # If the following command fails (RuntimeException) the binding
+            # fails.
+            self._set_hybrid_bridge_aeging_to_zero(device)
             gbp_details = details.get('gbp_details')
             neutron_details = details.get('neutron_details')
             if gbp_details and 'port_id' not in gbp_details:
