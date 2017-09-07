@@ -32,6 +32,10 @@ setuptools.setup(
                 'opflexagent.as_metadata_manager:ep_watcher_main',
             'opflex-state-watcher = '
                 'opflexagent.as_metadata_manager:state_watcher_main',
+            'neutron-cisco-apic-host-agent = '
+                'opflexagent.apic_topology:agent_main',
+            'opflex-ns-proxy = '
+                'opflexagent.namespace_proxy:main',
         ],
         'neutron.ml2.type_drivers': [
             'opflex = opflexagent.type_opflex:OpflexTypeDriver',
