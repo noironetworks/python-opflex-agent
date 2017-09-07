@@ -2,6 +2,8 @@ neutron-opflex-agent (2:@VERSION@-@REVISION@) trusty; urgency=low
 
   * Add host agent and metadata namespacy proxy
 
+ -- Thomas Bachman <bachman@noironetworks.com>  Thu, 07 Sep 2017 17:48:31 +0000
+
 neutron-opflex-agent (4.0.1-1) trusty; urgency=low
 
   * Update to Mitaka
