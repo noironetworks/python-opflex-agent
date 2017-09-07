@@ -1,4 +1,5 @@
 %define opflex_agent neutron-opflex-agent.service
+%define host_agent neutron-cisco-apic-host-agent.service
 
 Name:		neutron-opflex-agent
 Version:	@VERSION@
@@ -36,6 +37,8 @@ install -p -D -m 600 etc/gbp-opflex.filters \
     %{buildroot}%{_sysconfdir}/neutron/rootwrap.d/gbp-opflex.filters
 install -p -D -m 0644 rpm/%{opflex_agent} \
     %{buildroot}/%{_unitdir}/%{opflex_agent}
+install -p -D -m 0644 rpm/%{host_agent} \
+    %{buildroot}/%{_unitdir}/%{host_agent}
 
 # Remove unused files
 rm -rf %{buildroot}%{python2_sitelib}/opflexagent/test
@@ -47,6 +50,7 @@ usermod -a -G opflexep neutron
 %post
 %if 0%{?systemd_post:1}
     %systemd_post %{opflex_agent}
+    %systemd_post %{host_agent}
 %else
     if [ $1 -eq 1 ]; then
         # Package install, not upgrade
@@ -57,22 +61,27 @@ usermod -a -G opflexep neutron
 %preun
 %if 0%{?systemd_preun:1}
     %systemd_preun %{opflex_agent}
+    %systemd_preun %{host_agent}
 %else
     if [ $1 -eq 0 ] ; then
         # Package removal, not upgrade
         /bin/systemctl --no-reload disable %{opflex_agent} >/dev/null 2>&1 || :
         /bin/systemctl stop %{opflex_agent} >/dev/null 2>&1 || :
+        /bin/systemctl --no-reload disable %{host_agent} >/dev/null 2>&1 || :
+        /bin/systemctl stop %{host_agent} >/dev/null 2>&1 || :
     fi
 %endif
 
 %postun
 %if 0%{?systemd_postun_with_restart:1}
     %systemd_postun_with_restart %{opflex_agent}
+    %systemd_postun_with_restart %{host_agent}
 %else
     /bin/systemctl daemon-reload >/dev/null 2>&1 || :
     if [ "$1" -ge "1" ] ; then
         # Package upgrade, not uninstall
         /bin/systemctl try-restart %{opflex_agent} >/dev/null 2>&1 || :
+        /bin/systemctl try-restart %{host_agent} >/dev/null 2>&1 || :
     fi
 %endif
 
@@ -83,10 +92,16 @@ usermod -a -G opflexep neutron
 %{_bindir}/neutron-opflex-agent
 %{_bindir}/opflex-ep-watcher
 %{_bindir}/opflex-state-watcher
+%{_bindir}/neutron-cisco-apic-host-agent
+%{_bindir}/opflex-ns-proxy
 %{_sysconfdir}/neutron/rootwrap.d/gbp-opflex.filters
 %{_unitdir}/%{opflex_agent}
+%{_unitdir}/%{host_agent}
 
 %changelog
+* Tue Sep 07 2017 Thomas Bachman <bachman@noironetworks.com> - 5.0.1-1
+- Add host agent and metadata namespace proxy
+
 * Tue May 17 2016 Amit Bose <bose@noironetworks.com> - 4.0.1-1
 - Update to Mitaka
 
