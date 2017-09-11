@@ -529,7 +529,7 @@ class AsMetadataManager(object):
         self.root_helper = root_helper
         self.name = "AsMetadataManager"
         self.md_filename = "%s/%s" % (MD_DIR, MD_SUP_FILE_NAME)
-        self.integ_bridge = cfg.CONF.OVS.integration_bridge
+        self.integ_bridge = cfg.CONF.OPFLEX.fabric_bridge
         self.initialized = False
 
     def init_all(self):

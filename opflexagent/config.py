@@ -54,6 +54,9 @@ gbp_opts = [
                help=_("Path of the Opflex notification socket.")),
     cfg.IntOpt('nat_mtu_size', default=0,
                help=_("MTU size of the NAT namespace interface.")),
+    cfg.StrOpt('fabric_bridge', default='br-fabric',
+               help=_("The name of the bridge which connects to the ACI "
+                      "fabric")),
 ]
 
 cfg.CONF.register_opts(gbp_opts, "OPFLEX")

@@ -34,6 +34,8 @@ class TestOVSManager(base.BaseTestCase):
         cfg.CONF.register_opts(dhcp_config.DHCP_OPTS)
         super(TestOVSManager, self).setUp()
         self.manager = self._initialize_agent()
+        self.manager.int_br = mock.Mock()
+        self.manager.fabric_br = mock.Mock()
 
     def _check_call_list(self, expected, observed, check_all=True):
         for call in expected:
@@ -49,7 +51,8 @@ class TestOVSManager(base.BaseTestCase):
     def _initialize_agent(self):
         mock.patch(
             'opflexagent.utils.bridge_managers.ovs_lib.OVSBridge').start()
-        agent = ovs_manager.OvsManager().initialize('h1', cfg.CONF.OVS)
+        agent = ovs_manager.OvsManager().initialize('h1', cfg.CONF.OVS,
+                                                    cfg.CONF.OPFLEX)
         return agent
 
     def test_bridge_status(self):
@@ -111,3 +114,22 @@ class TestOVSManager(base.BaseTestCase):
         self.manager.int_br.get_vif_port_by_id = mock.Mock(return_value=None)
         self.manager.process_deleted_port('portid')
         self.assertEqual(0, self.manager.port_dead.call_count)
+
+    def test_add_delete_patch_ports(self):
+        self.manager.add_patch_ports(['port_id4321XXXXX', 'port_id5432XXXXX'])
+        expected = [mock.call('qpiport_id4321', 'qpfport_id4321'),
+                    mock.call('qpiport_id5432', 'qpfport_id5432')]
+        self._check_call_list(
+            expected,
+            self.manager.fabric_br.add_patch_port.call_args_list)
+        expected = [mock.call('qpfport_id4321', 'qpiport_id4321'),
+                    mock.call('qpfport_id5432', 'qpiport_id5432')]
+        self._check_call_list(
+            expected,
+            self.manager.int_br.add_patch_port.call_args_list)
+
+        self.manager.delete_patch_ports('port_id1234XXXXX')
+        self.manager.fabric_br.delete_port.assert_called_once_with(
+                                                            'qpiport_id1234')
+        self.manager.int_br.delete_port.assert_called_once_with(
+                                                            'qpfport_id1234')
