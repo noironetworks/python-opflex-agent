@@ -86,11 +86,12 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             self.int_fip_pool[4].remove(ofcst.METADATA_DEFAULT_IP)
 
         self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
-            bridge_manager.int_br)
+            bridge_manager.fabric_br)
         self._registered_endpoints = set()
         self._setup_ep_directory()
         self.host = host
         self.nat_mtu_size = config['nat_mtu_size']
+        self.bridge_manager = bridge_manager
         return self
 
     def declare_endpoint(self, port, mapping):
@@ -257,6 +258,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         ips_ext = mapping.get('extra_ips') or []
         mac = mapping.get('mac_address') or port.vif_mac
         LOG.debug("Generating mapping for %s", port.vif_id + '_' + mac)
+
+        port_i, port_f = self.bridge_manager.get_patch_port_pair_names(
+                                                                port.vif_id)
         mapping_dict = {
             "policy-space-name": mapping['ptg_tenant'],
             "endpoint-group-name": (mapping['app_profile_name'] + "|" +
@@ -264,7 +268,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             "eg-mapping-alias": "%s_%s_%s" % (mapping['ptg_tenant'],
                                               mapping['app_profile_name'],
                                               mapping['endpoint_group_name']),
-            "interface-name": port.port_name,
+            "access-interface": port.port_name,
+            "access-uplink-interface": port_f,
+            "interface-name": port_i,
             "promiscuous-mode": mapping.get('promiscuous_mode') or False,
             "uuid": '%s|%s' % (port.vif_id, mac.replace(':', '-')),
             'neutron-network': port.net_uuid,
@@ -330,6 +336,10 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             mapping_dict.pop("endpoint-group-name", None)
         else:
             mapping_dict.pop("eg-mapping-alias", None)
+
+        if 'security_group' in mapping:
+            mapping_dict['security-group'] = mapping['security_group']
+
         # Create one file per MAC address.
         LOG.debug("Final endpoint file for port %(port)s: \n %(mapping)s" %
                   {'port': port.vif_id, 'mapping': mapping_dict})

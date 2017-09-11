@@ -51,6 +51,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self._mock_agent(self.agent)
         self.addCleanup(self._purge_endpoint_dir)
         self.addCleanup(self.agent.bridge_manager.int_br.reset_mock)
+        self.addCleanup(self.agent.bridge_manager.fabric_br.reset_mock)
 
     def _port_bound_args(self, net_type='net_type'):
         port = mock.Mock()
@@ -124,6 +125,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         agent.bridge_manager.int_br = mock.Mock()
         agent.bridge_manager.int_br.get_vif_port_set = mock.Mock(
             return_value=set())
+        agent.bridge_manager.fabric_br = mock.Mock()
         agent.of_rpc.get_gbp_details = mock.Mock()
         agent.port_manager.of_rpc.request_endpoint_details_list = mock.Mock()
         agent.notify_worker.terminate()
@@ -179,6 +181,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.assertTrue(self.agent._agent_has_updates(polling_manager))
 
     def test_process_network_ports(self):
+        self.agent.bridge_manager.add_patch_ports = mock.Mock()
         fake_sub = {'tenant_id': 'tenant-id', 'id': 'someid'}
 
         mapping = self._get_gbp_details(l3_policy_id='tenant-id')
@@ -197,7 +200,10 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
         port_info = self.agent.bridge_manager.scan_ports(set())
         port_info['vrf_updated'] = self.agent.updated_vrf
+        port_info['added'] = set(['1', '2'])
         self.agent.process_network_ports(port_info, False)
+        self.agent.bridge_manager.add_patch_ports.assert_called_once_with(
+                                                            port_info['added'])
         self.agent.of_rpc.get_vrf_details_list.assert_called_once_with(
             mock.ANY, mock.ANY, set(['tenant-id']), mock.ANY)
         self.agent.ep_manager._write_vrf_file.assert_called_once_with(
@@ -292,6 +298,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                 'uuid2')
 
     def test_process_deleted_ports(self):
+        self.agent.bridge_manager.delete_patch_ports = mock.Mock()
         with mock.patch.object(
                 endpoint_file_manager.EndpointFileManager,
                 'undeclare_endpoint'):
@@ -305,12 +312,19 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             self._check_call_list(
                 expected,
                 self.agent.ep_manager.undeclare_endpoint.call_args_list)
+            expected = [mock.call('3'), mock.call('5')]
+            self._check_call_list(
+                expected,
+                self.agent.bridge_manager.delete_patch_ports.call_args_list)
 
             self.agent.ep_manager.undeclare_endpoint.reset_mock()
+            self.agent.bridge_manager.delete_patch_ports.reset_mock()
             port_info = {'current': set(['1', '2'])}
             self.agent.process_deleted_ports(port_info)
             # Nothing to do
             self.assertFalse(self.agent.ep_manager.undeclare_endpoint.called)
+            self.assertFalse(self.agent.bridge_manager.
+                             delete_patch_ports.called)
 
     def test_process_vrf_update(self):
         self.agent.ep_manager._delete_vrf_file = mock.Mock()

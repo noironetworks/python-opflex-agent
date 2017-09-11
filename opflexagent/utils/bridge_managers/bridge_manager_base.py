@@ -24,6 +24,7 @@ class BridgeManagerBase(object):
     """
     int_br_device_count = 0
     int_br = None
+    fabric_br = None
 
     @abc.abstractmethod
     def initialize(self, host, config):

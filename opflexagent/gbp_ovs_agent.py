@@ -80,6 +80,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.host = cfg.CONF.host
         agent_conf = cfg.CONF.AGENT
         ovs_conf = cfg.CONF.OVS
+        opflex_conf = cfg.CONF.OPFLEX
 
         try:
             bridge_mappings = q_utils.parse_mappings(ovs_conf.bridge_mappings)
@@ -97,7 +98,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
         # Initialize OVS Manager
         self.bridge_manager = ovs_manager.OvsManager().initialize(
-            self.host, ovs_conf)
+            self.host, ovs_conf, opflex_conf)
         # Stores port update notifications for processing in main rpc loop
         self.updated_ports = set()
         # Stores port delete notifications
@@ -264,6 +265,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 # have been actually processed.
                 port_info['current'] = (port_info['current'] -
                                         set(skipped_devices))
+                # create the patch port
+                if 'added' in port_info:
+                    self.bridge_manager.add_patch_ports(port_info['added'])
             except DeviceListRetrievalError:
                 # Need to resync as there was an error with server
                 # communication.
@@ -446,6 +450,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # Process deleted ports
         for port_id in port_info.get('removed', []):
             self.port_unbound(port_id)
+            self.bridge_manager.delete_patch_ports(port_id)
 
     def rpc_loop(self, polling_manager):
         sync = True
