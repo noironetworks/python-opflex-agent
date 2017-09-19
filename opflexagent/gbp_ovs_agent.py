@@ -469,7 +469,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 polling_manager.force_polling()
             ovs_status = self.bridge_manager.check_bridge_status()
             if ovs_status == constants.OVS_RESTARTED:
-                self.bridge_manager.setup_integration_br()
+                self.bridge_manager.setup_integration_bridge()
             elif ovs_status == constants.OVS_DEAD:
                 # Agent doesn't apply any operations when ovs is dead, to
                 # prevent unexpected failure or crash. Sleep and continue
