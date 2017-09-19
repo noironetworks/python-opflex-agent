@@ -286,5 +286,4 @@ def launch(binary, manager, topic=None):
 def agent_main():
     launch(
         BINARY_APIC_HOST_AGENT,
-        'opflexagent.topology.' +
-        'apic_topology.ApicTopologyAgent')
+        'opflexagent.apic_topology.ApicTopologyAgent')
