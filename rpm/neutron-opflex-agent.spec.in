@@ -35,6 +35,8 @@ rm -f requirements.txt
 %{__python2} setup.py install -O1 --install-data / --skip-build --root %{buildroot}
 install -p -D -m 600 etc/gbp-opflex.filters \
     %{buildroot}%{_sysconfdir}/neutron/rootwrap.d/gbp-opflex.filters
+install -p -D -m 600 etc/cisco-apic.filters \
+    %{buildroot}%{_sysconfdir}/neutron/rootwrap.d/cisco-apic.filters
 install -p -D -m 0644 rpm/%{opflex_agent} \
     %{buildroot}/%{_unitdir}/%{opflex_agent}
 install -p -D -m 0644 rpm/%{host_agent} \
@@ -95,6 +97,7 @@ usermod -a -G opflexep neutron
 %{_bindir}/neutron-cisco-apic-host-agent
 %{_bindir}/opflex-ns-proxy
 %{_sysconfdir}/neutron/rootwrap.d/gbp-opflex.filters
+%{_sysconfdir}/neutron/rootwrap.d/cisco-apic.filters
 %{_unitdir}/%{opflex_agent}
 %{_unitdir}/%{host_agent}
 
