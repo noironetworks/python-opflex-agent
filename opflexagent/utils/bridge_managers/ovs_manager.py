@@ -51,7 +51,8 @@ class OvsManager(bridge_manager_base.BridgeManagerBase):
         """Override parent setup integration bridge."""
         self.int_br.create()
         self.int_br.set_secure_mode()
-        self.int_br.reset_ofversion()
+        self.int_br.set_protocols(protocols='[]')
+        #self.int_br.reset_ofversion()
         # Add a canary flow to int_br to track OVS restarts
         self.int_br.add_flow(table=constants.CANARY_TABLE, priority=0,
                              actions="drop")
