@@ -662,6 +662,57 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.assertEqual(ep_file['dhcp4']['interface-mtu'], 1800)
         self.assertEqual(ep_file['dhcp4']['lease-time'], 100)
 
+    def test_dns_domain(self):
+        cfg.CONF.set_override('dns_domain', 'my_domain')
+        with mock.patch.object(snat_iptables_manager.SnatIptablesManager,
+                               'cleanup_snat_all'):
+            manager = self._initialize_agent()
+            self._mock_agent(manager)
+            mapping = self._get_gbp_details(enable_dhcp_optimization=True,
+                                            interface_mtu=1800,
+                                            subnets=[{'id': 'id1',
+                                                      'enable_dhcp': True,
+                                                      'ip_version': 4,
+                                                      'dns_nameservers': [],
+                                                      'cidr': '192.168.0.0/24',
+                                                      'host_routes': []}],
+                                            dhcp_lease_time=100)
+            port = self._port()
+            manager._release_int_fip = mock.Mock()
+            manager.declare_endpoint(port, mapping)
+            # no MTU set whatsoever
+            ep_file = None
+            for arg in manager._write_endpoint_file.call_args_list:
+                if port.vif_id in arg[0][0]:
+                    self.assertIsNone(ep_file)
+                    ep_file = arg[0][1]
+            self.assertIsNotNone(ep_file)
+            self.assertTrue('dhcp4' in ep_file)
+            self.assertEqual(ep_file['dhcp4']['domain'], 'my_domain')
+
+            mapping = self._get_gbp_details(enable_dhcp_optimization=True,
+                                            interface_mtu=1800,
+                                            subnets=[{'id': 'id1',
+                                                      'enable_dhcp': True,
+                                                      'ip_version': 4,
+                                                      'dns_nameservers': [],
+                                                      'cidr': '192.168.0.0/24',
+                                                      'host_routes': []}],
+                                            dhcp_lease_time=100,
+                                            dns_domain='my_domain2')
+            port = self._port()
+            manager._release_int_fip = mock.Mock()
+            manager.declare_endpoint(port, mapping)
+            # no MTU set whatsoever
+            ep_file = None
+            for arg in manager._write_endpoint_file.call_args_list:
+                if port.vif_id in arg[0][0]:
+                    self.assertIsNone(ep_file)
+                    ep_file = arg[0][1]
+            self.assertIsNotNone(ep_file)
+            self.assertTrue('dhcp4' in ep_file)
+            self.assertEqual(ep_file['dhcp4']['domain'], 'my_domain2')
+
     def _test_snat_next_hop_info(self, es_name, mapping_info, expected):
         mapping = self._get_gbp_details()
         for es in mapping['ip_mapping']:

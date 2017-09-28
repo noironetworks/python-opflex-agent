@@ -384,7 +384,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             dhcp4 = {'ip': fip['ip_address'],
                      'routers': [x for x in [sn.get('gateway_ip')] if x],
                      'dns-servers': sn['dns_nameservers'],
-                     'domain': self.dhcp_domain,
+                     'domain': mapping.get('dns_domain') or self.dhcp_domain,
                      'prefix-len': netaddr.IPNetwork(sn['cidr']).prefixlen}
             dhcp4['static-routes'] = []
             for hr in sn['host_routes']:

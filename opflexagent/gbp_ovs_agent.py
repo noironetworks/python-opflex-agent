@@ -596,7 +596,10 @@ def create_agent_config_map(conf):
                 if es_name:
                     es_info[es_name] = parsed_file[parsed_item].items()
     agent_config['external_segment'] = es_info
-    agent_config['dhcp_domain'] = conf.dns_domain
+    try:
+        agent_config['dhcp_domain'] = conf.dhcp_domain
+    except cfg.NoSuchOptError:
+        agent_config['dhcp_domain'] = conf.dns_domain
     agent_config['nat_mtu_size'] = conf.OPFLEX.nat_mtu_size
     return agent_config
 
