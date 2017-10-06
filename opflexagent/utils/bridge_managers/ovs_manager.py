@@ -21,14 +21,16 @@ from opflexagent.utils.bridge_managers import ovs_lib
 
 LOG = logging.getLogger(__name__)
 DEAD_VLAN_TAG = n_constants.MAX_VLAN_TAG + 1
+NIC_NAME_LEN = 14
 
 
 class OvsManager(bridge_manager_base.BridgeManagerBase):
     """ Bridge Manager for OpenVSwitch."""
 
-    def initialize(self, host, ovs_config):
+    def initialize(self, host, ovs_config, opflex_conf):
         self.int_br_device_count = 0
         self.int_br = ovs_lib.OVSBridge(ovs_config.integration_bridge)
+        self.fabric_br = ovs_lib.OVSBridge(opflex_conf.fabric_bridge)
         self.setup_integration_bridge()
         return self
 
@@ -53,6 +55,11 @@ class OvsManager(bridge_manager_base.BridgeManagerBase):
         self.int_br.set_secure_mode()
         self.int_br.set_protocols(protocols='[]')
         #self.int_br.reset_ofversion()
+
+        self.fabric_br.create()
+        self.fabric_br.set_secure_mode()
+        self.fabric_br.set_protocols(protocols='[]')
+
         # Add a canary flow to int_br to track OVS restarts
         self.int_br.add_flow(table=constants.CANARY_TABLE, priority=0,
                              actions="drop")
@@ -79,6 +86,21 @@ class OvsManager(bridge_manager_base.BridgeManagerBase):
         # Remove all the known ports not found on the integration bridge
         port_info['removed'] = registered_ports - cur_ports
         return port_info
+
+    def get_patch_port_pair_names(self, port_id):
+        return (("qpi%s" % port_id)[:NIC_NAME_LEN],
+                ("qpf%s" % port_id)[:NIC_NAME_LEN])
+
+    def add_patch_ports(self, port_ids):
+        for port_id in port_ids:
+            port_i, port_f = self.get_patch_port_pair_names(port_id)
+            self.fabric_br.add_patch_port(port_i, port_f)
+            self.int_br.add_patch_port(port_f, port_i)
+
+    def delete_patch_ports(self, port_id):
+        port_i, port_f = self.get_patch_port_pair_names(port_id)
+        self.fabric_br.delete_port(port_i)
+        self.int_br.delete_port(port_f)
 
     def process_deleted_port(self, port_id):
         port = self.int_br.get_vif_port_by_id(port_id)

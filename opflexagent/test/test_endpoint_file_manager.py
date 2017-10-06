@@ -54,6 +54,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
         kwargs = gbp_ovs_agent.create_agent_config_map(cfg.CONF)
         agent = endpoint_file_manager.EndpointFileManager().initialize(
             'h1', mock.Mock(), kwargs)
+        agent.bridge_manager.get_patch_port_pair_names = (mock.Mock(
+            return_value=('qpi', 'qpf')))
         return agent
 
     def _mock_agent(self, agent):
@@ -88,7 +90,9 @@ class TestEndpointFileManager(base.OpflexTestBase):
         ep_file = {"policy-space-name": mapping['ptg_tenant'],
                    "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                            mapping['endpoint_group_name']),
-                   "interface-name": port.port_name,
+                   "access-interface": port.port_name,
+                   "access-uplink-interface": 'qpf',
+                   "interface-name": 'qpi',
                    "mac": 'aa:bb:cc:00:11:22',
                    "promiscuous-mode": mapping['promiscuous_mode'],
                    "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
@@ -258,7 +262,9 @@ class TestEndpointFileManager(base.OpflexTestBase):
         ep_file = {"eg-mapping-alias": (mapping['ptg_tenant'] + "_" +
                                         mapping['app_profile_name'] + "_" +
                                         mapping['endpoint_group_name']),
-                   "interface-name": port.port_name,
+                   "access-interface": port.port_name,
+                   "access-uplink-interface": 'qpf',
+                   "interface-name": 'qpi',
                    "mac": 'aa:bb:cc:00:11:22',
                    "promiscuous-mode": mapping['promiscuous_mode'],
                    "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
@@ -366,7 +372,9 @@ class TestEndpointFileManager(base.OpflexTestBase):
                     "policy-space-name": mapping['ptg_tenant'],
                     "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                             mapping['endpoint_group_name']),
-                    "interface-name": port.port_name,
+                    "access-interface": port.port_name,
+                    "access-uplink-interface": 'qpf',
+                    "interface-name": 'qpi',
                     "mac": 'aa:bb:cc:00:11:22',
                     "promiscuous-mode": True,
                     "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
@@ -445,7 +453,9 @@ class TestEndpointFileManager(base.OpflexTestBase):
                     "policy-space-name": mapping['ptg_tenant'],
                     "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                             mapping['endpoint_group_name']),
-                    "interface-name": port.port_name,
+                    "access-interface": port.port_name,
+                    "access-uplink-interface": 'qpf',
+                    "interface-name": 'qpi',
                     # mac is BB:BB
                     "mac": 'BB:BB',
                     "promiscuous-mode": False,
@@ -489,7 +499,9 @@ class TestEndpointFileManager(base.OpflexTestBase):
                     "policy-space-name": mapping['ptg_tenant'],
                     "endpoint-group-name": (mapping['app_profile_name'] + "|" +
                                             mapping['endpoint_group_name']),
-                    "interface-name": port.port_name,
+                    "access-interface": port.port_name,
+                    "access-uplink-interface": 'qpf',
+                    "interface-name": 'qpi',
                     "promiscuous-mode": False,
                     "uuid": port.vif_id + '|AA-AA',
                     "attributes": {'vm-name': 'somename'},
@@ -647,7 +659,10 @@ class TestEndpointFileManager(base.OpflexTestBase):
                                                   'dns_nameservers': [],
                                                   'cidr': '192.168.0.0/24',
                                                   'host_routes': []}],
-                                        dhcp_lease_time=100)
+                                        dhcp_lease_time=100,
+                                        security_group=[
+                                            {'policy-space': 'common',
+                                             'name': 'gbp_default'}])
         port = self._port()
         self.manager._release_int_fip = mock.Mock()
         self.manager.declare_endpoint(port, mapping)
@@ -661,6 +676,9 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.assertTrue('dhcp4' in ep_file)
         self.assertEqual(ep_file['dhcp4']['interface-mtu'], 1800)
         self.assertEqual(ep_file['dhcp4']['lease-time'], 100)
+        self.assertEqual(ep_file['security-group'],
+                         [{'policy-space': 'common',
+                           'name': 'gbp_default'}])
 
     def test_dns_domain(self):
         cfg.CONF.set_override('dns_domain', 'my_domain')
