@@ -81,6 +81,9 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
         return self
 
     def apply_config(self):
+        LOG.debug("Apply config, pending requests: %s. current responses: "
+                  "%s" % (self.pending_requests._pending_requests_by_device_id,
+                          self.response_by_device_id))
         skipped = []
         response_by_device_id_copy = self.response_by_device_id
         self.response_by_device_id = {}
@@ -164,6 +167,9 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
                         'in the pending list', detail['request_id'])
                     continue
                 self.response_by_device_id[detail['device']] = detail
+            else:
+                LOG.warn("Endpoint update for port %s is malformed "
+                         "(request_id missing)" % detail.get('device'))
             LOG.debug("Got response for port %(port_id)s in "
                       "%(secs)s seconds",
                       {'port_id': detail.get('device'),
