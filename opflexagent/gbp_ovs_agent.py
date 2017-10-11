@@ -421,17 +421,21 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                   {'iter_num': self.iter_num,
                    'port_stats': port_stats,
                    'elapsed': elapsed})
+        sleep = False
         while elapsed < self.polling_interval:
             self.port_manager.apply_config()
             # TODO(ivar): Verify optimal sleep time
+            sleep = True
             time.sleep(min(self.config_apply_interval,
                            self.polling_interval - elapsed))
             elapsed = time.time() - start_time
-        else:
+        if not sleep:
             LOG.debug("Loop iteration exceeded interval "
                       "(%(polling_interval)s vs. %(elapsed)s)!",
                       {'polling_interval': self.polling_interval,
                        'elapsed': elapsed})
+            # Still apply config at least once
+            self.port_manager.apply_config()
         self.iter_num = self.iter_num + 1
 
     def process_deleted_ports(self, port_info):
