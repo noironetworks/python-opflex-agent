@@ -24,6 +24,8 @@ from opflexagent.test import base
 from opflexagent.utils.ep_managers import endpoint_file_manager
 
 from neutron.conf.agent import dhcp as dhcp_config
+from neutron.plugins.ml2.drivers.openvswitch.agent import (
+    ovs_neutron_agent as ovs)
 from oslo_config import cfg
 from oslo_utils import uuidutils
 
@@ -53,7 +55,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.addCleanup(self.agent.bridge_manager.int_br.reset_mock)
         self.addCleanup(self.agent.bridge_manager.fabric_br.reset_mock)
 
-    def _port_bound_args(self, net_type='net_type'):
+    def _try_port_binding_args(self, net_type='net_type'):
         port = mock.Mock()
         port.vif_id = uuidutils.generate_uuid()
         return {'port': port,
@@ -137,13 +139,13 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.of_rpc.get_gbp_details.return_value = mapping
         self.agent.ep_manager.snat_iptables.setup_snat_for_es.return_value = (
             tuple(['foo-if', 'foo-mac']))
-        args_1 = self._port_bound_args('opflex')
+        args_1 = self._try_port_binding_args('opflex')
         args_1['port'].gbp_details = mapping
-        self.agent.port_bound(**args_1)
+        self.agent.try_port_binding(**args_1)
 
-        args_2 = self._port_bound_args('opflex')
+        args_2 = self._try_port_binding_args('opflex')
         args_2['port'].gbp_details = mapping
-        self.agent.port_bound(**args_2)
+        self.agent.try_port_binding(**args_2)
         self.assertEqual(
             1,
             self.agent.ep_manager.snat_iptables.setup_snat_for_es.call_count)
@@ -157,11 +159,11 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             snat_iptables.cleanup_snat_for_es.assert_called_with('EXT-1'))
         self.agent.ep_manager._delete_endpoint_file.assert_called_with('EXT-1')
 
-    def test_port_bound_no_mapping(self):
+    def test_try_port_binding_no_mapping(self):
         self.agent.int_br = mock.Mock()
-        args = self._port_bound_args('opflex')
+        args = self._try_port_binding_args('opflex')
         args['port'].gbp_details = None
-        self.agent.port_bound(**args)
+        self.agent.try_port_binding(**args)
         self.assertFalse(self.agent.int_br.set_db_attribute.called)
         self.assertFalse(self.agent.ep_manager._write_endpoint_file.called)
 
@@ -192,9 +194,11 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                            'vrf_subnets': mapping['vrf_subnets'] +
                            ['1.1.1.0/24']}])
 
-        args = self._port_bound_args('opflex')
+        args = self._try_port_binding_args('opflex')
         args['port'].gbp_details = mapping
-        self.agent.port_bound(**args)
+        self.agent.try_port_binding(**args)
+        self.agent.bridge_manager.add_patch_ports.assert_called_once_with(
+            [args['port'].vif_id])
         self.agent.ep_manager._write_vrf_file.reset_mock()
         self.agent.subnet_update(mock.Mock(), fake_sub)
 
@@ -202,8 +206,6 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         port_info['vrf_updated'] = self.agent.updated_vrf
         port_info['added'] = set(['1', '2'])
         self.agent.process_network_ports(port_info, False)
-        self.agent.bridge_manager.add_patch_ports.assert_called_once_with(
-                                                            port_info['added'])
         self.agent.of_rpc.get_vrf_details_list.assert_called_once_with(
             mock.ANY, mock.ANY, set(['tenant-id']), mock.ANY)
         self.agent.ep_manager._write_vrf_file.assert_called_once_with(
@@ -219,10 +221,12 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         port = mock.Mock(ofport=1)
         self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
             return_value=port)
-
-        self.agent.bridge_manager.port_dead = mock.Mock()
-        self.agent.treat_devices_added_or_updated({'device': 'some_device'})
-        self.agent.bridge_manager.port_dead.assert_called_once_with(port)
+        with mock.patch.object(gbp_ovs_agent.ep_manager.EndpointFileManager,
+                               'undeclare_endpoint'):
+            self.agent.treat_devices_added_or_updated(
+                {'device': 'some_device'})
+            self.agent.ep_manager.undeclare_endpoint.assert_called_once_with(
+                port)
 
     def test_missing_port(self):
         self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
@@ -283,7 +287,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                     'cleanup_snat_all'),
                 mock.patch.object(
                     endpoint_file_manager.EndpointFileManager,
-                    'undeclare_endpoint')):
+                    'undeclare_endpoint'),
+                mock.patch.object(ovs.OVSPluginApi, 'update_device_down')):
             port_stats = {'regular': {'added': 0,
                                       'updated': 0,
                                       'removed': 0},
@@ -299,32 +304,37 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
     def test_process_deleted_ports(self):
         self.agent.bridge_manager.delete_patch_ports = mock.Mock()
-        with mock.patch.object(
-                endpoint_file_manager.EndpointFileManager,
-                'undeclare_endpoint'):
+        with contextlib.nested(
+                mock.patch.object(
+                    snat_iptables_manager.SnatIptablesManager,
+                    'cleanup_snat_all'),
+                mock.patch.object(
+                    endpoint_file_manager.EndpointFileManager,
+                    'undeclare_endpoint'),
+                mock.patch.object(ovs.OVSPluginApi, 'update_device_down')):
+            agent = self._initialize_agent()
+            self._mock_agent(agent)
             port_info = {'current': set(['1', '2']),
                          'removed': set(['3', '5'])}
-            self.agent.deleted_ports.add('3')
-            self.agent.deleted_ports.add('4')
-            self.agent.process_deleted_ports(port_info)
+            agent.bridge_manager.scan_ports = mock.Mock(return_value=port_info)
+            agent.bridge_manager.delete_patch_ports = mock.Mock()
+            agent.deleted_ports.add('3')
+            agent.deleted_ports.add('4')
+            port_stats = {'regular': {'added': 0,
+                                      'updated': 0,
+                                      'removed': 0},
+                          'ancillary': {'added': 0,
+                                        'removed': 0}}
+            agent._main_loop(set(), True, 1, port_stats, mock.Mock(), True)
             # 3, 4 and 5 are undeclared once
             expected = [mock.call('3'), mock.call('4'), mock.call('5')]
             self._check_call_list(
                 expected,
-                self.agent.ep_manager.undeclare_endpoint.call_args_list)
-            expected = [mock.call('3'), mock.call('5')]
+                agent.ep_manager.undeclare_endpoint.call_args_list)
+            expected = [mock.call(['3']), mock.call(['4']), mock.call(['5'])]
             self._check_call_list(
                 expected,
-                self.agent.bridge_manager.delete_patch_ports.call_args_list)
-
-            self.agent.ep_manager.undeclare_endpoint.reset_mock()
-            self.agent.bridge_manager.delete_patch_ports.reset_mock()
-            port_info = {'current': set(['1', '2'])}
-            self.agent.process_deleted_ports(port_info)
-            # Nothing to do
-            self.assertFalse(self.agent.ep_manager.undeclare_endpoint.called)
-            self.assertFalse(self.agent.bridge_manager.
-                             delete_patch_ports.called)
+                agent.bridge_manager.delete_patch_ports.call_args_list)
 
     def test_process_vrf_update(self):
         self.agent.ep_manager._delete_vrf_file = mock.Mock()
@@ -340,10 +350,10 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         mapping = self._get_gbp_details(l3_policy_id='tenant-id')
         self.agent.of_rpc.get_gbp_details.return_value = mapping
 
-        args = self._port_bound_args('opflex')
+        args = self._try_port_binding_args('opflex')
         args['port'].gbp_details = mapping
         self.agent.ep_manager._write_vrf_file = mock.Mock()
-        self.agent.port_bound(**args)
+        self.agent.try_port_binding(**args)
         self.agent.ep_manager._write_vrf_file.assert_called_once_with(
             'tenant-id', {
                 "domain-policy-space": mapping['vrf_tenant'],
