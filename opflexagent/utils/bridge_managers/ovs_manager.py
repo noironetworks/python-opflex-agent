@@ -97,23 +97,14 @@ class OvsManager(bridge_manager_base.BridgeManagerBase):
             self.fabric_br.add_patch_port(port_i, port_f)
             self.int_br.add_patch_port(port_f, port_i)
 
-    def delete_patch_ports(self, port_id):
-        port_i, port_f = self.get_patch_port_pair_names(port_id)
-        self.fabric_br.delete_port(port_i)
-        self.int_br.delete_port(port_f)
+    def delete_patch_ports(self, port_ids):
+        for port_id in port_ids:
+            port_i, port_f = self.get_patch_port_pair_names(port_id)
+            self.fabric_br.delete_port(port_i)
+            self.int_br.delete_port(port_f)
 
     def process_deleted_port(self, port_id):
-        port = self.int_br.get_vif_port_by_id(port_id)
-        # move to dead VLAN so deleted ports no
-        # longer have access to the network
-        if port:
-            # don't log errors since there is a chance someone will be
-            # removing the port from the bridge at the same time
-            self.port_dead(port, log_errors=False)
+        pass
 
     def port_dead(self, port, log_errors=True):
-        """Once a port has no binding, put it on the "dead vlan".
-
-        :param port: a ovs_lib.VifPort object.
-        """
         pass

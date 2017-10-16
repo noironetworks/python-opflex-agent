@@ -187,8 +187,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 port_info.get('updated') or
                 port_info.get('vrf_updated'))
 
-    def port_bound(self, port, net_uuid, network_type, physical_network,
-                   fixed_ips, device_owner):
+    def try_port_binding(self, port, net_uuid, network_type, physical_network,
+                         fixed_ips, device_owner):
         # TODO(ivar): No flows are needed in OVS, and GBP details can now
         # be retrieved in a sane way. This methos probably is not needed
         # anymore
@@ -200,7 +200,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             # Mapping is empty, this port left the Opflex policy space.
             LOG.warn("Mapping for port %s is None, undeclaring the Endpoint",
                      port.vif_id)
-            self.ep_manager.undeclare_endpoint(port.vif_id)
+            self.port_unbound(port.vif_id)
         elif network_type in self.supported_pt_network_types:
             if ((self.opflex_networks is None) or
                     (physical_network in self.opflex_networks)):
@@ -208,7 +208,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 LOG.debug("Processing the endpoint mapping "
                           "for port %(port)s: \n mapping: %(mapping)s" % {
                               'port': port.vif_id, 'mapping': mapping})
-                self.ep_manager.declare_endpoint(port, mapping)
+                self.port_bound(port, mapping)
             else:
                 LOG.error(_("Cannot provision OPFLEX network for "
                             "net-id=%(net_uuid)s - no bridge for "
@@ -222,16 +222,14 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                       {'net_type': network_type,
                        'supported': self.supported_pt_network_types})
 
+    def port_bound(self, vif, mapping):
+        self.ep_manager.declare_endpoint(vif, mapping)
+        self.bridge_manager.add_patch_ports([vif.vif_id])
+
     def port_unbound(self, vif_id):
-        """Unbind port.
-
-        :param vif_id: the id of the vif
-        """
+        """Unbind port."""
         self.ep_manager.undeclare_endpoint(vif_id)
-
-    def port_dead(self, port):
-        self.bridge_manager.port_dead(port)
-        self.ep_manager.undeclare_endpoint(port.vif_id)
+        self.bridge_manager.delete_patch_ports([vif_id])
 
     def process_network_ports(self, port_info, ovs_restarted):
         resync_a = False
@@ -265,9 +263,6 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 # have been actually processed.
                 port_info['current'] = (port_info['current'] -
                                         set(skipped_devices))
-                # create the patch port
-                if 'added' in port_info:
-                    self.bridge_manager.add_patch_ports(port_info['added'])
             except DeviceListRetrievalError:
                 # Need to resync as there was an error with server
                 # communication.
@@ -384,12 +379,12 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             else:
                 LOG.warn(_("Device %s not defined on plugin"), device)
                 if port and port.ofport != -1:
-                    self.port_dead(port)
+                    self.port_unbound(port)
         else:
             # The port disappeared and cannot be processed
             LOG.info(_("Port %s was not found on the integration bridge "
                        "and will therefore not be processed"), device)
-            self.ep_manager.undeclare_endpoint(device)
+            self.port_unbound(device)
             return False
         return True
 
@@ -405,10 +400,11 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                          "and might not be able to transmit"), vif_port.vif_id)
         if vif_port:
             if admin_state_up:
-                self.port_bound(vif_port, network_id, network_type,
-                                physical_network, fixed_ips, device_owner)
+                self.try_port_binding(vif_port, network_id, network_type,
+                                      physical_network, fixed_ips,
+                                      device_owner)
             else:
-                self.port_dead(vif_port)
+                self.port_unbound(vif_port.vif_id)
         else:
             LOG.debug("No VIF port for port %s defined on agent.", port_id)
 
@@ -438,29 +434,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             self.port_manager.apply_config()
         self.iter_num = self.iter_num + 1
 
-    def process_deleted_ports(self, port_info):
-        # don't try to process removed ports as deleted ports since
-        # they are already gone
-        if 'removed' in port_info:
-            self.deleted_ports -= port_info['removed']
-        deleted_ports = list(self.deleted_ports)
-        self.port_manager.unschedule_update(deleted_ports)
-        while self.deleted_ports:
-            port_id = self.deleted_ports.pop()
-            self.bridge_manager.process_deleted_port(port_id)
-            self.port_unbound(port_id)
-        # Flush firewall rules
-        self.sg_agent.remove_devices_filter(deleted_ports)
-        # Process deleted ports
-        for port_id in port_info.get('removed', []):
-            self.port_unbound(port_id)
-            self.bridge_manager.delete_patch_ports(port_id)
-
     def rpc_loop(self, polling_manager):
         sync = True
         ports = set()
-        updated_ports_copy = set()
-        updated_vrf_copy = set()
         ovs_restarted = False
         while self.run_daemon_loop:
             start = time.time()
@@ -494,9 +470,6 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                         polling_manager, sync)
                 except Exception:
                     LOG.exception(_LE("Error while processing VIF ports"))
-                    # Put the ports back in self.updated_port
-                    self.updated_ports |= updated_ports_copy
-                    self.updated_vrf |= updated_vrf_copy
                     sync = True
 
             self.loop_count_and_wait(start, port_stats)
@@ -512,54 +485,58 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # self.updated_ports. As the greenthread should not yield
         # between these two statements, this will be thread-safe
         updated_ports_copy = self.updated_ports
-        self.updated_ports = set()
-        reg_ports = (set() if ovs_restarted else ports)
-        port_info = self.bridge_manager.scan_ports(
-            reg_ports, updated_ports_copy)
-        removed_eps = (self.ep_manager.get_registered_endpoints() -
-                       port_info['current'])
-        if removed_eps:
-            port_info['removed'] = port_info.get('removed',
-                                                 set()) | removed_eps
+        deleted_ports_copy = self.deleted_ports
         updated_vrf_copy = self.updated_vrf
         self.updated_vrf = set()
-        vrf_info = updated_vrf_copy & set(
-            self.ep_manager.vrf_dict.keys())
-        port_info['vrf_updated'] = vrf_info
+        self.deleted_ports = set()
+        self.updated_ports = set()
+        try:
+            reg_ports = (set() if ovs_restarted else ports)
+            port_info = self.bridge_manager.scan_ports(
+                reg_ports, updated_ports_copy)
+            removed_eps = (self.ep_manager.get_registered_endpoints() -
+                           port_info['current'])
+            port_info['removed'] = port_info.get(
+                'removed', set()) | removed_eps | deleted_ports_copy
 
-        self.process_deleted_ports(port_info)
-        LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
-                  "port information retrieved. "
-                  "Elapsed:%(elapsed).3f",
-                  {'iter_num': self.iter_num,
-                   'elapsed': time.time() - start})
-        # Secure and wire/unwire VIFs and update their status
-        # on Neutron server
-        if (self._info_has_changes(port_info) or
-            self.sg_agent.firewall_refresh_needed() or
-            ovs_restarted):
-            LOG.debug("Starting to process devices in:%s",
-                      port_info)
-            # If treat devices fails - must resync with plugin
-            sync = self.process_network_ports(port_info,
-                                              ovs_restarted)
+            vrf_info = updated_vrf_copy & set(self.ep_manager.vrf_dict.keys())
+            port_info['vrf_updated'] = vrf_info
             LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
-                      "ports processed. Elapsed:%(elapsed).3f",
+                      "port information retrieved. "
+                      "Elapsed:%(elapsed).3f",
                       {'iter_num': self.iter_num,
                        'elapsed': time.time() - start})
-            port_stats['regular']['added'] = (
-                len(port_info.get('added', [])))
-            port_stats['regular']['updated'] = (
-                len(port_info.get('updated', [])))
-            port_stats['regular']['removed'] = (
-                len(port_info.get('removed', [])))
-        ports = port_info['current']
-        polling_manager.polling_completed()
-        # Keep this flag in the last line of "try" block,
-        # so we can sure that no other Exception occurred.
-        if not sync:
-            ovs_restarted = False
-        return ports, sync, ovs_restarted
+            # Secure and wire/unwire VIFs and update their status
+            # on Neutron server
+            if (self._info_has_changes(port_info) or
+                    self.sg_agent.firewall_refresh_needed() or
+                    ovs_restarted):
+                LOG.debug("Starting to process devices in:%s",
+                          port_info)
+                # If treat devices fails - must resync with plugin
+                sync = self.process_network_ports(port_info, ovs_restarted)
+                LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
+                          "ports processed. Elapsed:%(elapsed).3f",
+                          {'iter_num': self.iter_num,
+                           'elapsed': time.time() - start})
+                port_stats['regular']['added'] = (
+                    len(port_info.get('added', [])))
+                port_stats['regular']['updated'] = (
+                    len(port_info.get('updated', [])))
+                port_stats['regular']['removed'] = (
+                    len(port_info.get('removed', [])))
+            ports = port_info['current']
+            polling_manager.polling_completed()
+            # Keep this flag in the last line of "try" block,
+            # so we can sure that no other Exception occurred.
+            if not sync:
+                ovs_restarted = False
+            return ports, sync, ovs_restarted
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                self.updated_ports |= updated_ports_copy
+                self.deleted_ports |= deleted_ports_copy
+                self.updated_vrf |= updated_vrf_copy
 
     def daemon_loop(self):
         with polling.get_polling_manager(
