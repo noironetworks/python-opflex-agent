@@ -103,18 +103,6 @@ class TestOVSManager(base.BaseTestCase):
         res = self.manager.scan_ports(curr, updated_ports=set(['5']))
         self.assertEqual({'current': curr}, res)
 
-    def test_process_deleted_port(self):
-        self.manager.int_br.get_vif_port_by_id = mock.Mock(return_value='1')
-        self.manager.port_dead = mock.Mock()
-
-        self.manager.process_deleted_port('portid')
-        self.manager.port_dead.assert_called_once_with('1', log_errors=False)
-
-        self.manager.port_dead.reset_mock()
-        self.manager.int_br.get_vif_port_by_id = mock.Mock(return_value=None)
-        self.manager.process_deleted_port('portid')
-        self.assertEqual(0, self.manager.port_dead.call_count)
-
     def test_add_delete_patch_ports(self):
         self.manager.add_patch_ports(['port_id4321XXXXX', 'port_id5432XXXXX'])
         expected = [mock.call('qpiport_id4321', 'qpfport_id4321'),
@@ -128,7 +116,7 @@ class TestOVSManager(base.BaseTestCase):
             expected,
             self.manager.int_br.add_patch_port.call_args_list)
 
-        self.manager.delete_patch_ports('port_id1234XXXXX')
+        self.manager.delete_patch_ports(['port_id1234XXXXX'])
         self.manager.fabric_br.delete_port.assert_called_once_with(
                                                             'qpiport_id1234')
         self.manager.int_br.delete_port.assert_called_once_with(
