@@ -10,6 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import contextlib
 import sys
 
 import mock
@@ -36,6 +37,12 @@ class TestOVSManager(base.BaseTestCase):
         self.manager = self._initialize_agent()
         self.manager.int_br = mock.Mock()
         self.manager.fabric_br = mock.Mock()
+        self.manager.int_br.ovsdb_transaction = self.fake_transaction
+        self.manager.fabric_br.ovsdb_transaction = self.fake_transaction
+
+    @contextlib.contextmanager
+    def fake_transaction(self, *args, **kwargs):
+        yield mock.Mock()
 
     def _check_call_list(self, expected, observed, check_all=True):
         for call in expected:
@@ -105,19 +112,44 @@ class TestOVSManager(base.BaseTestCase):
 
     def test_add_delete_patch_ports(self):
         self.manager.add_patch_ports(['port_id4321XXXXX', 'port_id5432XXXXX'])
-        expected = [mock.call('qpiport_id4321', 'qpfport_id4321'),
-                    mock.call('qpiport_id5432', 'qpfport_id5432')]
+        expected = [mock.call(self.manager.int_br.br_name, 'qpiport_id4321'),
+                    mock.call(self.manager.fabric_br.br_name,
+                              'qpfport_id4321'),
+                    mock.call(self.manager.int_br.br_name, 'qpiport_id5432'),
+                    mock.call(self.manager.fabric_br.br_name,
+                              'qpfport_id5432')]
         self._check_call_list(
             expected,
-            self.manager.fabric_br.add_patch_port.call_args_list)
-        expected = [mock.call('qpfport_id4321', 'qpiport_id4321'),
-                    mock.call('qpfport_id5432', 'qpiport_id5432')]
+            self.manager.int_br.ovsdb.add_port.call_args_list)
+        expected = [mock.call('Interface', 'qpiport_id4321',
+                              ('type', 'patch'),
+                              ('options', {'peer': 'qpfport_id4321'}),
+                              ('external_ids',
+                               {'iface-id': 'port_id4321XXXXX'})),
+                    mock.call('Interface', 'qpfport_id4321',
+                              ('type', 'patch'),
+                              ('options', {'peer': 'qpiport_id4321'}),
+                              ('external_ids',
+                               {'iface-id': 'port_id4321XXXXX'})),
+
+                    mock.call('Interface', 'qpiport_id5432',
+                              ('type', 'patch'),
+                              ('options', {'peer': 'qpfport_id5432'}),
+                              ('external_ids',
+                               {'iface-id': 'port_id5432XXXXX'})),
+                    mock.call('Interface', 'qpfport_id5432',
+                              ('type', 'patch'),
+                              ('options', {'peer': 'qpiport_id5432'}),
+                              ('external_ids',
+                               {'iface-id': 'port_id5432XXXXX'}))]
         self._check_call_list(
             expected,
-            self.manager.int_br.add_patch_port.call_args_list)
+            self.manager.int_br.ovsdb.db_set.call_args_list)
 
         self.manager.delete_patch_ports(['port_id1234XXXXX'])
-        self.manager.fabric_br.delete_port.assert_called_once_with(
-                                                            'qpiport_id1234')
-        self.manager.int_br.delete_port.assert_called_once_with(
-                                                            'qpfport_id1234')
+        expected = [mock.call('qpiport_id1234', self.manager.int_br.br_name),
+                    mock.call('qpfport_id1234',
+                              self.manager.fabric_br.br_name)]
+        self._check_call_list(
+            expected,
+            self.manager.int_br.ovsdb.del_port.call_args_list)
