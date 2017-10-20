@@ -257,7 +257,20 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         ips_ext = mapping.get('extra_ips') or []
         mac = mapping.get('mac_address') or port.vif_mac
         LOG.debug("Generating mapping for %s", port.vif_id + '_' + mac)
-
+        trunk_details = port.trunk_details
+        # Nothing to do on the master port
+        vlan = None
+        access_interface = port.port_name
+        master_port_id = None
+        if trunk_details and trunk_details['master_port_id'] != port.vif_id:
+            master_name = self.bridge_manager.get_port_vif_name(
+                trunk_details['master_port_id'])
+            if master_name:
+                master_port_id = trunk_details['master_port_id']
+                access_interface = master_name
+                for p in trunk_details['subports']:
+                    if p['port_id'] == port.vif_id:
+                        vlan = p['segmentation_id']
         port_i, port_f = self.bridge_manager.get_patch_port_pair_names(
                                                                 port.vif_id)
         mapping_dict = {
@@ -267,7 +280,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             "eg-mapping-alias": "%s_%s_%s" % (mapping['ptg_tenant'],
                                               mapping['app_profile_name'],
                                               mapping['endpoint_group_name']),
-            "access-interface": port.port_name,
+            "access-interface": access_interface,
             "access-uplink-interface": port_f,
             "interface-name": port_i,
             "promiscuous-mode": mapping.get('promiscuous_mode') or False,
@@ -276,7 +289,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             'neutron-metadata-optimization':
                 mapping['enable_metadata_optimization'],
         }
-
+        if vlan:
+            mapping_dict['access-interface-vlan'] = vlan
         ips = [x['ip_address'] for x in fixed_ips]
 
         virtual_ips = []
@@ -342,7 +356,11 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         # Create one file per MAC address.
         LOG.debug("Final endpoint file for port %(port)s: \n %(mapping)s" %
                   {'port': port.vif_id, 'mapping': mapping_dict})
-        self._write_endpoint_file(port.vif_id + '_' + mac, mapping_dict)
+        file_name = port.vif_id + '_' + mac
+        if master_port_id:
+            file_name = master_port_id + '_' + file_name
+
+        self._write_endpoint_file(file_name, mapping_dict)
         self.vrf_info_to_file(mapping, vif_id=port.vif_id)
 
     def _handle_host_snat_ip(self, host_snat_ips):

@@ -23,7 +23,9 @@ from opflexagent import snat_iptables_manager
 from opflexagent.test import base
 from opflexagent.utils.ep_managers import endpoint_file_manager
 
+from neutron.api.rpc.callbacks import events
 from neutron.conf.agent import dhcp as dhcp_config
+from neutron.objects import trunk as trunk_obj
 from neutron.plugins.ml2.drivers.openvswitch.agent import (
     ovs_neutron_agent as ovs)
 from oslo_config import cfg
@@ -57,6 +59,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
     def _try_port_binding_args(self, net_type='net_type'):
         port = mock.Mock()
+        port.trunk_details = None
         port.vif_id = uuidutils.generate_uuid()
         return {'port': port,
                 'net_uuid': 'net_id',
@@ -125,7 +128,10 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         agent.bridge_manager.int_br = mock.Mock()
         agent.bridge_manager.int_br.get_vif_port_set = mock.Mock(
             return_value=set())
+        agent.bridge_manager.add_patch_ports = mock.Mock()
+        agent.bridge_manager.delete_patch_ports = mock.Mock()
         agent.bridge_manager.fabric_br = mock.Mock()
+        agent.bridge_manager.trunk_rpc = mock.Mock()
         agent.of_rpc.get_gbp_details = mock.Mock()
         agent.port_manager.of_rpc.request_endpoint_details_list = mock.Mock()
         agent.notify_worker.terminate()
@@ -368,3 +374,23 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
     def test_apply_config_interval(self):
         self.assertEqual(0.5, self.agent.config_apply_interval)
+
+    def test_trunk_handler(self):
+        trunk_id = uuidutils.generate_uuid()
+        subports = [
+            trunk_obj.SubPort(
+                port_id=uuidutils.generate_uuid(), trunk_id=trunk_id,
+                segmentation_type='foo', segmentation_id=i)
+            for i in range(2)]
+        self.agent.bridge_manager.handle_subports(subports, events.CREATED)
+        self.agent.bridge_manager.handle_subports(subports, events.DELETED)
+        self.assertFalse(self.agent.bridge_manager.add_patch_ports.called)
+        self.assertFalse(self.agent.bridge_manager.delete_patch_ports.called)
+        self.agent.bridge_manager.managed_trunks[trunk_id] = 'master_port'
+        self.agent.bridge_manager.managed_trunks['master_port'] = trunk_id
+        self.agent.bridge_manager.handle_subports(subports, events.CREATED)
+        self.agent.bridge_manager.handle_subports(subports, events.DELETED)
+        self.agent.bridge_manager.add_patch_ports.assert_called_with(
+            [subports[0].port_id, subports[1].port_id])
+        self.agent.bridge_manager.delete_patch_ports.assert_called_with(
+            [subports[0].port_id, subports[1].port_id])

@@ -74,7 +74,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
         port.fixed_ips = [{'subnet_id': 'id1', 'ip_address': '192.168.0.2'},
                           {'subnet_id': 'id2', 'ip_address': '192.168.1.2'}]
         port.device_owner = 'compute:'
-        port.port_name = 'name'
+        port.port_name = 'tap' + port.vif_id[6:]
+        port.trunk_details = None
         return port
 
     def test_port_bound(self):
@@ -867,3 +868,73 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.assertTrue('dhcp6' in ep_file)
         self.assertEqual(ep_file['dhcp6']['interface-mtu'], 1800)
         self.assertEqual(ep_file['dhcp6']['dns-servers'], [V6_DNS])
+
+    def test_port_trunk_details(self):
+        mapping = self._get_gbp_details()
+        self.manager.snat_iptables.setup_snat_for_es.return_value = tuple(
+            ['foo-if', 'foo-mac'])
+        port = self._port()
+        trunk_details = {
+            'trunk_id': 'some_id',
+            'master_port_id': port.vif_id,
+            'subports': [{
+                'port_id': 'sub1',
+                'segmentation_type': 'vlan',
+                'segmentation_id': 100,
+            }, {
+                'port_id': 'sub2',
+                'segmentation_type': 'vlan',
+                'segmentation_id': 101,
+            }]
+        }
+        port.trunk_details = trunk_details
+        self.manager._release_int_fip = mock.Mock()
+        self.manager.declare_endpoint(port, mapping)
+
+        master_port_id = port.vif_id
+        master_port_name = port.port_name
+        ep_name = master_port_id + '_' + mapping['mac_address']
+        ep_file = {"policy-space-name": mapping['ptg_tenant'],
+                   "endpoint-group-name": (mapping['app_profile_name'] + "|" +
+                                           mapping['endpoint_group_name']),
+                   "access-interface": master_port_name,
+                   "access-uplink-interface": 'qpf',
+                   "interface-name": 'qpi',
+                   "mac": 'aa:bb:cc:00:11:22',
+                   "promiscuous-mode": mapping['promiscuous_mode'],
+                   "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
+                   "attributes": {'vm-name': 'somename'},
+                   "neutron-network": port.net_uuid,
+                   "neutron-metadata-optimization": True,
+                   "domain-policy-space": 'apic_tenant',
+                   "domain-name": 'name_of_l3p',
+                   "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
+                          '192.169.8.253', '192.169.8.254'],
+                   "anycast-return-ip": ['192.168.0.2', '192.168.1.2'],
+                   # FIP mapping will be in the file
+                   "ip-address-mapping": mock.ANY,
+                   "attestation": mapping['attestation']}
+        snat_ep_file = {'mac': 'foo-mac', 'interface-name': 'foo-if',
+                        'ip': ['200.0.0.10'],
+                        'policy-space-name': 'nat-epg-tenant',
+                        'attributes': {'vm-name': 'snat|h1|EXT-1'},
+                        'promiscuous-mode': True,
+                        'endpoint-group-name': 'profile_name|nat-epg-name',
+                        'uuid': mock.ANY}
+        self._check_call_list(
+            [mock.call(ep_name, ep_file), mock.call('EXT-1', snat_ep_file)],
+            self.manager._write_endpoint_file.call_args_list)
+
+        self.manager._write_endpoint_file.reset_mock()
+        port.vif_id = 'sub1'
+        ep_file['uuid'] = port.vif_id + '|aa-bb-cc-00-11-22'
+        ep_name = master_port_id + '_sub1_' + mapping['mac_address']
+        ep_file['access-interface-vlan'] = 100
+        old_method = self.manager.bridge_manager.get_port_vif_name
+
+        def get_port_vif_name(vif_id):
+            return 'tap' + vif_id[6:]
+        self.manager.bridge_manager.get_port_vif_name = get_port_vif_name
+        self.manager.declare_endpoint(port, mapping)
+        self.manager._write_endpoint_file.assert_called_with(ep_name, ep_file)
+        self.manager.bridge_manager.get_port_vif_name = old_method
