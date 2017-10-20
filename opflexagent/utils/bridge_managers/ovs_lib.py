@@ -10,6 +10,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import contextlib
+
 from neutron.agent.common import ovs_lib
 from neutron.agent.ovsdb import impl_vsctl
 
@@ -20,3 +22,24 @@ class OVSBridge(ovs_lib.OVSBridge):
         context = self.ovsdb.context
         return impl_vsctl.BaseCommand(context, 'set',
                                       args=[self.br_name, 'protocols=[]'])
+
+    @contextlib.contextmanager
+    def ovsdb_transaction(self):
+        """Context manager for ovsdb transaction.
+
+        The object caches whether its already in transaction and if it is, the
+        original transaction is returned.  This behavior enables calling
+        manager several times while always getting the same transaction.
+        """
+        try:
+            if self._transaction:
+                yield self._transaction
+        except AttributeError:
+            pass
+        else:
+            with self.ovsdb.transaction() as txn:
+                self._transaction = txn
+                try:
+                    yield txn
+                finally:
+                    self._transaction = None
