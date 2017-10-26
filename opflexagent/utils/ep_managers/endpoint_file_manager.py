@@ -15,6 +15,7 @@ import netaddr
 import os
 
 from neutron._i18n import _LI
+from neutron.common import constants
 from neutron_lib import constants as n_constants
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
@@ -405,6 +406,17 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                      'next-hop': hr['nexthop']})
             if 'dhcp_server_ips' in sn and sn['dhcp_server_ips']:
                 dhcp4['server-ip'] = sn['dhcp_server_ips'][0]
+                # If we're using optimized metadata, add a host route for
+                # the metadata server via the DHCP agent IP (opflex networks
+                # are alway considered "isolated networks", so next-hop is
+                # the DHCP agent IP). For non-optimized metadata, the plugin
+                # has already added this route for us via "host_routes" above
+                if mapping['enable_metadata_optimization']:
+                    metadata_cidr = netaddr.IPNetwork(constants.METADATA_CIDR)
+                    dhcp4['static-routes'].append(
+                        {'dest': str(metadata_cidr.network),
+                         'dest-prefix': metadata_cidr.prefixlen,
+                         'next-hop': sn['dhcp_server_ips'][0]})
             if 'interface_mtu' in mapping:
                 dhcp4['interface-mtu'] = mapping['interface_mtu']
             if 'dhcp_lease_time' in mapping:
