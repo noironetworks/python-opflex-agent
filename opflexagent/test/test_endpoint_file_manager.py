@@ -867,3 +867,56 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.assertTrue('dhcp6' in ep_file)
         self.assertEqual(ep_file['dhcp6']['interface-mtu'], 1800)
         self.assertEqual(ep_file['dhcp6']['dns-servers'], [V6_DNS])
+
+    def test_host_routes(self):
+        DHCP_SERVER_IP = '192.168.0.2'
+        default_route = {'dest': '0.0.0.0',
+                         'dest-prefix': 0,
+                         'next-hop': '192.168.0.1'}
+        metadata_route = {'dest': '169.254.169.254',
+                          'dest-prefix': 32,
+                          'next-hop': DHCP_SERVER_IP}
+        subnets = [{'id': 'id1',
+                    'enable_dhcp': True,
+                    'ip_version': 4,
+                    'dns_nameservers': [],
+                    'cidr': '192.168.0.0/24',
+                    'dhcp_server_ips': [DHCP_SERVER_IP],
+                    'host_routes': [{'destination': '0.0.0.0/0',
+                                     'nexthop': '192.168.0.1'}]}]
+        mapping = self._get_gbp_details(enable_dhcp_optimization=True,
+                                        enable_metadata_optimization=False,
+                                        interface_mtu=1800,
+                                        subnets=subnets,
+                                        dhcp_lease_time=100)
+        port = self._port()
+        self.manager._release_int_fip = mock.Mock()
+        self.manager.declare_endpoint(port, mapping)
+        ep_file = None
+        write_ep = self.manager._write_endpoint_file
+        for arg in write_ep.call_args_list:
+            if port.vif_id in arg[0][0]:
+                self.assertIsNone(ep_file)
+                ep_file = arg[0][1]
+        self.assertIsNotNone(ep_file['dhcp4'].get('static-routes'))
+        self.assertEqual(len(ep_file['dhcp4']['static-routes']), 1)
+        self.assertEqual(ep_file['dhcp4']['static-routes'][0], default_route)
+
+        self.manager._write_endpoint_file.reset_mock()
+        mapping = self._get_gbp_details(enable_dhcp_optimization=True,
+                                        enable_metadata_optimization=True,
+                                        interface_mtu=1800,
+                                        subnets=subnets,
+                                        dhcp_lease_time=100)
+
+        self.manager.declare_endpoint(port, mapping)
+        ep_file = None
+        write_ep = self.manager._write_endpoint_file
+        for arg in write_ep.call_args_list:
+            if port.vif_id in arg[0][0]:
+                self.assertIsNone(ep_file)
+                ep_file = arg[0][1]
+        self.assertIsNotNone(ep_file['dhcp4'].get('static-routes'))
+        self.assertEqual(len(ep_file['dhcp4']['static-routes']), 2)
+        self.assertEqual(ep_file['dhcp4']['static-routes'][0], default_route)
+        self.assertEqual(ep_file['dhcp4']['static-routes'][1], metadata_route)
