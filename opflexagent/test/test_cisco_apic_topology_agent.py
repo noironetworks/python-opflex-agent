@@ -40,9 +40,9 @@ SERVICE_HOST_IFACE = 'eth0'
 SERVICE_HOST_MAC = 'aa:ee:ii:oo:uu:yy'
 
 SERVICE_PEER_CHASSIS_NAME = 'leaf4'
-SERVICE_PEER_CHASSIS = 'topology/pod-1/node-' + APIC_EXT_SWITCH
+SERVICE_PEER_CHASSIS = 'topology/pod-2/node-' + APIC_EXT_SWITCH
 SERVICE_PEER_PORT_LOCAL = 'Eth%s/%s' % (APIC_EXT_MODULE, APIC_EXT_PORT)
-SERVICE_PEER_PORT_DESC = ('topology/pod-1/paths-%s/pathep-[%s]' %
+SERVICE_PEER_PORT_DESC = ('topology/pod-2/paths-%s/pathep-[%s]' %
                           (APIC_EXT_SWITCH, SERVICE_PEER_PORT_LOCAL.lower()))
 ETH0 = SERVICE_HOST_IFACE
 
@@ -102,7 +102,7 @@ class TestCiscoApicTopologyAgent(base.BaseTestCase):
             expected = [(SERVICE_HOST, SERVICE_HOST_IFACE,
                          SERVICE_HOST_MAC, APIC_EXT_SWITCH,
                          APIC_EXT_MODULE, APIC_EXT_PORT,
-                         SERVICE_PEER_PORT_DESC)]
+                         '2', SERVICE_PEER_PORT_DESC)]
             self.assertEqual(expected,
                              peers[SERVICE_HOST_IFACE])
 
@@ -110,7 +110,7 @@ class TestCiscoApicTopologyAgent(base.BaseTestCase):
             self.agent.peers = {}
             expected = (SERVICE_HOST, SERVICE_HOST_IFACE,
                         SERVICE_HOST_MAC, APIC_EXT_SWITCH,
-                        APIC_EXT_MODULE, APIC_EXT_PORT,
+                        APIC_EXT_MODULE, APIC_EXT_PORT, '2',
                         SERVICE_PEER_PORT_DESC)
             peers = {SERVICE_HOST_IFACE: [expected]}
             context = mock.Mock()
@@ -125,7 +125,7 @@ class TestCiscoApicTopologyAgent(base.BaseTestCase):
         def test_check_for_new_peers_with_peers(self):
             expected = (SERVICE_HOST, SERVICE_HOST_IFACE,
                         SERVICE_HOST_MAC, APIC_EXT_SWITCH,
-                        APIC_EXT_MODULE, APIC_EXT_PORT,
+                        APIC_EXT_MODULE, APIC_EXT_PORT, '2',
                         SERVICE_PEER_PORT_DESC)
             peers = {SERVICE_HOST_IFACE: [expected]}
             self.agent.peers = {SERVICE_HOST_IFACE:
