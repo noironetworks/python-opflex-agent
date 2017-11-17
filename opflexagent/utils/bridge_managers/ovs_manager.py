@@ -110,7 +110,7 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
         ovsdb = self.int_br.ovsdb
         with self.int_br.ovsdb_transaction() as txn:
             for port_id in port_ids:
-                port_i, port_f = self.get_patch_port_pair_names(port_id)
+                port_f, port_i = self.get_patch_port_pair_names(port_id)
                 patch_int_attrs = self._get_patch_peer_attrs(port_f, port_id)
                 patch_fab_attrs = self._get_patch_peer_attrs(port_i, port_id)
                 txn.add(ovsdb.add_port(self.int_br.br_name, port_i))
