@@ -18,6 +18,10 @@ from neutron.agent.ovsdb import impl_vsctl
 
 class OVSBridge(ovs_lib.OVSBridge):
 
+    def __init__(self, *args, **kwargs):
+        self._transaction = None
+        super(OVSBridge, self).__init__(*args, **kwargs)
+
     def reset_ofversion(self):
         context = self.ovsdb.context
         return impl_vsctl.BaseCommand(context, 'set',
