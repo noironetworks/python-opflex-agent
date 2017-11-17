@@ -40,6 +40,7 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
         pass
 
     def handle_subports(self, subports, event_type):
+        LOG.info("Handling subports %s event %s" % (subports, event_type))
         trunk_id = subports[0].trunk_id
         if trunk_id in self.managed_trunks:
             subport_ids = [subport.port_id for subport in subports]
