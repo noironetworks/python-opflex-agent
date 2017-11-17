@@ -126,9 +126,9 @@ class TestOVSManager(base.BaseTestCase):
                               ('options', {'peer': 'qpiport_id4321'}),
                               ('external_ids',
                                {'iface-id': 'port_id4321XXXXX'})),
-                    mock.call('Interface', 'qpfport_id4321',
+                    mock.call('Interface', 'qpiport_id4321',
                               ('type', 'patch'),
-                              ('options', {'peer': 'qpiport_id4321'}),
+                              ('options', {'peer': 'qpfport_id4321'}),
                               ('external_ids',
                                {'iface-id': 'port_id4321XXXXX'})),
 
@@ -137,9 +137,9 @@ class TestOVSManager(base.BaseTestCase):
                               ('options', {'peer': 'qpiport_id5432'}),
                               ('external_ids',
                                {'iface-id': 'port_id5432XXXXX'})),
-                    mock.call('Interface', 'qpfport_id5432',
+                    mock.call('Interface', 'qpiport_id5432',
                               ('type', 'patch'),
-                              ('options', {'peer': 'qpiport_id5432'}),
+                              ('options', {'peer': 'qpfport_id5432'}),
                               ('external_ids',
                                {'iface-id': 'port_id5432XXXXX'}))]
         self._check_call_list(

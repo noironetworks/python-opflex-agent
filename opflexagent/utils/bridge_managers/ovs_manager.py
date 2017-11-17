@@ -101,17 +101,27 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
         return (("qpi%s" % port_id)[:NIC_NAME_LEN],
                 ("qpf%s" % port_id)[:NIC_NAME_LEN])
 
-    def _get_patch_peer_attrs(self, peer_name, port_id):
-        return [('type', 'patch'), ('options', {'peer': peer_name}),
-                ('external_ids', {'iface-id': port_id})]
+    def _get_patch_peer_attrs(self, peer_name, port_id, port_mac=None):
+        external_ids = {}
+        if port_mac:
+            external_ids['attached-mac'] = port_mac
+        if port_id:
+            external_ids['iface-id'] = port_id
+        attrs = [('type', 'patch'), ('options', {'peer': peer_name})]
+        if external_ids:
+            attrs.append(('external_ids', external_ids))
+        return attrs
 
-    def add_patch_ports(self, port_ids):
+    def add_patch_ports(self, port_ids, attached_macs=None):
+        attached_macs = attached_macs or {}
         ovsdb = self.int_br.ovsdb
         with self.int_br.ovsdb_transaction() as txn:
             for port_id in port_ids:
                 port_f, port_i = self.get_patch_port_pair_names(port_id)
-                patch_int_attrs = self._get_patch_peer_attrs(port_f, port_id)
-                patch_fab_attrs = self._get_patch_peer_attrs(port_i, port_id)
+                patch_int_attrs = self._get_patch_peer_attrs(
+                    port_f, port_id, port_mac=attached_macs.get(port_id))
+                patch_fab_attrs = self._get_patch_peer_attrs(
+                    port_i, port_id, port_mac=attached_macs.get(port_id))
                 txn.add(ovsdb.add_port(self.int_br.br_name, port_i))
                 txn.add(ovsdb.db_set('Interface', port_i, *patch_int_attrs))
                 txn.add(ovsdb.add_port(self.fabric_br.br_name, port_f))
@@ -121,7 +131,7 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
         ovsdb = self.int_br.ovsdb
         with self.int_br.ovsdb_transaction() as txn:
             for port_id in port_ids:
-                port_i, port_f = self.get_patch_port_pair_names(port_id)
+                port_f, port_i = self.get_patch_port_pair_names(port_id)
                 txn.add(ovsdb.del_port(port_i, self.int_br.br_name))
                 txn.add(ovsdb.del_port(port_f, self.fabric_br.br_name))
 
