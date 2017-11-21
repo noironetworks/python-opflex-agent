@@ -41,6 +41,9 @@ class AgentNotifierApi(object):
                                                        topics.DELETE)
         self.topic_subnet_update = topics.get_topic_name(topic, topics.SUBNET,
                                                          topics.UPDATE)
+        self.topic_network_update = topics.get_topic_name(topic,
+                                                          topics.NETWORK,
+                                                          topics.UPDATE)
         self.topic_opflex_endpoint_update = topics.get_topic_name(
             topic, TOPIC_OPFLEX, ENDPOINT, topics.UPDATE)
         self.topic_opflex_vrf_update = topics.get_topic_name(
@@ -58,6 +61,11 @@ class AgentNotifierApi(object):
         cctxt = self.client.prepare(fanout=True,
                                     topic=self.topic_subnet_update)
         cctxt.cast(context, 'subnet_update', subnet=subnet)
+
+    def network_update(self, context, network):
+        cctxt = self.client.prepare(fanout=True,
+                                    topic=self.topic_network_update)
+        cctxt.cast(context, 'network_update', network=network)
 
     def opflex_endpoint_update(self, context, details, host=None):
         cctxt = self.client.prepare(
@@ -126,6 +134,13 @@ class GBPServerRpcApi(object):
                    agent_id=agent_id, requests=requests, host=host)
 
     @log.log_method_call
+    def notify_filtered_ports_per_networks(self, context, networks=None,
+                                           host=None):
+        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
+        cctxt.call(context, 'notify_filtered_ports_per_networks',
+                   networks=networks, host=host)
+
+    @log.log_method_call
     def request_vrf_details(self, context, agent_id, request=None, host=None):
         # Request is a tuple with the vrf_id as first element, and the
         # request ID as second element
@@ -190,6 +205,14 @@ class GBPServerRpcCallback(object):
             for vrf_id in kwargs.pop('vrf_ids', [])
         ]
 
+    def notify_filtered_ports_per_networks(self, context, **kwargs):
+        # The pollicy driver method will provide the
+        # response using port update notifications
+        args = {'host': kwargs.get('host')}
+        for network in kwargs.pop('networks', []):
+            args.update({'network': network})
+            self.gbp_driver.notify_filtered_ports_per_network(context, **args)
+
     def request_endpoint_details(self, context, **kwargs):
         result = [self.gbp_driver.request_endpoint_details(context, **kwargs)]
         # Notify the agent back once the answer is calculated
@@ -248,6 +271,12 @@ class OpenstackRpcMixin(object):
         self.updated_vrf.add(subnet['tenant_id'])
         LOG.debug("subnet_update message processed for subnet %s",
                   subnet['id'])
+
+    def network_update(self, context, network):
+        network_id = network['id']
+        self.updated_networks.add(network_id)
+        LOG.debug("network_update message processed for network %s",
+                  network_id)
 
     def port_update(self, context, **kwargs):
         port = kwargs.get('port')
