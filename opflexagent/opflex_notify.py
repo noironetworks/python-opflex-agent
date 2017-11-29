@@ -22,7 +22,8 @@ import time
 from neutron.common import config
 from neutron.common import utils
 from neutron import context
-import opflexagent
+from opflexagent import config as ofcfg  # noqa
+from opflexagent import rpc
 from oslo_config import cfg
 from oslo_log import log as logging
 
@@ -36,8 +37,7 @@ class OpflexNotifyAgent(object):
         self.agent_id = 'opflex-notify-agent-%s' % self.host
         self.context = context.get_admin_context_without_session()
         self.sockname = cfg.CONF.OPFLEX.opflex_notify_socket_path
-        self.of_rpc = opflexagent.rpc.GBPServerRpcApi(
-            opflexagent.rpc.TOPIC_OPFLEX)
+        self.of_rpc = rpc.GBPServerRpcApi(rpc.TOPIC_OPFLEX)
 
     def _handle(self, uuids, mac, addr):
         LOG.debug('Handle: endpoint(s): {}, mac: {}, addr: {}'.
