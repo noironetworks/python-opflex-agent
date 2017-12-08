@@ -97,3 +97,14 @@ class TestOpflexRpc(base.OpflexTestBase):
             mock.ANY, host='h1', requests=range(3))
         self.assertFalse(
             self.callback.agent_notifier.opflex_vrf_update.called)
+
+    def test_notify_filtered_ports_per_networks(self):
+        networks = ['net1', 'net2']
+        mock_calls = [mock.call(mock.ANY, host='h1', network=net)
+                      for net in networks]
+        self.callback.gbp_driver.notify_filtered_ports_per_network = (
+            mock.Mock())
+        self.callback.notify_filtered_ports_per_networks(
+            mock.ANY, host='h1', networks=networks)
+        notifier = self.callback.gbp_driver.notify_filtered_ports_per_network
+        notifier.assert_has_calls(mock_calls)

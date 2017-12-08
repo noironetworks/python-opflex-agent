@@ -105,6 +105,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.deleted_ports = set()
         # Stores VRF update notifications
         self.updated_vrf = set()
+        # Stores network update notifications
+        self.updated_networks = set()
         self.setup_rpc()
         self.local_ip = ovs_conf.local_ip
         self.polling_interval = agent_conf.polling_interval
@@ -170,12 +172,14 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                      [topics.PORT, topics.DELETE],
                      [topics.SECURITY_GROUP, topics.UPDATE],
                      [topics.SUBNET, topics.UPDATE],
+                     [topics.NETWORK, topics.UPDATE],
                      [rpc.TOPIC_OPFLEX, rpc.VRF, topics.UPDATE]]
         self.connection = agent_rpc.create_consumers(
             self.endpoints, self.topic, consumers, start_listening=False)
 
     def _agent_has_updates(self, polling_manager):
         return (polling_manager.is_polling_required or
+                self.updated_networks or
                 self.updated_ports or
                 self.deleted_ports or
                 self.updated_vrf or
@@ -486,6 +490,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # between these two statements, this will be thread-safe
         updated_ports_copy = self.updated_ports
         deleted_ports_copy = self.deleted_ports
+        updated_networks_copy = self.updated_networks
+        self.updated_networks = set()
         updated_vrf_copy = self.updated_vrf
         self.updated_vrf = set()
         self.deleted_ports = set()
@@ -526,6 +532,13 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 port_stats['regular']['removed'] = (
                     len(port_info.get('removed', [])))
             ports = port_info['current']
+            # If network or related parameters have changed, we have
+            # to go get the ports on that network to see if they have
+            # any changes
+            if updated_networks_copy:
+                self.of_rpc.notify_filtered_ports_per_networks(self.context,
+                    networks=updated_networks_copy, host=self.host)
+
             polling_manager.polling_completed()
             # Keep this flag in the last line of "try" block,
             # so we can sure that no other Exception occurred.

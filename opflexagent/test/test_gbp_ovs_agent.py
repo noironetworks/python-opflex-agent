@@ -368,5 +368,20 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.ep_manager._delete_vrf_file.assert_called_once_with(
             'tenant-id')
 
+    def test_process_network_update(self):
+        mapping = self._get_gbp_details(l3_policy_id='tenant-id')
+        fake_net = {'id': 'someid'}
+        fake_port = {'id': mapping['port_id']}
+        self.agent.of_rpc.notify_filtered_ports_per_networks = mock.Mock(
+            side_effect=self.agent.port_update(mock.ANY, port=fake_port))
+        self.agent.of_rpc.get_gbp_details.return_value = mapping
+
+        # kick things off with a network update. This triggers the RPC
+        # that triggers port updates. The port update is pre-loaded with
+        # the GBP details for that port.
+        self.agent.network_update(mock.Mock(), fake_net)
+        self.assertEqual(set(['someid']), self.agent.updated_networks)
+        self.assertEqual(set([mapping['port_id']]), self.agent.updated_ports)
+
     def test_apply_config_interval(self):
         self.assertEqual(0.5, self.agent.config_apply_interval)
