@@ -189,6 +189,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
     def try_port_binding(self, port, net_uuid, network_type, physical_network,
                          fixed_ips, device_owner):
+        mapping = port.gbp_details
         port.net_uuid = net_uuid
         port.device_owner = device_owner
         port.fixed_ips = fixed_ips
@@ -203,9 +204,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 # Endpoint Manager to process the EP info
                 LOG.debug("Processing the endpoint mapping "
                           "for port %(port)s: \n mapping: %(mapping)s" % {
-                              'port': port.vif_id,
-                              'mapping': port.gbp_details})
-                self.port_bound(port)
+                              'port': port.vif_id, 'mapping': mapping})
+                self.port_bound(port, mapping)
             else:
                 LOG.error(_("Cannot provision OPFLEX network for "
                             "net-id=%(net_uuid)s - no bridge for "
@@ -219,10 +219,10 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                       {'net_type': network_type,
                        'supported': self.supported_pt_network_types})
 
-    def port_bound(self, port):
-        self.bridge_manager.add_patch_ports([port.vif_id])
-        self.ep_manager.declare_endpoint(port, port.gbp_details)
-        self.bridge_manager.manage_trunk(port)
+    def port_bound(self, vif, mapping):
+        self.ep_manager.declare_endpoint(vif, mapping)
+        self.bridge_manager.add_patch_ports([vif.vif_id])
+        self.bridge_manager.manage_trunk(vif)
 
     def port_unbound(self, vif_id):
         """Unbind port."""

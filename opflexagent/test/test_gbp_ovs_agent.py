@@ -26,6 +26,7 @@ from opflexagent.utils.ep_managers import endpoint_file_manager
 from neutron.api.rpc.callbacks import events
 from neutron.conf.agent import dhcp as dhcp_config
 from neutron.objects import trunk as trunk_obj
+
 from neutron.plugins.ml2.drivers.openvswitch.agent import (
     ovs_neutron_agent as ovs)
 from oslo_config import cfg
