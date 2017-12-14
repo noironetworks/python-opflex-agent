@@ -33,6 +33,8 @@ from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
 
+from opflexagent import config as oscfg  # noqa
+
 LOG = logging.getLogger(__name__)
 
 gbp_opts = [
