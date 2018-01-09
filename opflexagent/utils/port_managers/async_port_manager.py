@@ -12,10 +12,9 @@
 
 import time
 
-from neutron._i18n import _LE, _LI, _LW  # noqa
 from neutron.agent import rpc as agent_rpc
 from neutron.common import topics
-from neutron import context
+from neutron_lib import context
 from oslo_log import log as logging
 from oslo_utils import excutils
 from oslo_utils import uuidutils
@@ -101,7 +100,7 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
             LOG.debug("An exception has occurred.")
             with excutils.save_and_reraise_exception():
                 # The upper layers will trigger the resync
-                LOG.error(_LE("Configuration failed on port manager: %s"),
+                LOG.error("Configuration failed on port manager: %s",
                           e.message)
                 # Newer responses take precedence over old ones.
                 response_by_device_id_copy.update(self.response_by_device_id)
@@ -115,14 +114,14 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
         # See if more ports need to be updated due to request timeout
         for request in self.pending_requests.get_requests():
             if current_time - request['timestamp'] > self.request_timeout:
-                LOG.info(_LI('Request %s has timed out, rescheduling'),
+                LOG.info('Request %s has timed out, rescheduling',
                          request['request_id'])
                 device_ids.add(request['device'])
                 # Remove from the pending requests, concurrency is not a
                 # concern because of how greenthreads work
                 self.pending_requests.pop_by_request_id(request['request_id'])
 
-        LOG.info(_LI('Update scheduled for port ids %s'), device_ids)
+        LOG.info('Update scheduled for port ids %s', device_ids)
         requests = []
         for device_id in device_ids:
             request = {'request_id': uuidutils.generate_uuid(),
@@ -138,7 +137,7 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
                 host=self.host)
 
     def unschedule_update(self, device_ids=None):
-        LOG.info(_LI("Unschedule update request for devices %s"), device_ids)
+        LOG.info("Unschedule update request for devices %s", device_ids)
         for device_id in device_ids:
             self.pending_requests.pop_by_device_id(device_id)
 
@@ -155,7 +154,7 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
     def _opflex_endpoint_update(self, context, details):
         # Don't worry about concurrency, greenthreads won't be scheduled until
         # an explicit IO call is perfomed.
-        LOG.info(_LI('Got endpoint update from the server'))
+        LOG.info('Got endpoint update from the server')
         LOG.debug('The following updates were received: %s', details)
         for detail in details:
             if 'request_id' in detail:

@@ -14,7 +14,6 @@ import copy
 import netaddr
 import os
 
-from neutron._i18n import _LI
 from neutron_lib import constants as n_constants
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
@@ -67,7 +66,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
     """
 
     def initialize(self, host, bridge_manager, config):
-        LOG.info(_LI("Initializing the Endpoint File Manager. \n %s"), config)
+        LOG.info("Initializing the Endpoint File Manager. \n %s", config)
         self.epg_mapping_file = os.path.join(config['epg_mapping_dir'],
                                              FILE_NAME_FORMAT)
         self.vrf_mapping_file = os.path.join(config['epg_mapping_dir'],
@@ -95,7 +94,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         return self
 
     def declare_endpoint(self, port, mapping):
-        LOG.info(_LI("Endpoint declaration requested for port %s"),
+        LOG.info("Endpoint declaration requested for port %s",
                  port.vif_id)
         LOG.debug("Mapping file for port %(port)s, %(mapping)s" %
                   {'port': port.vif_id, 'mapping': mapping})
@@ -193,7 +192,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             self._registered_endpoints.add(port.vif_id)
 
     def undeclare_endpoint(self, port_id):
-        LOG.info(_LI("Endpoint undeclare requested for port %s"), port_id)
+        LOG.info("Endpoint undeclare requested for port %s", port_id)
         self._mapping_cleanup(port_id)
         self._registered_endpoints.discard(port_id)
 

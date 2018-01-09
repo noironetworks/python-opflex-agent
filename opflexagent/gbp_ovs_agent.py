@@ -15,8 +15,6 @@ import signal
 import sys
 import time
 
-from neutron._i18n import _LE, _LI, _LW
-from neutron.agent.common import config
 from neutron.agent.common import polling
 from neutron.agent.linux import ip_lib
 from neutron.agent.linux import iptables_firewall
@@ -26,13 +24,15 @@ from neutron.common import config as common_config
 from neutron.common import eventlet_utils
 from neutron.common import topics
 from neutron.common import utils as q_utils
+from neutron.conf.agent import common as config
 from neutron.conf.agent import dhcp as dhcp_config
-from neutron import context
 from neutron.plugins.ml2.drivers.openvswitch.agent import (
     ovs_neutron_agent as ovs)
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from neutron_lib import constants as n_constants
+from neutron_lib import context
 from neutron_lib import exceptions
+from neutron_lib.utils import helpers
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_service import loopingcall
@@ -83,7 +83,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         opflex_conf = cfg.CONF.OPFLEX
 
         try:
-            bridge_mappings = q_utils.parse_mappings(ovs_conf.bridge_mappings)
+            bridge_mappings = helpers.parse_mappings(ovs_conf.bridge_mappings)
         except ValueError as e:
             raise ValueError(_("Parsing bridge_mappings failed: %s.") % e)
 
@@ -151,7 +151,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             self.use_call = False
             self.agent_state.pop('start_flag', None)
         except Exception:
-            LOG.exception(_LE("Failed reporting state!"))
+            LOG.exception("Failed reporting state!")
 
     def setup_rpc(self):
         self.agent_id = 'opflex-agent-%s' % cfg.CONF.host
@@ -266,9 +266,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             except DeviceListRetrievalError:
                 # Need to resync as there was an error with server
                 # communication.
-                LOG.exception(_LE("process_network_ports - iteration:%d - "
-                                  "failure while retrieving port details "
-                                  "from server"), self.iter_num)
+                LOG.exception("process_network_ports - iteration:%d - "
+                              "failure while retrieving port details "
+                              "from server", self.iter_num)
                 resync_a = True
         if 'removed' in port_info:
             start = time.time()
@@ -287,7 +287,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.port_manager.unschedule_update(devices)
         self.sg_agent.remove_devices_filter(devices)
         for device in devices:
-            LOG.info(_LI("Attachment %s removed"), device)
+            LOG.info("Attachment %s removed", device)
             try:
                 self.plugin_rpc.update_device_down(self.context,
                                                    device,
@@ -396,8 +396,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # for being treated. If that does not happen, it is a potential
         # error condition of which operators should be aware
         if not vif_port.ofport:
-            LOG.warn(_LW("VIF port: %s has no ofport configured, "
-                         "and might not be able to transmit"), vif_port.vif_id)
+            LOG.warn("VIF port: %s has no ofport configured, "
+                     "and might not be able to transmit", vif_port.vif_id)
         if vif_port:
             if admin_state_up:
                 self.try_port_binding(vif_port, network_id, network_type,
@@ -448,7 +448,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             LOG.debug("Agent rpc_loop - iteration:%d started",
                       self.iter_num)
             if sync:
-                LOG.info(_LI("Agent out of sync with plugin!"))
+                LOG.info("Agent out of sync with plugin!")
                 ports.clear()
                 sync = False
                 polling_manager.force_polling()
@@ -469,7 +469,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                         ports, ovs_restarted, start, port_stats,
                         polling_manager, sync)
                 except Exception:
-                    LOG.exception(_LE("Error while processing VIF ports"))
+                    LOG.exception("Error while processing VIF ports")
                     sync = True
 
             self.loop_count_and_wait(start, port_stats)
@@ -638,8 +638,8 @@ def main_dvs(no_binding=False):
     try:
         dvs_agent = importlib.import_module(DVS_AGENT_MODULE)
     except ValueError as e:
-        LOG.error(_LE(
-            "Couldn't import DVS agent class (%s), Agent terminated!"), e)
+        LOG.error(
+            "Couldn't import DVS agent class (%s), Agent terminated!", e)
         return None
 
     def dummy_function(config, pg_cache=False):
