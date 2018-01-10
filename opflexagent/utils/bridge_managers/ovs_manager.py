@@ -10,7 +10,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from neutron._i18n import _LW
 from neutron.plugins.common import constants as n_constants
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from oslo_log import log as logging
@@ -38,12 +37,12 @@ class OvsManager(bridge_manager_base.BridgeManagerBase):
         # Check for the canary flow
         canary_flow = self.int_br.dump_flows_for_table(constants.CANARY_TABLE)
         if canary_flow == '':
-            LOG.warn(_LW("OVS is restarted. OVSNeutronAgent will reset "
-                         "bridges and recover ports."))
+            LOG.warn("OVS is restarted. OVSNeutronAgent will reset "
+                     "bridges and recover ports.")
             return constants.OVS_RESTARTED
         elif canary_flow is None:
-            LOG.warn(_LW("OVS is dead. OVSNeutronAgent will keep running "
-                         "and checking OVS status periodically."))
+            LOG.warn("OVS is dead. OVSNeutronAgent will keep running "
+                     "and checking OVS status periodically.")
             return constants.OVS_DEAD
         else:
             # OVS is in normal status

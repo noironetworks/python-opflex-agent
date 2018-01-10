@@ -21,7 +21,7 @@ import time
 
 from neutron.common import config
 from neutron.common import utils
-from neutron import context
+from neutron_lib import context
 from opflexagent import config as ofcfg  # noqa
 from opflexagent import rpc
 from oslo_config import cfg

@@ -18,7 +18,6 @@ from oslo_log import log as logging
 import six.moves.urllib.parse as urlparse
 import webob
 
-from neutron._i18n import _LE
 from neutron.agent.linux import daemon
 from neutron.agent.linux import utils as agent_utils
 from neutron.common import config
@@ -56,7 +55,7 @@ class NetworkMetadataProxyHandler(object):
                                        req.query_string,
                                        req.body)
         except Exception:
-            LOG.exception(_LE("Unexpected error."))
+            LOG.exception("Unexpected error.")
             msg = _('An unknown error has occurred. '
                     'Please try your request again.')
             return webob.exc.HTTPInternalServerError(explanation=unicode(msg))

@@ -24,16 +24,14 @@ from oslo_log import log as logging
 from oslo_service import periodic_task
 from oslo_service import service as svc
 
-from neutron.agent.common import config
 from neutron.agent.linux import ip_lib
 from neutron.agent.linux import utils
 from neutron.common import config as common_cfg
-from neutron.common import utils as neutron_utils
+from neutron.conf.agent import common as config
 from neutron import manager
 from neutron import service
+from neutron_lib.utils import net as net_utils
 
-from neutron._i18n import _LE
-from neutron._i18n import _LI
 from opflexagent import host_agent_rpc as arpc
 
 ACI_CHASSIS_DESCR_FORMAT = 'topology/pod-(\d+)/node-(\d+)'
@@ -71,7 +69,7 @@ cfg.CONF.register_opts(apic_opts, "ml2_cisco_apic")
 class ApicTopologyAgent(manager.Manager):
     def __init__(self, host=None):
         if host is None:
-            host = neutron_utils.get_hostname()
+            host = net_utils.get_hostname()
         super(ApicTopologyAgent, self).__init__(host=host)
 
         self.conf = cfg.CONF.ml2_cisco_apic
@@ -92,7 +90,7 @@ class ApicTopologyAgent(manager.Manager):
         self.invalid_peers = []
 
     def init_host(self):
-        LOG.info(_LI("APIC host agent: agent starting on %s"), self.host)
+        LOG.info("APIC host agent: agent starting on %s", self.host)
         self.state = {
             'binary': BINARY_APIC_HOST_AGENT,
             'host': self.host,
@@ -108,11 +106,11 @@ class ApicTopologyAgent(manager.Manager):
                 self.uplink_ports.append(inf)
             else:
                 # ignore unknown interfaces
-                LOG.error(_LE("No such interface (ignored): %s"), inf)
+                LOG.error("No such interface (ignored): %s", inf)
         self.lldpcmd = ['lldpctl', '-f', 'keyvalue'] + self.uplink_ports
 
     def after_start(self):
-        LOG.info(_LI("APIC host agent: started on %s"), self.host)
+        LOG.info("APIC host agent: started on %s", self.host)
 
     @periodic_task.periodic_task(
         spacing=cfg.CONF.ml2_cisco_apic.apic_agent_poll_interval,
@@ -163,7 +161,7 @@ class ApicTopologyAgent(manager.Manager):
                     context, peer[0], peer[1], None, 0, 0, 0, 0, '')
 
         except Exception:
-            LOG.exception(_LE("APIC service agent: exception in LLDP parsing"))
+            LOG.exception("APIC service agent: exception in LLDP parsing")
 
     def _get_peers(self):
         interfaces = {}
@@ -253,7 +251,7 @@ class ApicTopologyAgent(manager.Manager):
         except Exception:
             # we can safely ignore it, it is only needed for debugging
             LOG.exception(
-                _LE("APIC service agent: can not get MACaddr for %s"),
+                "APIC service agent: can not get MACaddr for %s",
                 interface)
 
     def report_send(self, context):
@@ -269,7 +267,7 @@ class ApicTopologyAgent(manager.Manager):
             # ignore it
             return
         except Exception:
-            LOG.exception(_LE("APIC host agent: failed in reporting state"))
+            LOG.exception("APIC host agent: failed in reporting state")
 
 
 def launch(binary, manager, topic=None):

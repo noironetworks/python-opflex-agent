@@ -96,8 +96,6 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
                        'get_local_port_mac',
                        return_value='00:00:00:00:00:01'),
-            mock.patch('neutron.agent.linux.utils.get_interface_mac',
-                       return_value='00:00:00:00:00:01'),
             mock.patch('neutron.agent.common.ovs_lib.BaseOVS.get_bridges'),
             mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
                        new=MockFixedIntervalLoopingCall),

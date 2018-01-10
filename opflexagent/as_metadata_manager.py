@@ -24,9 +24,9 @@ import sys
 import time
 import uuid
 
-from neutron.agent.common import config
 from neutron.common import config as common_config
 from neutron.common import utils
+from neutron.conf.agent import common as config
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import (  # noqa
     config as ovs_config)
 from oslo_config import cfg
