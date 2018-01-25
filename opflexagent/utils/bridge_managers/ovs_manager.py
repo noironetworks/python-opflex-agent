@@ -16,6 +16,7 @@ from oslo_log import log as logging
 
 from opflexagent.utils.bridge_managers import bridge_manager_base
 from opflexagent.utils.bridge_managers import ovs_lib
+from opflexagent.utils.bridge_managers import trunk_skeleton
 
 
 LOG = logging.getLogger(__name__)
@@ -23,8 +24,12 @@ DEAD_VLAN_TAG = n_constants.MAX_VLAN_TAG + 1
 NIC_NAME_LEN = 14
 
 
-class OvsManager(bridge_manager_base.BridgeManagerBase):
+class OvsManager(bridge_manager_base.BridgeManagerBase,
+                 trunk_skeleton.OpflexTrunkMixin):
     """ Bridge Manager for OpenVSwitch."""
+
+    def __init__(self):
+        super(OvsManager, self).__init__()
 
     def initialize(self, host, ovs_config, opflex_conf):
         self.int_br_device_count = 0
@@ -86,21 +91,49 @@ class OvsManager(bridge_manager_base.BridgeManagerBase):
         port_info['removed'] = registered_ports - cur_ports
         return port_info
 
+    def get_port_vif_name(self, port_id, bridge=None):
+        bridge = bridge or self.int_br
+        ports = bridge.get_vifs_by_ids([port_id])
+        if ports:
+            return ports[port_id].port_name
+
     def get_patch_port_pair_names(self, port_id):
         return (("qpi%s" % port_id)[:NIC_NAME_LEN],
                 ("qpf%s" % port_id)[:NIC_NAME_LEN])
 
-    def add_patch_ports(self, port_ids):
-        for port_id in port_ids:
-            port_i, port_f = self.get_patch_port_pair_names(port_id)
-            self.fabric_br.add_patch_port(port_i, port_f)
-            self.int_br.add_patch_port(port_f, port_i)
+    def _get_patch_peer_attrs(self, peer_name, port_id, port_mac=None):
+        external_ids = {}
+        if port_mac:
+            external_ids['attached-mac'] = port_mac
+        if port_id:
+            external_ids['iface-id'] = port_id
+        attrs = [('type', 'patch'), ('options', {'peer': peer_name})]
+        if external_ids:
+            attrs.append(('external_ids', external_ids))
+        return attrs
+
+    def add_patch_ports(self, port_ids, attached_macs=None):
+        attached_macs = attached_macs or {}
+        ovsdb = self.int_br.ovsdb
+        with self.int_br.ovsdb_transaction() as txn:
+            for port_id in port_ids:
+                port_f, port_i = self.get_patch_port_pair_names(port_id)
+                patch_int_attrs = self._get_patch_peer_attrs(
+                    port_f, port_id, port_mac=attached_macs.get(port_id))
+                patch_fab_attrs = self._get_patch_peer_attrs(
+                    port_i, port_id, port_mac=attached_macs.get(port_id))
+                txn.add(ovsdb.add_port(self.int_br.br_name, port_i))
+                txn.add(ovsdb.db_set('Interface', port_i, *patch_int_attrs))
+                txn.add(ovsdb.add_port(self.fabric_br.br_name, port_f))
+                txn.add(ovsdb.db_set('Interface', port_f, *patch_fab_attrs))
 
     def delete_patch_ports(self, port_ids):
-        for port_id in port_ids:
-            port_i, port_f = self.get_patch_port_pair_names(port_id)
-            self.fabric_br.delete_port(port_i)
-            self.int_br.delete_port(port_f)
+        ovsdb = self.int_br.ovsdb
+        with self.int_br.ovsdb_transaction() as txn:
+            for port_id in port_ids:
+                port_f, port_i = self.get_patch_port_pair_names(port_id)
+                txn.add(ovsdb.del_port(port_i, self.int_br.br_name))
+                txn.add(ovsdb.del_port(port_f, self.fabric_br.br_name))
 
     def process_deleted_port(self, port_id):
         pass
