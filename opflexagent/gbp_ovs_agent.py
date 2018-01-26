@@ -71,7 +71,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
     The GBP Opflex Agent
     """
 
-    def __init__(self, root_helper=None, **kwargs):
+    def __init__(self, root_helper=None, *args, **kwargs):
         self.opflex_networks = kwargs['opflex_networks']
         if self.opflex_networks and self.opflex_networks[0] == '*':
             self.opflex_networks = None
@@ -189,14 +189,11 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
     def try_port_binding(self, port, net_uuid, network_type, physical_network,
                          fixed_ips, device_owner):
-        # TODO(ivar): No flows are needed in OVS, and GBP details can now
-        # be retrieved in a sane way. This methos probably is not needed
-        # anymore
         mapping = port.gbp_details
         port.net_uuid = net_uuid
         port.device_owner = device_owner
         port.fixed_ips = fixed_ips
-        if not mapping:
+        if not port.gbp_details:
             # Mapping is empty, this port left the Opflex policy space.
             LOG.warn("Mapping for port %s is None, undeclaring the Endpoint",
                      port.vif_id)
@@ -225,11 +222,13 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
     def port_bound(self, vif, mapping):
         self.ep_manager.declare_endpoint(vif, mapping)
         self.bridge_manager.add_patch_ports([vif.vif_id])
+        self.bridge_manager.manage_trunk(vif)
 
     def port_unbound(self, vif_id):
         """Unbind port."""
         self.ep_manager.undeclare_endpoint(vif_id)
         self.bridge_manager.delete_patch_ports([vif_id])
+        self.bridge_manager.unmanage_trunk(vif_id)
 
     def process_network_ports(self, port_info, ovs_restarted):
         resync_a = False
@@ -349,6 +348,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             # fails.
             self._set_hybrid_bridge_aeging_to_zero(device)
             gbp_details = details.get('gbp_details')
+            trunk_details = details.get('trunk_details')
             neutron_details = details.get('neutron_details')
             if gbp_details and 'port_id' not in gbp_details:
                 # The port is dead
@@ -356,8 +356,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             if neutron_details and 'port_id' in neutron_details:
                 LOG.info(_("Port %(device)s updated. Details: %(details)s"),
                          {'device': device, 'details': details})
-                # Inject GBP details
+                # Inject GBP/Trunk details
                 port.gbp_details = gbp_details
+                port.trunk_details = trunk_details
                 self.treat_vif_port(port, neutron_details['port_id'],
                                     neutron_details['network_id'],
                                     neutron_details['network_type'],
