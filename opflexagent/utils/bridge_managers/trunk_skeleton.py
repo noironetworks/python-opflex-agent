@@ -13,10 +13,11 @@
 from neutron.api.rpc.callbacks.consumer import registry
 from neutron.api.rpc.callbacks import events
 from neutron.api.rpc.callbacks import resources
-from neutron import context as n_context
+
 from neutron.objects import trunk as trunk_objects
 from neutron.services.trunk import constants
 from neutron.services.trunk.rpc import agent
+from neutron_lib import context as n_context
 from oslo_context import context as o_context
 from oslo_log import log as logging
 
