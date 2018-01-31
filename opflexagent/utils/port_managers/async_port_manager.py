@@ -126,6 +126,7 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
         requests = []
         for device_id in device_ids:
             request = {'request_id': uuidutils.generate_uuid(),
+                       'host': self.host, 'agent_id': self.agent_id,
                        'timestamp': current_time, 'device': device_id}
             requests.append(request)
             self.pending_requests.update_request(request)
