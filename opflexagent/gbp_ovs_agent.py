@@ -353,7 +353,11 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             if gbp_details and 'port_id' not in gbp_details:
                 # The port is dead
                 details.pop('port_id', None)
-            if neutron_details and 'port_id' in neutron_details:
+            if (gbp_details and gbp_details.get('host') and
+                gbp_details['host'] != self.host):
+                    self.port_unbound(device)
+                    return False
+            elif neutron_details and 'port_id' in neutron_details:
                 LOG.info(_("Port %(device)s updated. Details: %(details)s"),
                          {'device': device, 'details': details})
                 # Inject GBP/Trunk details
@@ -381,6 +385,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 LOG.warn(_("Device %s not defined on plugin"), device)
                 if port and port.ofport != -1:
                     self.port_unbound(port)
+                    return False
         else:
             # The port disappeared and cannot be processed
             LOG.info(_("Port %s was not found on the integration bridge "
