@@ -112,6 +112,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             # to mocked out RPC calls
             agent.use_call = True
             agent.tun_br = mock.Mock()
+            agent.host = 'host1'
         agent.sg_agent = mock.Mock()
         return agent
 
@@ -405,3 +406,46 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             attached_macs={subports[0].port_id: '0', subports[1].port_id: '1'})
         self.agent.bridge_manager.delete_patch_ports.assert_called_with(
             [subports[0].port_id, subports[1].port_id])
+
+    def test_port_bound_to_host(self):
+        mapping = self._get_gbp_details(device='some_device')
+        port_details = {'device': 'some_device',
+                        'admin_state_up': True,
+                        'port_id': mapping['port_id'],
+                        'network_id': 'some-net',
+                        'network_type': 'opflex',
+                        'physical_network': 'phys_net',
+                        'segmentation_id': '',
+                        'fixed_ips': [],
+                        'device_owner': 'some-vm'}
+        self.agent.plugin_rpc.update_device_up = mock.Mock()
+        self.agent.plugin_rpc.update_device_down = mock.Mock()
+        port = mock.Mock(ofport=1, vif_id=mapping['port_id'])
+        self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
+            return_value=port)
+        self.agent.ep_manager._mapping_cleanup = mock.Mock()
+        self.agent.ep_manager._mapping_to_file = mock.Mock()
+
+        # first test is with no binding attribute. This is what
+        # happens when port binding is first attempted, in order to
+        # bind the port to a host.
+        mapping['host'] = ''
+        self.agent.treat_devices_added_or_updated(
+            {'device': 'some_device', 'neutron_details': port_details,
+             'gbp_details': mapping, 'port_id': 'port_id'})
+        self.assertTrue(self.agent.ep_manager._mapping_to_file.called)
+        self.agent.ep_manager._mapping_cleanup.assert_called_once_with(
+            port_details['port_id'], cleanup_vrf=False,
+            mac_exceptions=set([mapping['mac_address']]))
+
+        self.agent.ep_manager._mapping_cleanup.reset_mock()
+        self.agent.ep_manager._mapping_to_file.reset_mock()
+
+        # Now try binding with a different host
+        mapping['host'] = 'host2'
+        self.agent.treat_devices_added_or_updated(
+            {'device': 'some_device', 'neutron_details': port_details,
+             'gbp_details': mapping, 'port_id': 'port_id'})
+        self.assertFalse(self.agent.ep_manager._mapping_to_file.called)
+        self.agent.ep_manager._mapping_cleanup.assert_called_once_with(
+            port_details['device'])
