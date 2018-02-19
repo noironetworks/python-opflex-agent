@@ -40,5 +40,7 @@ setuptools.setup(
         'neutron.ml2.type_drivers': [
             'opflex = opflexagent.type_opflex:OpflexTypeDriver',
         ]
-    }
+    },
+    data_files=[('etc/neutron/opflex-agent',
+        ['etc/neutron/opflex-agent/apic_topology_service.ini'])]
 )
