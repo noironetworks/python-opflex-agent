@@ -65,7 +65,7 @@ class TestCiscoApicTopologyAgent(base.BaseTestCase):
             super(TestCiscoApicTopologyAgent, self).setUp()
             # Configure the Cisco APIC mechanism driver
             cfg.CONF.set_override('apic_host_uplink_ports',
-                                  APIC_UPLINK_PORTS, 'ml2_cisco_apic')
+                                  APIC_UPLINK_PORTS, 'apic_host_agent')
             # Patch device_exists
             self.dev_exists = mock.patch(DEV_EXISTS).start()
             # Patch IPDevice
