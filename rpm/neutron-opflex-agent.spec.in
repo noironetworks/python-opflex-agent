@@ -100,6 +100,7 @@ usermod -a -G opflexep neutron
 %{_sysconfdir}/neutron/rootwrap.d/cisco-apic.filters
 %{_unitdir}/%{opflex_agent}
 %{_unitdir}/%{host_agent}
+%config(noreplace) %{_sysconfdir}/neutron/opflex-agent/apic_topology_service.ini
 
 %changelog
 * Tue Sep 07 2017 Thomas Bachman <bachman@noironetworks.com> - 5.0.1-1
