@@ -63,7 +63,7 @@ apic_opts = [
                  help=_('Interval between agent status updates (in sec)')),
 ]
 
-cfg.CONF.register_opts(apic_opts, "ml2_cisco_apic")
+cfg.CONF.register_opts(apic_opts, "apic_host_agent")
 
 
 class ApicTopologyAgent(manager.Manager):
@@ -72,7 +72,7 @@ class ApicTopologyAgent(manager.Manager):
             host = net_utils.get_hostname()
         super(ApicTopologyAgent, self).__init__(host=host)
 
-        self.conf = cfg.CONF.ml2_cisco_apic
+        self.conf = cfg.CONF.apic_host_agent
         self.count_current = 0
         self.count_force_send = AGENT_FORCE_UPDATE_COUNT
         self.interfaces = {}
@@ -113,7 +113,7 @@ class ApicTopologyAgent(manager.Manager):
         LOG.info("APIC host agent: started on %s", self.host)
 
     @periodic_task.periodic_task(
-        spacing=cfg.CONF.ml2_cisco_apic.apic_agent_poll_interval,
+        spacing=cfg.CONF.apic_host_agent.apic_agent_poll_interval,
         run_immediately=True)
     def _check_for_new_peers(self, context):
         LOG.debug("APIC host agent: _check_for_new_peers")
@@ -274,8 +274,8 @@ def launch(binary, manager, topic=None):
     cfg.CONF(project='neutron')
     common_cfg.init(sys.argv[1:])
     config.setup_logging()
-    report_period = cfg.CONF.ml2_cisco_apic.apic_agent_report_interval
-    poll_period = cfg.CONF.ml2_cisco_apic.apic_agent_poll_interval
+    report_period = cfg.CONF.apic_host_agent.apic_agent_report_interval
+    poll_period = cfg.CONF.apic_host_agent.apic_agent_poll_interval
     server = service.Service.create(
         binary=binary, manager=manager, topic=topic,
         report_interval=report_period, periodic_interval=poll_period)
