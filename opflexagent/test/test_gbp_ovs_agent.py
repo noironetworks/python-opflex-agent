@@ -231,7 +231,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             self.agent.treat_devices_added_or_updated(
                 {'device': 'some_device'})
             self.agent.ep_manager.undeclare_endpoint.assert_called_once_with(
-                port)
+                port.vif_id)
 
     def test_missing_port(self):
         self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
