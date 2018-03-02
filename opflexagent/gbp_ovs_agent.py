@@ -384,7 +384,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             else:
                 LOG.warn(_("Device %s not defined on plugin"), device)
                 if port and port.ofport != -1:
-                    self.port_unbound(port)
+                    self.port_unbound(port.vif_id)
                     return False
         else:
             # The port disappeared and cannot be processed
