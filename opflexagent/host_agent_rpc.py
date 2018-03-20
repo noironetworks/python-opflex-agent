@@ -23,17 +23,18 @@ TOPIC_APIC_SERVICE = 'apic-service'
 class ApicTopologyServiceNotifierApi(object):
 
     def __init__(self):
-        target = oslo_messaging.Target(topic=TOPIC_APIC_SERVICE, version='1.2')
+        target = oslo_messaging.Target(topic=TOPIC_APIC_SERVICE, version='2')
         self.client = rpc.get_client(target)
 
     def update_link(self, context, host, interface, mac, switch, module, port,
-                    pod_id, port_description=''):
-        cctxt = self.client.prepare(version='1.2', fanout=False)
+                    pod_id, port_description='', force=False):
+        cctxt = self.client.prepare(version='2', fanout=False)
         cctxt.cast(context, 'update_link', host=host, interface=interface,
                    mac=mac, switch=switch, module=module, port=port,
-                   pod_id=pod_id, port_description=port_description)
+                   pod_id=pod_id, port_description=port_description,
+                   force=force)
 
     def delete_link(self, context, host, interface):
-        cctxt = self.client.prepare(version='1.2', fanout=False)
+        cctxt = self.client.prepare(version='2', fanout=False)
         cctxt.cast(context, 'delete_link', host=host, interface=interface,
                    mac=None, switch=0, module=0, port=0)
