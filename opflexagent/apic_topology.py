@@ -43,7 +43,7 @@ ACI_PORT_LOCAL_FORMAT = 'Eth(\d+)/(\d+(\/\d+)*)'
 ACI_VPCPORT_DESCR_FORMAT = ('topology/pod-(\d+)/protpaths-(\d+)-(\d+)/pathep-'
                             '\[(.*)\]')
 
-AGENT_FORCE_UPDATE_COUNT = 5
+AGENT_FORCE_UPDATE_COUNT = 30
 BINARY_APIC_HOST_AGENT = 'neutron-cisco-apic-host-agent'
 TYPE_APIC_HOST_AGENT = 'cisco-apic-host-agent'
 VPCMODULE_NAME = 'vpc-%s-%s'
@@ -126,7 +126,6 @@ class ApicTopologyAgent(manager.Manager):
             self.count_current += 1
             if self.count_current >= self.count_force_send:
                 force_send = True
-                self.count_current = 0
 
             # Check for new peers
             new_peers = self._get_peers()
@@ -146,11 +145,14 @@ class ApicTopologyAgent(manager.Manager):
                     LOG.debug('reporting peer removal: %s', peer)
                     self.service_agent.update_link(
                         context, peer[0], peer[1], None, 0, 0, 0, 0, '')
+                    self.count_current = 0
                 if (interface not in curr_peers or
                         curr_peers[interface] != peer or
                         force_send):
                     LOG.debug('reporting new peer: %s', peer)
-                    self.service_agent.update_link(context, *peer)
+                    self.service_agent.update_link(context, *peer,
+                                                   force=force_send)
+                    self.count_current = 0
                 if interface in curr_peers:
                     curr_peers.pop(interface)
 
@@ -159,6 +161,7 @@ class ApicTopologyAgent(manager.Manager):
                 LOG.debug('reporting peer removal: %s', peer)
                 self.service_agent.update_link(
                     context, peer[0], peer[1], None, 0, 0, 0, 0, '')
+                self.count_current = 0
 
         except Exception:
             LOG.exception("APIC service agent: exception in LLDP parsing")
