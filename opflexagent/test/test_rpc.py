@@ -66,8 +66,8 @@ class TestOpflexRpc(base.OpflexTestBase):
             return_value=result)
         self.callback.request_endpoint_details_list(
             mock.ANY, host='h1', requests=range(3))
-        (self.callback.agent_notifier.opflex_endpoint_update.
-            assert_called_once_with(mock.ANY, [result] * 3, host='h1'))
+        self.assertEqual(
+            3, self.callback.agent_notifier.opflex_endpoint_update.call_count)
 
         # Test None return
         self.callback.agent_notifier.opflex_endpoint_update.reset_mock()
@@ -85,8 +85,8 @@ class TestOpflexRpc(base.OpflexTestBase):
             return_value=result)
         self.callback.request_vrf_details_list(
             mock.ANY, host='h1', requests=range(3))
-        (self.callback.agent_notifier.opflex_vrf_update.
-            assert_called_once_with(mock.ANY, [result] * 3, host='h1'))
+        self.assertEqual(
+            3, self.callback.agent_notifier.opflex_vrf_update.call_count)
 
         # Test None return
         self.callback.agent_notifier.opflex_vrf_update.reset_mock()
