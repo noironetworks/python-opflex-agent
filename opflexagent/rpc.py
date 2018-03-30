@@ -198,8 +198,19 @@ class GBPServerRpcCallback(object):
                 context, result, host=kwargs.get('host'))
 
     def request_endpoint_details_list(self, context, **kwargs):
+        result = []
         for request in kwargs.pop('requests', []):
-            self.request_endpoint_details(context, request=request, **kwargs)
+            details = self.gbp_driver.request_endpoint_details(
+                context, request=request, **kwargs)
+            if details:
+                result.append(details)
+
+        # Notify the agent back once the answer is calculated
+        # Exclude empty answers as an error as occurred and the agent might
+        # want to retry
+        if result:
+            self.agent_notifier.opflex_endpoint_update(
+                context, result, host=kwargs.get('host'))
 
     def request_vrf_details(self, context, **kwargs):
         result = [self.gbp_driver.request_vrf_details(context, **kwargs)]
@@ -209,8 +220,19 @@ class GBPServerRpcCallback(object):
                                                   host=kwargs.get('host'))
 
     def request_vrf_details_list(self, context, **kwargs):
+        result = []
         for request in kwargs.pop('requests', []):
-            self.request_vrf_details(context, request=request, **kwargs)
+            details = self.gbp_driver.request_vrf_details(
+                context, request=request, **kwargs)
+            if details:
+                result.append(details)
+
+        # Notify the agent back once the answer is calculated
+        # Exclude empty answers as an error as occurred and the agent might
+        # want to retry
+        if result:
+            self.agent_notifier.opflex_vrf_update(
+                context, [x for x in result if x], host=kwargs.get('host'))
 
     def ip_address_owner_update(self, context, **kwargs):
         self.gbp_driver.ip_address_owner_update(context, **kwargs)
