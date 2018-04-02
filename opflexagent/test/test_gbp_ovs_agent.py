@@ -224,6 +224,14 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                                             '1.1.1.0/24',
                                             '169.254.0.0/16'])})
 
+    def test_stale_endpoints_in_process_network_ports(self):
+        self.agent.ep_manager.undeclare_endpoint = mock.Mock()
+        self.agent.plugin_rpc.update_device_down = mock.Mock()
+        self.agent.ep_manager._stale_endpoints.add('EXT-2.ep')
+        self.agent.process_network_ports({}, False)
+        self.agent.ep_manager.undeclare_endpoint.assert_called_once_with(
+            'EXT-2.ep')
+
     def test_dead_port(self):
         port = mock.Mock(ofport=1)
         self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
