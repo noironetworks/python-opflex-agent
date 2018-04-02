@@ -276,6 +276,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                       "treat_devices_removed completed in %(elapsed).3f",
                       {'iter_num': self.iter_num,
                        'elapsed': time.time() - start})
+        stale_eps = [ep for ep in self.ep_manager.get_stale_endpoints()]
+        if stale_eps:
+            self.treat_devices_removed(stale_eps)
         if port_info.get('vrf_updated'):
             self.process_vrf_update(port_info['vrf_updated'])
         # If one of the above operations fails => resync with plugin
