@@ -112,7 +112,7 @@ class GBPServerRpcApi(object):
                                  host=None):
         # Request is a tuple with the device_id as first element, and the
         # request ID as second element
-        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION, fanout=True)
+        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION, fanout=False)
         cctxt.cast(context, 'request_endpoint_details', agent_id=agent_id,
                    request=request, host=host)
 
@@ -121,7 +121,7 @@ class GBPServerRpcApi(object):
                                       host=None):
         # Requests is a list of tuples with the device_id as first element,
         # and the request ID as second element
-        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION, fanout=True)
+        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION, fanout=False)
         cctxt.cast(context, 'request_endpoint_details_list',
                    agent_id=agent_id, requests=requests, host=host)
 
@@ -129,7 +129,7 @@ class GBPServerRpcApi(object):
     def request_vrf_details(self, context, agent_id, request=None, host=None):
         # Request is a tuple with the vrf_id as first element, and the
         # request ID as second element
-        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION, fanout=True)
+        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION, fanout=False)
         cctxt.cast(context, 'request_vrf_details', agent_id=agent_id,
                    request=request, host=host)
 
@@ -138,14 +138,14 @@ class GBPServerRpcApi(object):
                                  host=None):
         # Requests is a list of tuples with the vrf_id as first element,
         # and the request ID as second element
-        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION, fanout=True)
+        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION, fanout=False)
         cctxt.cast(context, 'request_vrf_details_list',
                    agent_id=agent_id, requests=requests, host=host)
 
     @log.log_method_call
     def ip_address_owner_update(self, context, agent_id, ip_owner_info,
                                 host=None):
-        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION, fanout=True)
+        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION, fanout=False)
         cctxt.cast(context, 'ip_address_owner_update', agent_id=agent_id,
                    ip_owner_info=ip_owner_info, host=host)
 
