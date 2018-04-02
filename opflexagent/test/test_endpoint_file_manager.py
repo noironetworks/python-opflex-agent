@@ -623,18 +623,33 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.manager._write_file('uuid1_AA', {}, self.manager.epg_mapping_file)
         self.manager._write_file('EXT-1', {}, self.manager.epg_mapping_file)
         self.manager._write_file('EXT-2', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('EXT-3', {}, self.manager.epg_mapping_file)
 
         def dummy_check(self, es):
-            return True if es == 'EXT-1' else False
+            return True if es == 'EXT-2' else False
 
         with mock.patch.multiple(snat_iptables_manager.SnatIptablesManager,
                                  cleanup_snat_all=mock.DEFAULT,
                                  check_if_exists=dummy_check):
             manager = self._initialize_agent()
-            self.assertEqual(set(['uuid1', 'EXT-2.ep']),
+            self.assertEqual(set(['uuid1']),
                              manager.get_registered_endpoints())
+            self.assertEqual(set(['EXT-1.ep', 'EXT-3.ep']),
+                             manager.get_stale_endpoints())
             manager.snat_iptables.cleanup_snat_all.assert_called_once_with(
-                exclude_es=['EXT-1'])
+                exclude_es=['EXT-2'])
+
+            self._mock_agent(manager)
+            manager._write_endpoint_file.return_value = 'EXT-1.ep'
+
+            # declare a port that uses EXT-1
+            port = self._port()
+            manager.declare_endpoint(port, self._get_gbp_details())
+            self.assertNotIn('EXT-1.ep', manager.get_stale_endpoints())
+
+            # undeclaring EXT-3.ep should remove it from stale EPs
+            manager.undeclare_endpoint('EXT-3.ep')
+            self.assertNotIn('EXT-3.ep', manager.get_stale_endpoints())
 
     def test_interface_mtu(self):
         mapping = self._get_gbp_details(enable_dhcp_optimization=False,
