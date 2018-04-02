@@ -69,3 +69,10 @@ class EndpointManagerBase(object):
         :return: set of port IDs for each endpoint registered in the EP
         directory
         """
+
+    @abc.abstractmethod
+    def get_stale_endpoints(self):
+        """ Get stale endpoints that are not tracked by registered endpoints.
+
+        :return: set of stale endpoint IDs
+        """
