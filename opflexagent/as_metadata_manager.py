@@ -620,13 +620,13 @@ class AsMetadataManager(object):
         return 'inet %s' % (ipaddr, ) in outp
 
     def add_ip(self, ipaddr):
-        if has_ip(ipaddr):
+        if self.has_ip(ipaddr):
             return
         self.sh("ip netns exec %s ip addr add %s/%s dev %s" %
                 (SVC_NS, ipaddr, SVC_IP_CIDR, SVC_NS_PORT))
 
     def del_ip(self, ipaddr):
-        if not has_ip(ipaddr):
+        if not self.has_ip(ipaddr):
             return
         self.sh("ip netns exec %s ip addr del %s/%s dev %s" %
                 (SVC_NS, ipaddr, SVC_IP_CIDR, SVC_NS_PORT))
