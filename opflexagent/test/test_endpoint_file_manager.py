@@ -18,7 +18,7 @@ import mock
 sys.modules["apicapi"] = mock.Mock()
 sys.modules["pyinotify"] = mock.Mock()
 
-from opflexagent import gbp_ovs_agent
+from opflexagent import gbp_agent
 from opflexagent import snat_iptables_manager
 from opflexagent.test import base
 from opflexagent.utils.ep_managers import endpoint_file_manager
@@ -51,7 +51,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
 
     def _initialize_agent(self):
         cfg.CONF.set_override('epg_mapping_dir', self.ep_dir, 'OPFLEX')
-        kwargs = gbp_ovs_agent.create_agent_config_map(cfg.CONF)
+        kwargs = gbp_agent.create_agent_config_map(cfg.CONF)
         agent = endpoint_file_manager.EndpointFileManager().initialize(
             'h1', mock.Mock(), kwargs)
         agent.bridge_manager.get_patch_port_pair_names = (mock.Mock(
