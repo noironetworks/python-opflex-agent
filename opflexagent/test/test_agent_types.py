@@ -12,7 +12,7 @@
 
 import mock
 
-from opflexagent import gbp_ovs_agent
+from opflexagent import gbp_agent
 from opflexagent.test import base
 
 from oslo_config import cfg
@@ -32,14 +32,14 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
         self.signal_patch.stop()
 
     def test_opflex_agent_mode(self):
-        opflex_agent = mock.patch('opflexagent.gbp_ovs_agent.GBPOpflexAgent')
+        opflex_agent = mock.patch('opflexagent.gbp_agent.GBPOpflexAgent')
         opflex_patch = opflex_agent.start()
         metadata_mgr = mock.patch(
             'opflexagent.as_metadata_manager.AsMetadataManager')
         metadata_patch = metadata_mgr.start()
         cfg.CONF.set_override('agent_mode', 'opflex', 'OPFLEX')
         with mock.patch('sys.argv'):
-            gbp_ovs_agent.main()
+            gbp_agent.main()
             self.assertEqual(1, opflex_patch.call_count)
             self.assertEqual(1, metadata_patch.call_count)
         opflex_agent.stop()
@@ -52,7 +52,7 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
         import_patch = import_mock.start()
         cfg.CONF.set_override('agent_mode', 'dvs', 'OPFLEX')
         with mock.patch('sys.argv'):
-            gbp_ovs_agent.main()
+            gbp_agent.main()
             self.assertEqual(1, import_patch.call_count)
             self.assertEqual(
                 1, mock_dvs_instance.create_agent_config_map.call_count)
@@ -65,7 +65,7 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
         import_patch = import_mock.start()
         cfg.CONF.set_override('agent_mode', 'dvs_no_binding', 'OPFLEX')
         with mock.patch('sys.argv'):
-            gbp_ovs_agent.main()
+            gbp_agent.main()
             self.assertEqual(1, import_patch.call_count)
             self.assertEqual(
                 1, mock_dvs_instance.create_agent_config_map.call_count)
@@ -78,7 +78,7 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
         cfg.CONF.set_override('agent_mode', 'dvs', 'OPFLEX')
         with mock.patch('sys.argv'), mock.patch('sys.exit') as sys_patch:
             try:
-                gbp_ovs_agent.main()
+                gbp_agent.main()
             except AttributeError:
                 self.assertEqual(1, sys_patch.call_count)
             self.assertEqual(1, import_patch.call_count)
