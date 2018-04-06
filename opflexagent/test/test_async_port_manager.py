@@ -16,7 +16,7 @@ import mock
 sys.modules["apicapi"] = mock.Mock()
 sys.modules["pyinotify"] = mock.Mock()
 
-from opflexagent import gbp_ovs_agent
+from opflexagent import gbp_agent
 from opflexagent.utils.port_managers import async_port_manager
 
 from neutron.conf.agent import dhcp as dhcp_config
@@ -54,7 +54,7 @@ class TestAsyncPortManager(base.BaseTestCase):
                 msg='There are more calls than expected: %s' % str(observed))
 
     def _initialize_agent(self):
-        kwargs = gbp_ovs_agent.create_agent_config_map(cfg.CONF)
+        kwargs = gbp_agent.create_agent_config_map(cfg.CONF)
         agent = async_port_manager.AsyncPortManager().initialize(
             'h1', mock.Mock(), kwargs)
         agent.of_rpc = mock.Mock()
