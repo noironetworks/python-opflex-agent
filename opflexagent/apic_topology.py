@@ -43,7 +43,7 @@ ACI_PORT_LOCAL_FORMAT = 'Eth(\d+)/(\d+(\/\d+)*)'
 ACI_VPCPORT_DESCR_FORMAT = ('topology/pod-(\d+)/protpaths-(\d+)-(\d+)/pathep-'
                             '\[(.*)\]')
 
-AGENT_FORCE_UPDATE_COUNT = 30
+AGENT_FORCE_UPDATE_COUNT = 5
 BINARY_APIC_HOST_AGENT = 'neutron-cisco-apic-host-agent'
 TYPE_APIC_HOST_AGENT = 'cisco-apic-host-agent'
 VPCMODULE_NAME = 'vpc-%s-%s'
@@ -165,6 +165,8 @@ class ApicTopologyAgent(manager.Manager):
 
         except Exception:
             LOG.exception("APIC service agent: exception in LLDP parsing")
+            # Force update
+            self.count_current = float('inf')
 
     def _get_peers(self):
         interfaces = {}
