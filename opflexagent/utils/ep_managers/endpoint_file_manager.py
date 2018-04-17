@@ -87,6 +87,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
             bridge_manager.fabric_br)
         self._registered_endpoints = set()
+        self._stale_endpoints = set()
         self._setup_ep_directory()
         self.host = host
         self.nat_mtu_size = config['nat_mtu_size']
@@ -195,9 +196,13 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         LOG.info("Endpoint undeclare requested for port %s", port_id)
         self._mapping_cleanup(port_id)
         self._registered_endpoints.discard(port_id)
+        self._stale_endpoints.discard(port_id)
 
     def get_registered_endpoints(self):
         return self._registered_endpoints
+
+    def get_stale_endpoints(self):
+        return self._stale_endpoints
 
     # Private Methods
 
@@ -224,12 +229,11 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                     elif self.snat_iptables.check_if_exists(filename):
                         # check if EP file is for SNAT EP. If so mark it for
                         # exclusion from clean-up; also don't register the EP
-                        # file, otherwise it will be removed as stale
+                        # file, otherwise it will be treated as a removed port
                         snat_excl.append(filename)
                     else:
-                        # 'register' unknown EP file so that it will removed
-                        # as stale
-                        self._registered_endpoints.add(f)
+                        # Mark unknown EP file as stale
+                        self._stale_endpoints.add(f)
         if not created:
             self.snat_iptables.cleanup_snat_all(exclude_es=snat_excl)
 
@@ -723,7 +727,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             "uuid": nh.uuid,
             "promiscuous-mode": True,
         }
-        self._write_endpoint_file(nh.es_name, ep_dict)
+        epfile = self._write_endpoint_file(nh.es_name, ep_dict)
+        # SNAT EP is no longer stale
+        self._stale_endpoints.discard(epfile)
 
     def _write_endpoint_file(self, port_id, mapping_dict):
         return self._write_file(port_id, mapping_dict, self.epg_mapping_file)
@@ -756,6 +762,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             os.makedirs(os.path.dirname(filename))
         with open(filename, 'w') as f:
             jsonutils.dump(mapping_dict, f, indent=4)
+        return filename
 
     def _delete_file(self, port_id, file_format):
         try:
