@@ -57,6 +57,10 @@ gbp_opts = [
     cfg.StrOpt('fabric_bridge', default='br-fabric',
                help=_("The name of the bridge which connects to the ACI "
                       "fabric")),
+    cfg.StrOpt('bridge_manager',
+               default='ovs',
+               help=_("The class to use for OVS bridge management. "
+                      "Options are: 'ovs' (default), and 'fake'.")),
 ]
 
 cfg.CONF.register_opts(gbp_opts, "OPFLEX")
