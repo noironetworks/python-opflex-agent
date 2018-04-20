@@ -47,3 +47,9 @@ class OVSBridge(ovs_lib.OVSBridge):
                     yield txn
                 finally:
                     self._transaction = None
+
+
+class FakeOVSBridge(OVSBridge):
+
+    def get_vif_port_by_id(self, port_id):
+        return ovs_lib.VifPort(port_id, None, port_id, None, self)
