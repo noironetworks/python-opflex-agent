@@ -57,6 +57,12 @@ gbp_opts = [
     cfg.StrOpt('fabric_bridge', default='br-fabric',
                help=_("The name of the bridge which connects to the ACI "
                       "fabric")),
+    cfg.StrOpt('nested_domain_uplink_interface', default='patch-fabric-ex',
+               help=_("This is used in the nested Kubernetes configuration "
+                      "to denote the name of the OVS interface that serves "
+                      "as the uplink for the host. On RHEL installation, "
+                      "this corresponds to the patch port on br-fabric that "
+                      "connects to br-ex")),
     cfg.StrOpt('bridge_manager',
                default='ovs',
                help=_("The class to use for OVS bridge management. "
