@@ -31,6 +31,9 @@ FILE_EXTENSION = "ep"
 FILE_NAME_FORMAT = "%s." + FILE_EXTENSION
 VRF_FILE_EXTENSION = "rdconfig"
 VRF_FILE_NAME_FORMAT = "%s." + VRF_FILE_EXTENSION
+LBIFACE_FILE_EXTENSION = "lbiface"
+LBIFACE_FILE_NAME_FORMAT = "%s." + LBIFACE_FILE_EXTENSION
+NESTED_DOMAIN_UPLINK = "uplink"
 
 
 class ExtSegNextHopInfo(object):
@@ -73,7 +76,11 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                                              FILE_NAME_FORMAT)
         self.vrf_mapping_file = os.path.join(config['epg_mapping_dir'],
                                              VRF_FILE_NAME_FORMAT)
-        self.file_formats = [self.epg_mapping_file, self.vrf_mapping_file]
+        self.lbiface_mapping_file_fmt = os.path.join(
+                config['epg_mapping_dir'], LBIFACE_FILE_NAME_FORMAT)
+        self.file_formats = [self.epg_mapping_file, self.vrf_mapping_file,
+                             self.lbiface_mapping_file_fmt]
+        self.uplink_intf_name = config['nested_domain_uplink_interface']
         self.dhcp_domain = config['dhcp_domain']
         self.es_port_dict = {}
         self.vrf_dict = {}
@@ -95,6 +102,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         self.host = host
         self.nat_mtu_size = config['nat_mtu_size']
         self.bridge_manager = bridge_manager
+        self.nested_domain_uplink_interface = (
+                config['nested_domain_uplink_interface'])
         return self
 
     def declare_endpoint(self, port, mapping):
@@ -379,6 +388,67 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         if 'security_group' in mapping:
             mapping_dict['security-group'] = mapping['security_group']
 
+        nested_domain_dict = {}
+        allowed_vlans = []
+        if 'nested_domain_name' in mapping and mapping['nested_domain_name']:
+            nested_domain_dict['openstack_nested_domain_metadata'] = {}
+            nested_domain_dict['openstack_nested_domain_metadata']['name'] = (
+                    mapping['nested_domain_name'])
+        if 'nested_domain_type' in mapping and mapping['nested_domain_type']:
+            if not nested_domain_dict['openstack_nested_domain_metadata']:
+                nested_domain_dict['openstack_nested_domain_metadata'] = {}
+            nested_domain_dict['openstack_nested_domain_metadata']['type'] = (
+                    mapping['nested_domain_type'])
+        if 'nested_domain_infra_vlan' in mapping and (
+                mapping['nested_domain_infra_vlan']):
+            allowed_vlans.append(int(mapping['nested_domain_infra_vlan']))
+        if 'nested_domain_service_vlan' in mapping and (
+                mapping['nested_domain_service_vlan']):
+            allowed_vlans.append(int(mapping['nested_domain_service_vlan']))
+        if 'nested_domain_node_network_vlan' in mapping and (
+                mapping['nested_domain_node_network_vlan']):
+            allowed_vlans.append(
+                    int(mapping['nested_domain_node_network_vlan']))
+        if 'nested_domain_allowed_vlans' in mapping and (
+                mapping['nested_domain_allowed_vlans']):
+            allowed_vlans.extend(mapping['nested_domain_allowed_vlans'])
+        if 'nested_host_vlan' in mapping and mapping['nested_host_vlan']:
+            mapping_dict['access-interface-vlan'] = mapping['nested_host_vlan']
+        if allowed_vlans:
+            vlan_ranges = self._list_to_range(allowed_vlans)
+            rngs_dict = []
+            for rng in vlan_ranges:
+                rngs_dict.append({'start': rng[0], 'end': rng[-1]})
+            nested_domain_dict['trunk-vlans'] = rngs_dict
+        if 'trunk-vlans' in nested_domain_dict and (
+                nested_domain_dict['trunk-vlans']):
+            # First write the lbiface file for the VM's interface
+            nested_domain_dict["interface-name"] = mapping_dict[
+                    "interface-name"]
+            nested_domain_dict["uuid"] = uuidutils.generate_uuid()
+            LOG.debug("lbiface file for port %(port)s: \n %(mapping)s" %
+                      {'port': port.vif_id, 'mapping': nested_domain_dict})
+            lbiface_file_name = port.vif_id + '_' + mac
+            self._write_lbiface_file(lbiface_file_name, nested_domain_dict)
+            # Now write the lbiface file for the uplink interface.
+            # Note that there will be multiple lbiface files for the
+            # uplink interface, one corresponding each VM interface
+            # that has a nested domain (potentially leading to lot of
+            # redundant information)
+            if self.uplink_intf_name:
+                # The following copy is not strictly needed, but helps
+                # in the UT (with the assumption that the performance
+                # hit for having this in the agent code is negligible).
+                nested_domain_dict = nested_domain_dict.copy()
+                nested_domain_dict["interface-name"] = self.uplink_intf_name
+                nested_domain_dict["uuid"] = uuidutils.generate_uuid()
+                LOG.debug("Uplink lbiface file for %(intf)s: \n %(mapping)s" %
+                          {'intf': self.uplink_intf_name,
+                           'mapping': nested_domain_dict})
+                self._write_lbiface_file(
+                        lbiface_file_name + '_' + NESTED_DOMAIN_UPLINK,
+                        nested_domain_dict)
+
         # Create one file per MAC address.
         LOG.debug("Final endpoint file for port %(port)s: \n %(mapping)s" %
                   {'port': port.vif_id, 'mapping': mapping_dict})
@@ -388,6 +458,24 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
         self._write_endpoint_file(file_name, mapping_dict)
         self.vrf_info_to_file(mapping, vif_id=port.vif_id)
+
+    def _list_to_range(self, vlans_list):
+        vlans_list = list(set(vlans_list))
+        vlans_list.sort()
+        length = len(vlans_list)
+        while vlans_list:
+            if len(vlans_list) == 1:
+                yield range(vlans_list[0], vlans_list[0] + 1)
+                break
+
+            step = vlans_list[1] - vlans_list[0]
+            i = next(i for i in range(1, length) if i + 1 == length or (
+                vlans_list[i + 1] - vlans_list[i] != step))
+
+            yield range(vlans_list[0], vlans_list[i] + 1, step)
+
+            vlans_list = vlans_list[i + 1:]
+            length -= i + 1
 
     def _handle_host_snat_ip(self, host_snat_ips):
         for hsi in host_snat_ips:
@@ -765,7 +853,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         directory = os.path.dirname(self.epg_mapping_file)
         # Remove all existing EPs mapping for port_id
         for f in os.listdir(directory):
-            if f.endswith('.' + FILE_EXTENSION) and port_id in f:
+            if (f.endswith('.' + FILE_EXTENSION) or f.endswith(
+                '.' + LBIFACE_FILE_EXTENSION)) and port_id in f:
                 if not any(x for x in mac_exceptions if x in f):
                     try:
                         os.remove(os.path.join(directory, f))
@@ -777,6 +866,13 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
     def _delete_vrf_file(self, vrf_id):
         return self._delete_file(vrf_id, self.vrf_mapping_file)
+
+    def _write_lbiface_file(self, file_name, mapping_dict):
+        return self._write_file(file_name, mapping_dict,
+                self.lbiface_mapping_file_fmt)
+
+    def _delete_lbiface_file(self, file_name):
+        return self._delete_file(file_name, self.lbiface_mapping_file_fmt)
 
     def _write_file(self, port_id, mapping_dict, file_format):
         filename = file_format % port_id
