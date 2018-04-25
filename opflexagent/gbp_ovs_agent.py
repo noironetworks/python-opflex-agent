@@ -564,6 +564,29 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             rpc_api.client.timeout = timeout
 
 
+def _parse_files(conf_files):
+    try:
+        multi_parser = cfg.MultiConfigParser()
+        multi_parser.read(conf_files)
+        return multi_parser.parsed
+    except AttributeError:
+        # Oslo 6.0.0+
+        sections = {}
+        for filename in conf_files:
+            parser = cfg.ConfigParser(filename, sections)
+            try:
+                parser.parse()
+            except IOError:
+                LOG.warning('IOError failure on %(file)s: %(exc)s',
+                            {'file': filename,
+                             'exc': '(file missing or permission issue?)'})
+                continue
+            except Exception as e:
+                LOG.warning('Failed to parse file %(file)s: %(exc)s',
+                            {'file': filename, 'exc': e})
+        return [sections]
+
+
 def create_agent_config_map(conf):
     agent_config = {}
     agent_config['epg_mapping_dir'] = conf.OPFLEX.epg_mapping_dir
@@ -582,9 +605,8 @@ def create_agent_config_map(conf):
 
     # read external-segment next-hop info
     es_info = {}
-    multi_parser = cfg.MultiConfigParser()
-    multi_parser.read(conf.config_file)
-    for parsed_file in multi_parser.parsed:
+    parsed_files = _parse_files(cfg.CONF.config_file)
+    for parsed_file in parsed_files:
         for parsed_item in parsed_file.keys():
             if parsed_item.startswith('opflex_external_segment:'):
                 es_name = parsed_item.split(':', 1)[1]
