@@ -140,3 +140,27 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
 
     def port_dead(self, port, log_errors=True):
         pass
+
+
+class FakeManager(OvsManager):
+    """ Fake Bridge Manager for OpenVSwitch."""
+
+    def initialize(self, host, ovs_config, opflex_conf):
+        self.int_br_device_count = 0
+        self.int_br = ovs_lib.FakeOVSBridge(ovs_config.integration_bridge)
+        self.fabric_br = ovs_lib.FakeOVSBridge(opflex_conf.fabric_bridge)
+        self.setup_integration_bridge()
+        return self
+
+    def scan_ports(self, registered_ports, updated_ports=None):
+        cur_ports = registered_ports
+        for port in updated_ports:
+            if port not in cur_ports:
+                cur_ports.add(port)
+        self.int_br_device_count = len(cur_ports)
+        port_info = {'current': cur_ports}
+        updated_ports = updated_ports or set()
+        if updated_ports:
+            port_info['updated'] = updated_ports
+
+        return port_info

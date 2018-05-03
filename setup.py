@@ -39,6 +39,10 @@ setuptools.setup(
         ],
         'neutron.ml2.type_drivers': [
             'opflex = opflexagent.type_opflex:OpflexTypeDriver',
+        ],
+        'opflexagent.utils.bridge_managers': [
+            'ovs = opflexagent.utils.bridge_managers.ovs_manager:OvsManager',
+            'fake = opflexagent.utils.bridge_managers.ovs_manager:FakeManager',
         ]
     },
     data_files=[('etc/neutron/opflex-agent',

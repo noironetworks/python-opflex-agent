@@ -147,6 +147,12 @@ class OpflexNotifyAgent(object):
     def run(self):
         """Infinite loop which catches all exception, exits on ^C"""
 
+        # Don't bother running if we don't have a socket
+        if not self.sockname:
+            LOG.warning("Notification socket not set, "
+                        "notifications will not be sent")
+            return
+
         while True:
             try:
                 client = self._connect()
