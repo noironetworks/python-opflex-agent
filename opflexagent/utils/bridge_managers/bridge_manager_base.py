@@ -14,6 +14,9 @@ import abc
 import six
 
 
+BRIDGE_MANAGER_NAMESPACE = 'opflexagent.utils.bridge_managers'
+
+
 @six.add_metaclass(abc.ABCMeta)
 class BridgeManagerBase(object):
     """ Bridge Manager base class
