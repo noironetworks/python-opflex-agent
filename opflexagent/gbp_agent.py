@@ -32,22 +32,21 @@ from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from neutron_lib import constants as n_constants
 from neutron_lib import context
 from neutron_lib import exceptions
-from neutron_lib.utils import helpers
 from neutron_lib.utils import runtime
-from oslo_config import cfg
-from oslo_log import log as logging
-from oslo_service import loopingcall
-from oslo_utils import excutils
 
 from opflexagent import as_metadata_manager
-from opflexagent import config as ofcfg  # noqa
 from opflexagent import constants as ofcst
 from opflexagent import opflex_notify
 from opflexagent import rpc
 from opflexagent.utils.bridge_managers import (
     bridge_manager_base as bridge_manager)
+
 from opflexagent.utils.ep_managers import endpoint_file_manager as ep_manager
 from opflexagent.utils.port_managers import async_port_manager as port_manager
+from oslo_config import cfg
+from oslo_log import log as logging
+from oslo_service import loopingcall
+from oslo_utils import excutils
 
 eventlet_utils.monkey_patch()
 LOG = logging.getLogger(__name__)
@@ -98,28 +97,22 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.notify_worker = opflex_notify.worker()
         self.host = cfg.CONF.host
         agent_conf = cfg.CONF.AGENT
-        ovs_conf = cfg.CONF.OVS
         opflex_conf = cfg.CONF.OPFLEX
-
-        try:
-            bridge_mappings = helpers.parse_mappings(ovs_conf.bridge_mappings)
-        except ValueError as e:
-            raise ValueError(_("Parsing bridge_mappings failed: %s.") % e)
 
         self.agent_state = {
             'binary': 'neutron-opflex-agent',
             'host': self.host,
             'topic': n_constants.L2_AGENT_TOPIC,
-            'configurations': {'bridge_mappings': bridge_mappings,
-                               'opflex_networks': self.opflex_networks},
-            'agent_type': ofcst.AGENT_TYPE_OPFLEX_OVS,
+            'configurations': {'opflex_networks': self.opflex_networks},
             'start_flag': True}
 
         # Initialize OVS Manager
         bridge_manager_class = load_bridge_manager(
             opflex_conf)
-        self.bridge_manager = bridge_manager_class.initialize(
-            self.host, ovs_conf, opflex_conf)
+        self.bridge_manager, self.agent_state = (
+            bridge_manager_class.initialize(
+                self.host, cfg.CONF, self.agent_state))
+
         # Stores port update notifications for processing in main rpc loop
         self.updated_ports = set()
         # Stores port delete notifications
@@ -127,7 +120,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # Stores VRF update notifications
         self.updated_vrf = set()
         self.setup_rpc()
-        self.local_ip = ovs_conf.local_ip
+        self.local_ip = self.bridge_manager.get_local_ip()
         self.polling_interval = agent_conf.polling_interval
         self.config_apply_interval = kwargs['config_apply_interval']
         self.minimize_polling = agent_conf.minimize_polling
@@ -366,7 +359,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         LOG.debug("Processing port: %s", device)
         # REVISIT(ivar): this is not a public facing API, we will move to
         # the right method once the redesign is complete.
-        port = self.bridge_manager.int_br.get_vif_port_by_id(device)
+        port = self.bridge_manager.get_vif_port_by_id(device)
         if port:
             # If the following command fails (RuntimeException) the binding
             # fails.

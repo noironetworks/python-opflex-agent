@@ -12,11 +12,11 @@
 
 from neutron.plugins.common import constants as n_constants
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
-from oslo_log import log as logging
-
+from neutron_lib.utils import helpers
 from opflexagent.utils.bridge_managers import bridge_manager_base
 from opflexagent.utils.bridge_managers import ovs_lib
 from opflexagent.utils.bridge_managers import trunk_skeleton
+from oslo_log import log as logging
 
 
 LOG = logging.getLogger(__name__)
@@ -31,12 +31,25 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
     def __init__(self):
         super(OvsManager, self).__init__()
 
-    def initialize(self, host, ovs_config, opflex_conf):
+    def initialize(self, host, conf, agent_state):
+        ovs_config = conf.OVS
+        try:
+            bridge_mappings = helpers.parse_mappings(
+                ovs_config.bridge_mappings)
+        except ValueError as e:
+            raise ValueError(_("Parsing bridge_mappings failed: %s.") % e)
         self.int_br_device_count = 0
         self.int_br = ovs_lib.OVSBridge(ovs_config.integration_bridge)
-        self.fabric_br = ovs_lib.OVSBridge(opflex_conf.fabric_bridge)
+        self.fabric_br = ovs_lib.OVSBridge(conf.OPFLEX.fabric_bridge)
+        self.local_ip = ovs_config.local_ip
         self.setup_integration_bridge()
-        return self
+        agent_state['bridge_mappings'] = bridge_mappings
+        agent_state['datapath_type'] = ovs_config.datapath_type
+        agent_state['vhostuser_socket_dir'] = ovs_config.vhostuser_socket_dir
+        return self, agent_state
+
+    def get_local_ip(self):
+        return self.local_ip
 
     def check_bridge_status(self):
         # Check for the canary flow
@@ -140,6 +153,9 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
 
     def port_dead(self, port, log_errors=True):
         pass
+
+    def get_vif_port_by_id(self, id):
+        return self.int_br.get_vif_port_by_id(id)
 
 
 class FakeManager(OvsManager):

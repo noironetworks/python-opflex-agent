@@ -34,7 +34,7 @@ class TestOVSManager(base.BaseTestCase):
     def setUp(self):
         cfg.CONF.register_opts(dhcp_config.DHCP_OPTS)
         super(TestOVSManager, self).setUp()
-        self.manager = self._initialize_agent()
+        self._initialize_agent()
         self.manager.int_br = mock.Mock()
         self.manager.fabric_br = mock.Mock()
         self.manager.int_br.ovsdb_transaction = self.fake_transaction
@@ -58,8 +58,10 @@ class TestOVSManager(base.BaseTestCase):
     def _initialize_agent(self):
         mock.patch(
             'opflexagent.utils.bridge_managers.ovs_lib.OVSBridge').start()
-        agent = ovs_manager.OvsManager().initialize('h1', cfg.CONF.OVS,
-                                                    cfg.CONF.OPFLEX)
+        agent = {}
+        self.manager, agent = ovs_manager.OvsManager().initialize('h1',
+                                                    cfg.CONF,
+                                                    agent)
         return agent
 
     def test_bridge_status(self):

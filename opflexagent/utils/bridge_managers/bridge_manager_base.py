@@ -30,15 +30,16 @@ class BridgeManagerBase(object):
     fabric_br = None
 
     @abc.abstractmethod
-    def initialize(self, host, config):
+    def initialize(self, host, config, agent_state):
         """ Bridge Manager initialization method.
 
         This method will be called before any other.
 
         :param host: agent host
         :param config: configuration dictionary
+        :param agent_state: neutron agent state dictionary
 
-        :returns: self
+        :returns: self, agent_state
         """
 
     @abc.abstractmethod
@@ -79,4 +80,12 @@ class BridgeManagerBase(object):
         """Once a port has no binding, put it on the "dead vlan".
 
         :param port: a ovs_lib.VifPort object.
+        """
+
+    @abc.abstractmethod
+    def get_vif_port_by_id(self, id):
+        """Get port object using given id.
+
+        :param id: mac or device id of the guest device
+        :return Port object
         """
