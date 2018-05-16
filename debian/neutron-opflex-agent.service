@@ -7,7 +7,7 @@ Before=openstack-nova-compute.service
 [Service]
 Type=simple
 User=neutron
-ExecStart=/usr/bin/neutron-opflex-agent --config-file=/etc/neutron/neutron.conf --config-file=/etc/neutron/plugins/ml2/openvswitch_agent.ini --log-file=/var/log/neutron/opflex-agent.log
+ExecStart=/usr/bin/neutron-opflex-agent --config-file=/etc/neutron/neutron.conf --log-file=/var/log/neutron/opflex-agent.log
 PrivateTmp=false
 KillMode=process
 Restart=always
