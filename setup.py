@@ -36,6 +36,8 @@ setuptools.setup(
                 'opflexagent.apic_topology:agent_main',
             'opflex-ns-proxy = '
                 'opflexagent.namespace_proxy:main',
+            'opflex-rpc-load = '
+                'opflexagent.tools.load_generator:run'
         ],
         'neutron.ml2.type_drivers': [
             'opflex = opflexagent.type_opflex:OpflexTypeDriver',
