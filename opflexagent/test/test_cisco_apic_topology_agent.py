@@ -120,7 +120,7 @@ class TestCiscoApicTopologyAgent(base.BaseTestCase):
                 self.assertEqual(expected,
                                  self.agent.peers[SERVICE_HOST_IFACE])
                 self.agent.service_agent.update_link.assert_called_once_with(
-                    context, *expected, force=False)
+                    context, *expected)
 
         def test_check_for_new_peers_with_peers(self):
             expected = (SERVICE_HOST, SERVICE_HOST_IFACE,
@@ -135,4 +135,4 @@ class TestCiscoApicTopologyAgent(base.BaseTestCase):
                                    return_value=peers):
                 self.agent._check_for_new_peers(context)
                 self.agent.service_agent.update_link.assert_called_with(
-                    context, *expected, force=False)
+                    context, *expected)

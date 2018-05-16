@@ -151,9 +151,8 @@ class ApicTopologyAgent(manager.Manager):
                 if (interface not in curr_peers or
                         curr_peers[interface] != peer or
                         force_send):
-                    LOG.debug('reporting new peer: %s', peer)
-                    self.service_agent.update_link(context, *peer,
-                                                   force=force_send)
+                    LOG.info('reporting new peer: %s', peer)
+                    self.service_agent.update_link(context, *peer)
                     self.count_current = 0
                 if interface in curr_peers:
                     curr_peers.pop(interface)
