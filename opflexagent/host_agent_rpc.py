@@ -18,26 +18,26 @@ import oslo_messaging
 from neutron.common import rpc
 
 TOPIC_APIC_SERVICE = 'apic-service'
+VERSION = '1.2'
 
 
 class ApicTopologyServiceNotifierApi(object):
-    # version: 3.0: calls
 
     def __init__(self):
-        target = oslo_messaging.Target(topic=TOPIC_APIC_SERVICE, version='3.0')
+        target = oslo_messaging.Target(topic=TOPIC_APIC_SERVICE,
+                                       version=VERSION)
         self.client = rpc.get_client(target)
 
     def update_link(self, context, host, interface, mac, switch, module, port,
-                    pod_id, port_description='', force=False):
-        cctxt = self.client.prepare(version='3.0')
+                    pod_id, port_description=''):
+        cctxt = self.client.prepare(version=VERSION)
         return cctxt.call(context, 'update_link', host=host,
                           interface=interface,
                           mac=mac, switch=switch, module=module, port=port,
-                          pod_id=pod_id, port_description=port_description,
-                          force=force)
+                          pod_id=pod_id, port_description=port_description)
 
     def delete_link(self, context, host, interface):
-        cctxt = self.client.prepare(version='3.0')
+        cctxt = self.client.prepare(version=VERSION)
         return cctxt.call(context, 'delete_link', host=host,
                           interface=interface,
                           mac=None, switch=0, module=0, port=0)
