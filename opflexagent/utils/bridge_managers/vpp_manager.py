@@ -10,11 +10,14 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from neutron.agent.linux import ip_lib
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
+from neutron_lib import constants as lib_constants
 from opflexagent.utils.bridge_managers import bridge_manager_base
 from opflexagent.utils.bridge_managers import trunk_skeleton
+from opflexagent.vpplib.VPPApi import VPPApi
+import os
 from oslo_log import log as logging
-from vpplib.VPPApi import VPPApi
 
 
 LOG = logging.getLogger(__name__)
@@ -50,8 +53,9 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
         """
         pass
 
-    def scan_ports(self, registered_ports, updated_ports=None):
-        cur_ports = self.get_vif_port_set()
+    def scan_ports(self, registered_ports, updated_ports=None, em=None):
+        cur_tag_dict = self.get_vif_port_set()
+        cur_ports = {x for x, y in cur_tag_dict.items()}
         self.int_br_device_count = len(cur_ports)
         port_info = {'current': cur_ports}
         updated_ports = updated_ports or set()
@@ -71,6 +75,13 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
         port_info['added'] = cur_ports - registered_ports
         # Remove all the known ports not found on the integration bridge
         port_info['removed'] = registered_ports - cur_ports
+        # Retain ep file if nova is still holding on to the socket
+        # or if tap interface is still present
+        retain_list = set()
+        removed_eps = port_info['removed']
+        port_info['removed'] = self.handle_removed_eps(em, removed_eps)
+        retain_list = removed_eps - port_info['removed']
+        port_info['current'] |= retain_list
         return port_info
 
     # This is redundant since we populate port_name in get_vif_port_by_id
@@ -94,9 +105,9 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
     def port_dead(self, port, log_errors=True):
         pass
 
-    def get_vif_port_by_id(self, mac):
+    def get_vif_port_by_id(self, tag):
         vapi = VPPApi(LOG, 'gbp-agent')
-        port_name = vapi.vhost_name_from_mac(mac)
+        port_name, mac, _ = vapi.vhost_details_from_tag(tag)
         # Create a fake port object for compatibility within
         # gbp agent.
 
@@ -104,7 +115,7 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
             pass
 
         port_obj = Port()
-        port_obj.vif_id = mac
+        port_obj.vif_id = tag
         port_obj.vif_mac = mac
         port_obj.ofport = -1
         port_obj.port_name = port_name
@@ -116,5 +127,26 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
         :param : None.
         """
         vapi = VPPApi(LOG, 'gbp-agent')
-        vhost_set = vapi.get_vhost_macs()
-        return vhost_set
+        vhtag = vapi.get_vhost_tag_dicts()
+        uuid_filtered = {x.split('|')[0]: y for x, y in vhtag.items()}
+        return uuid_filtered
+
+    @staticmethod
+    def _device_exists(device_name):
+        if device_name:
+            if device_name.startswith(lib_constants.VETH_DEVICE_PREFIX):
+                return ip_lib.device_exists(device_name)
+            else:
+                return os.path.exists(device_name)
+        else:
+            return False
+
+    def handle_removed_eps(self, em, removed_eps):
+        retain = set()
+        for ep in removed_eps:
+            port_name = em.get_access_int_for_vif(ep)
+            if self._device_exists(port_name):
+                LOG.debug("Retaining {}".format(port_name))
+                retain |= {ep}
+        removed_eps -= retain
+        return removed_eps
