@@ -16,8 +16,8 @@ import sys
 import mock
 sys.modules["apicapi"] = mock.Mock()
 sys.modules["pyinotify"] = mock.Mock()
-sys.modules['vpplib'] = mock.MagicMock()
-sys.modules['vpplib.VPPApi'] = mock.MagicMock()
+sys.modules['opflexagent.vpplib'] = mock.MagicMock()
+sys.modules['opflexagent.vpplib.VPPApi'] = mock.MagicMock()
 
 import contextlib
 from neutron.api.rpc.callbacks import events
@@ -299,7 +299,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             agent = self._initialize_agent()
             self._mock_agent(agent)
             agent.bridge_manager.get_vif_port_set = mock.Mock(
-                return_value=set(['uuid1']))
+                return_value = {'uuid1': 'someint'})
             agent._main_loop(set(), True, 1, port_stats, mock.Mock(), True)
             agent.ep_manager.undeclare_endpoint.assert_called_once_with(
                 'uuid2')
