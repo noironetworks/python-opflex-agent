@@ -74,8 +74,8 @@ def load_bridge_manager(conf):
                 bridge_manager.BRIDGE_MANAGER_NAMESPACE, conf.bridge_manager)
         return loaded_class()
     except ImportError:
-        LOG.error(_("Error loading interface driver '%s'"),
-                  conf.interface_driver)
+        LOG.error(_("Error loading bridge manager '%s'"),
+                  conf.bridge_manager)
         raise SystemExit(1)
 
 
@@ -518,9 +518,12 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         try:
             reg_ports = (set() if ovs_restarted else ports)
             port_info = self.bridge_manager.scan_ports(
-                reg_ports, updated_ports_copy)
+                reg_ports, updated_ports_copy, self.ep_manager)
             removed_eps = (self.ep_manager.get_registered_endpoints() -
                            port_info['current'])
+            # Handle EP file persistence on restart for VPP
+            removed_eps = self.bridge_manager.handle_removed_eps(
+                self.ep_manager, removed_eps)
             port_info['removed'] = port_info.get(
                 'removed', set()) | removed_eps | deleted_ports_copy
 
