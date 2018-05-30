@@ -76,3 +76,10 @@ class EndpointManagerBase(object):
 
         :return: set of stale endpoint IDs
         """
+
+    @abc.abstractmethod
+    def get_access_int_for_vif(self, vif):
+        """ Get access interface for a given vif id.
+
+        :return: access interface name
+        """
