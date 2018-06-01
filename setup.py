@@ -43,6 +43,10 @@ setuptools.setup(
         'opflexagent.utils.bridge_managers': [
             'ovs = opflexagent.utils.bridge_managers.ovs_manager:OvsManager',
             'fake = opflexagent.utils.bridge_managers.ovs_manager:FakeManager',
+            'vpp = opflexagent.utils.bridge_managers.vpp_manager:VppManager'
+        ],
+        'os_vif': [
+            'vpp = opflexagent.vif_plug_vpp.vpp:VppPlugin',
         ]
     },
     data_files=[('etc/neutron/opflex-agent',
