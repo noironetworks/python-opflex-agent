@@ -60,7 +60,13 @@ gbp_opts = [
     cfg.StrOpt('bridge_manager',
                default='ovs',
                help=_("The class to use for OVS bridge management. "
-                      "Options are: 'ovs' (default), and 'fake'.")),
+                      "Options are: 'ovs' (default), 'vpp' and 'fake'.")),
+]
+
+vpp_opts = [
+    cfg.StrOpt('vhostuser_socket_dir', default='/var/run/vpp-sockets',
+               help=_("Path where VPP vhost-user sockets are created by nova"))
 ]
 
 cfg.CONF.register_opts(gbp_opts, "OPFLEX")
+cfg.CONF.register_opts(vpp_opts, "VPP")

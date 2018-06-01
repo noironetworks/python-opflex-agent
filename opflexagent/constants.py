@@ -14,7 +14,8 @@
 # limitations under the License.
 
 AGENT_TYPE_OPFLEX_OVS = 'OpFlex Open vSwitch agent'
+AGENT_TYPE_OPFLEX_VPP = 'OpFlex VPP agent'
 TYPE_OPFLEX = 'opflex'
-
+VHOST_USER_VPP_PLUG = 'vhostuser_vpp_plug'
 METADATA_DEFAULT_IP = '169.254.169.254'
 METADATA_SUBNET = '169.254.0.0/16'
