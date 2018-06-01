@@ -16,25 +16,26 @@ import sys
 import mock
 sys.modules["apicapi"] = mock.Mock()
 sys.modules["pyinotify"] = mock.Mock()
+sys.modules['vpplib'] = mock.MagicMock()
+sys.modules['vpplib.VPPApi'] = mock.MagicMock()
 
 import contextlib
+from neutron.api.rpc.callbacks import events
+from neutron.conf.agent import dhcp as dhcp_config
+from neutron.objects import trunk as trunk_obj
+from neutron.plugins.ml2.drivers.openvswitch.agent import (
+    ovs_neutron_agent as ovs)
 from opflexagent import gbp_agent
 from opflexagent import snat_iptables_manager
 from opflexagent.test import base
 from opflexagent.utils.ep_managers import endpoint_file_manager
-
-from neutron.api.rpc.callbacks import events
-from neutron.conf.agent import dhcp as dhcp_config
-from neutron.objects import trunk as trunk_obj
-
-from neutron.plugins.ml2.drivers.openvswitch.agent import (
-    ovs_neutron_agent as ovs)
 from oslo_config import cfg
 from oslo_utils import uuidutils
 
 _uuid = uuidutils.generate_uuid
 NOTIFIER = 'neutron.plugins.ml2.rpc.AgentNotifierApi'
 EP_DIR = '.%s_endpoints/'
+VHU_DIR = '.vpp-sockets/'
 
 
 class TestGBPOpflexAgent(base.OpflexTestBase):
@@ -42,7 +43,6 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
     def setUp(self):
         cfg.CONF.register_opts(dhcp_config.DHCP_OPTS)
         super(TestGBPOpflexAgent, self).setUp()
-        cfg.CONF.set_override("ovsdb_interface", "vsctl", group="OVS")
         notifier_p = mock.patch(NOTIFIER)
         notifier_cls = notifier_p.start()
         self.notifier = mock.Mock()
@@ -80,6 +80,10 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
     def _initialize_agent(self):
         cfg.CONF.set_override('epg_mapping_dir', self.ep_dir, 'OPFLEX')
+        cfg.CONF.set_override('bridge_manager',
+            'opflexagent.utils.bridge_managers.vpp_manager.VppManager',
+            'OPFLEX')
+        cfg.CONF.set_override("vhostuser_socket_dir", VHU_DIR, group="VPP")
         kwargs = gbp_agent.create_agent_config_map(cfg.CONF)
 
         class MockFixedIntervalLoopingCall(object):
@@ -90,19 +94,9 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                 self.f()
 
         with contextlib.nested(
-            mock.patch('opflexagent.utils.bridge_managers.ovs_manager.'
-                       'OvsManager.setup_integration_bridge',
-                       return_value=mock.Mock()),
-            mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
-                       'create'),
-            mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
-                       'set_secure_mode'),
-            mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
-                       'get_local_port_mac',
-                       return_value='00:00:00:00:00:01'),
-            mock.patch('neutron.agent.linux.utils.get_interface_mac',
-                       return_value='00:00:00:00:00:01'),
-            mock.patch('neutron.agent.common.ovs_lib.BaseOVS.get_bridges'),
+            #mock.patch('opflexagent.utils.bridge_managers.vpp_manager.'
+            #           'VppManager.check_bridge_status',
+            #           return_value=constants.OVS_NORMAL),
             mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
                        new=MockFixedIntervalLoopingCall),
             mock.patch('opflexagent.gbp_agent.GBPOpflexAgent.'
@@ -225,17 +219,9 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                                             '1.1.1.0/24',
                                             '169.254.0.0/16'])})
 
-    def test_stale_endpoints_in_process_network_ports(self):
-        self.agent.ep_manager.undeclare_endpoint = mock.Mock()
-        self.agent.plugin_rpc.update_device_down = mock.Mock()
-        self.agent.ep_manager._stale_endpoints.add('EXT-2.ep')
-        self.agent.process_network_ports({}, False)
-        self.agent.ep_manager.undeclare_endpoint.assert_called_once_with(
-            'EXT-2.ep')
-
     def test_dead_port(self):
         port = mock.Mock(ofport=1)
-        self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
+        self.agent.bridge_manager.get_vif_port_by_id = mock.Mock(
             return_value=port)
         with mock.patch.object(gbp_agent.ep_manager.EndpointFileManager,
                                'undeclare_endpoint'):
@@ -245,7 +231,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                 port.vif_id)
 
     def test_missing_port(self):
-        self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
+        self.agent.bridge_manager.get_vif_port_by_id = mock.Mock(
             return_value=None)
         with mock.patch.object(gbp_agent.ep_manager.EndpointFileManager,
                                'undeclare_endpoint'):
@@ -269,7 +255,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.plugin_rpc.update_device_up = mock.Mock()
         self.agent.plugin_rpc.update_device_down = mock.Mock()
         port = mock.Mock(ofport=1, vif_id=mapping['port_id'])
-        self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
+        self.agent.bridge_manager.get_vif_port_by_id = mock.Mock(
             return_value=port)
         self.agent.ep_manager._mapping_cleanup = mock.Mock()
         self.agent.ep_manager._mapping_to_file = mock.Mock()
@@ -312,7 +298,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                                         'removed': 0}}
             agent = self._initialize_agent()
             self._mock_agent(agent)
-            agent.bridge_manager.int_br.get_vif_port_set = mock.Mock(
+            agent.bridge_manager.get_vif_port_set = mock.Mock(
                 return_value=set(['uuid1']))
             agent._main_loop(set(), True, 1, port_stats, mock.Mock(), True)
             agent.ep_manager.undeclare_endpoint.assert_called_once_with(
@@ -327,7 +313,9 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                 mock.patch.object(
                     endpoint_file_manager.EndpointFileManager,
                     'undeclare_endpoint'),
-                mock.patch.object(ovs.OVSPluginApi, 'update_device_down')):
+                mock.patch.object(
+                    ovs.OVSPluginApi,
+                    'update_device_down')):
             agent = self._initialize_agent()
             self._mock_agent(agent)
             port_info = {'current': set(['1', '2']),
@@ -429,7 +417,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.plugin_rpc.update_device_up = mock.Mock()
         self.agent.plugin_rpc.update_device_down = mock.Mock()
         port = mock.Mock(ofport=1, vif_id=mapping['port_id'])
-        self.agent.bridge_manager.int_br.get_vif_port_by_id = mock.Mock(
+        self.agent.bridge_manager.get_vif_port_by_id = mock.Mock(
             return_value=port)
         self.agent.ep_manager._mapping_cleanup = mock.Mock()
         self.agent.ep_manager._mapping_to_file = mock.Mock()
