@@ -11,6 +11,7 @@
 #    under the License.
 
 import copy
+import json
 import netaddr
 import os
 
@@ -89,6 +90,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             bridge_manager.fabric_br)
         self._registered_endpoints = set()
         self._stale_endpoints = set()
+        self.vif_int_dict = {}
         self._setup_ep_directory()
         self.host = host
         self.nat_mtu_size = config['nat_mtu_size']
@@ -192,18 +194,23 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             self._mapping_cleanup(port.vif_id, cleanup_vrf=False,
                                   mac_exceptions=macs)
             self._registered_endpoints.add(port.vif_id)
+            self.vif_int_dict.update({port.vif_id: port.port_name})
 
     def undeclare_endpoint(self, port_id):
         LOG.info(_LI("Endpoint undeclare requested for port %s"), port_id)
         self._mapping_cleanup(port_id)
         self._registered_endpoints.discard(port_id)
         self._stale_endpoints.discard(port_id)
+        self.vif_int_dict.pop(port_id, None)
 
     def get_registered_endpoints(self):
         return self._registered_endpoints
 
     def get_stale_endpoints(self):
         return self._stale_endpoints
+
+    def get_access_int_for_vif(self, vif):
+        return self.vif_int_dict.get(vif)
 
     # Private Methods
 
@@ -227,6 +234,20 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                     filename = f[:-len(FILE_EXTENSION) - 1]
                     if '_' in f:
                         self._registered_endpoints.add(f.split('_')[0])
+                        fp = file(os.path.join(directory, f))
+                        try:
+                            ep_opts = json.load(fp)
+                            access_int = ep_opts['access-interface']
+                            self.vif_int_dict.update({f.split('_')[0]:
+                                access_int})
+                        except Exception as e:
+                            # KeyError should only happen for UT
+                            # EP File would be deleted if parsing fails
+                            # for a VPP endpoint at restart
+                            LOG.exception(_("Error while parsing ep "
+                                "file %(file)s: %(ex)s"),
+                                {'file': f, 'ex': e})
+
                     elif self.snat_iptables.check_if_exists(filename):
                         # check if EP file is for SNAT EP. If so mark it for
                         # exclusion from clean-up; also don't register the EP
