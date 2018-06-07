@@ -82,7 +82,7 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
         self.int_br.add_flow(table=constants.CANARY_TABLE, priority=0,
                              actions="drop")
 
-    def scan_ports(self, registered_ports, updated_ports=None):
+    def scan_ports(self, registered_ports, updated_ports=None, em=None):
         cur_ports = self.int_br.get_vif_port_set()
         self.int_br_device_count = len(cur_ports)
         port_info = {'current': cur_ports}
@@ -157,6 +157,9 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
 
     def get_vif_port_by_id(self, id):
         return self.int_br.get_vif_port_by_id(id)
+
+    def handle_removed_eps(self, em, removed_eps):
+        return removed_eps
 
 
 class FakeManager(OvsManager):

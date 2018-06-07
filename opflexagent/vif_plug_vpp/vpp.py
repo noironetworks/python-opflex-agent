@@ -107,7 +107,7 @@ class VppPlugin(plugin.PluginBase):
 
     def _update_vif_port(self, vif, vif_name):
         mtu = self._get_mtu(vif)
-        linux_net.update_vpp_vif_port(vif_name, mtu)
+        linux_net.update_vpp_vif_port(vif, mtu)
 
     def _plug_vhostuser(self, vif, instance_info):
         vif_name = VppPlugin.gen_port_name(
