@@ -13,6 +13,7 @@
 from neutron.plugins.common import constants as n_constants
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from neutron_lib.utils import helpers
+from opflexagent import constants as ofcst
 from opflexagent.utils.bridge_managers import bridge_manager_base
 from opflexagent.utils.bridge_managers import ovs_lib
 from opflexagent.utils.bridge_managers import trunk_skeleton
@@ -43,6 +44,7 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
         self.fabric_br = ovs_lib.OVSBridge(conf.OPFLEX.fabric_bridge)
         self.local_ip = ovs_config.local_ip
         self.setup_integration_bridge()
+        agent_state['agent_type'] = ofcst.AGENT_TYPE_OPFLEX_OVS
         agent_state['bridge_mappings'] = bridge_mappings
         agent_state['datapath_type'] = ovs_config.datapath_type
         agent_state['vhostuser_socket_dir'] = ovs_config.vhostuser_socket_dir
