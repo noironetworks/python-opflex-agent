@@ -11,6 +11,7 @@
 #    under the License.
 
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
+from opflexagent import constants as ofcst
 from opflexagent.utils.bridge_managers import bridge_manager_base
 from opflexagent.utils.bridge_managers import trunk_skeleton
 from oslo_log import log as logging
@@ -30,6 +31,7 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
     def initialize(self, host, conf, agent_state):
         self.int_br_device_count = 0
         vpp_config = conf.VPP
+        agent_state['agent_type'] = ofcst.AGENT_TYPE_OPFLEX_VPP
         agent_state['vhostuser_socket_dir'] = vpp_config.vhostuser_socket_dir
         return self, agent_state
 
