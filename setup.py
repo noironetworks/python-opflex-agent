@@ -27,7 +27,7 @@ setuptools.setup(
     entry_points={
         'console_scripts': [
             'neutron-opflex-agent = '
-                'opflexagent.gbp_ovs_agent:main',
+                'opflexagent.gbp_agent:main',
             'opflex-ep-watcher = '
                 'opflexagent.as_metadata_manager:ep_watcher_main',
             'opflex-state-watcher = '
