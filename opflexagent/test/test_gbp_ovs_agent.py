@@ -115,7 +115,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
     def _mock_agent(self, agent):
         # Mock EP manager methods
-        agent.ep_manager._write_endpoint_file = mock.Mock()
+        agent.ep_manager._write_endpoint_file = mock.Mock(
+            return_value=agent.ep_manager.epg_mapping_file)
         agent.ep_manager._write_vrf_file = mock.Mock()
         agent.ep_manager._delete_endpoint_file = mock.Mock()
         agent.ep_manager._delete_vrf_file = mock.Mock()

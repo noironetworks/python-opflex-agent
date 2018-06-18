@@ -729,7 +729,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         }
         epfile = self._write_endpoint_file(nh.es_name, ep_dict)
         # SNAT EP is no longer stale
-        self._stale_endpoints.discard(epfile)
+        self._stale_endpoints.discard(os.path.basename(epfile))
 
     def _write_endpoint_file(self, port_id, mapping_dict):
         return self._write_file(port_id, mapping_dict, self.epg_mapping_file)
