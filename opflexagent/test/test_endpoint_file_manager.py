@@ -59,7 +59,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
         return agent
 
     def _mock_agent(self, agent):
-        agent._write_endpoint_file = mock.Mock()
+        agent._write_endpoint_file = mock.Mock(
+            return_value=agent.epg_mapping_file)
         agent._write_vrf_file = mock.Mock()
         agent._delete_endpoint_file = mock.Mock()
         agent._delete_vrf_file = mock.Mock()
@@ -640,7 +641,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
                 exclude_es=['EXT-2'])
 
             self._mock_agent(manager)
-            manager._write_endpoint_file.return_value = 'EXT-1.ep'
+            manager._write_endpoint_file.return_value = (
+                manager.epg_mapping_file % "EXT-1")
 
             # declare a port that uses EXT-1
             port = self._port()
