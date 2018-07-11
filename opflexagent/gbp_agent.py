@@ -632,6 +632,8 @@ def create_agent_config_map(conf):
     except cfg.NoSuchOptError:
         agent_config['dhcp_domain'] = conf.dns_domain
     agent_config['nat_mtu_size'] = conf.OPFLEX.nat_mtu_size
+    agent_config['nested_domain_uplink_interface'] = (
+            conf.OPFLEX.nested_domain_uplink_interface)
     return agent_config
 
 

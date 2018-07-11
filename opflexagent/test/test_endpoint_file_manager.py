@@ -15,6 +15,7 @@ import shutil
 import sys
 
 import mock
+from mock import call
 sys.modules["apicapi"] = mock.Mock()
 sys.modules["pyinotify"] = mock.Mock()
 
@@ -62,6 +63,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
         agent._write_endpoint_file = mock.Mock(
             return_value=agent.epg_mapping_file)
         agent._write_vrf_file = mock.Mock()
+        agent._write_lbiface_file = mock.Mock()
         agent._delete_endpoint_file = mock.Mock()
         agent._delete_vrf_file = mock.Mock()
         agent.snat_iptables = mock.Mock()
@@ -218,6 +220,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
             None, None, mtu=9000)
         self.manager._write_vrf_file.reset_mock()
         self.manager._write_endpoint_file.reset_mock()
+        self.manager._write_lbiface_file.reset_mock()
         self.manager.snat_iptables.setup_snat_for_es.reset_mock()
 
         # Bind another port on a same L3P, but subnets changed.
@@ -281,6 +284,70 @@ class TestEndpointFileManager(base.OpflexTestBase):
                    "attestation": []}
         self.manager._write_endpoint_file.assert_called_once_with(
                 ep_name, ep_file)
+
+    def test_port_nested_domain(self):
+        mapping = self._get_gbp_details(
+            extra_ips=[],
+            vrf_name='name_of_l3p',
+            vrf_tenant='apic_tenant',
+            vrf_subnets=['192.168.0.0/16', '192.169.0.0/16'],
+            floating_ip=[],
+            ip_mapping=[],
+            host_snat_ips=[],
+            owned_addresses=[],
+            attestation=[],
+            nested_domain_name='kubernetes',
+            nested_domain_type='nested-kubernetes',
+            nested_domain_infra_vlan=4093,
+            nested_domain_service_vlan=1000,
+            nested_domain_node_network_vlan=1001,
+            nested_domain_allowed_vlans=[2, 3, 4],
+            nested_host_vlan=4094)
+        port = self._port()
+        self.manager.declare_endpoint(port, mapping)
+
+        port_id = port.vif_id
+        ep_name = port_id + '_' + mapping['mac_address']
+        ep_file = {"endpoint-group-name": (mapping['app_profile_name'] + "|" +
+                                           mapping['endpoint_group_name']),
+                   "access-interface": port.port_name,
+                   "access-uplink-interface": 'qpf',
+                   "interface-name": 'qpi',
+                   "mac": 'aa:bb:cc:00:11:22',
+                   "access-interface-vlan": 4094,
+                   "promiscuous-mode": mapping['promiscuous_mode'],
+                   "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
+                   "attributes": {'vm-name': 'somename'},
+                   "neutron-network": port.net_uuid,
+                   "neutron-metadata-optimization": True,
+                   "domain-policy-space": 'apic_tenant',
+                   "domain-name": 'name_of_l3p',
+                   "ip": ['192.168.0.2', '192.168.1.2'],
+                   "anycast-return-ip": ['192.168.0.2', '192.168.1.2'],
+                   "attestation": [],
+                   'policy-space-name': 'apic_tenant'}
+        lbiface_file = {
+                   "interface-name": 'qpi',
+                   "uuid": mock.ANY,
+                   'openstack_nested_domain_metadata': {
+                           'name': 'kubernetes', 'type': 'nested-kubernetes'},
+                   'trunk-vlans': [{'start': 2, 'end': 4},
+                       {'start': 1000, 'end': 1001},
+                       {'start': 4093, 'end': 4093}]}
+        uplink_lbiface_file = {
+                   "interface-name": 'patch-fabric-ex',
+                   "uuid": mock.ANY,
+                   'openstack_nested_domain_metadata': {
+                           'name': 'kubernetes', 'type': 'nested-kubernetes'},
+                   'trunk-vlans': [{'start': 2, 'end': 4},
+                       {'start': 1000, 'end': 1001},
+                       {'start': 4093, 'end': 4093}]}
+        self.manager._write_endpoint_file.assert_called_once_with(
+                ep_name, ep_file)
+        calls = [call(ep_name, lbiface_file),
+                 call(ep_name + '_uplink', uplink_lbiface_file)]
+        self.assertEqual(2, self.manager._write_lbiface_file.call_count)
+        self.manager._write_lbiface_file.assert_has_calls(calls)
 
     def test_port_multiple_ep_files(self):
         # Prepare AAP list
@@ -587,6 +654,21 @@ class TestEndpointFileManager(base.OpflexTestBase):
     def test_delete_endpoint_files(self):
         self.manager._write_file('uuid1_AA', {}, self.manager.epg_mapping_file)
         self.manager._write_file('uuid1_BB', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid1_CC', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid2_BB', {}, self.manager.epg_mapping_file)
+        self.manager._delete_endpoint_files(
+            'uuid1', mac_exceptions=set(['AA', 'CC']))
+        ls = os.listdir(self.ep_dir)
+        self.assertEqual(set(['uuid1_AA.ep', 'uuid1_CC.ep', 'uuid2_BB.ep']),
+                         set(ls))
+
+    def test_delete_ep_and_lbiface_files(self):
+        self.manager._write_file('uuid1_AA', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid1_BB', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid1_BB', {},
+                self.manager.lbiface_mapping_file_fmt)
+        self.manager._write_file('uuid1_BB_uplink', {},
+                self.manager.lbiface_mapping_file_fmt)
         self.manager._write_file('uuid1_CC', {}, self.manager.epg_mapping_file)
         self.manager._write_file('uuid2_BB', {}, self.manager.epg_mapping_file)
         self.manager._delete_endpoint_files(
