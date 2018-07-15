@@ -15,8 +15,8 @@ import signal
 import sys
 import time
 
+from neutron.agent.common import ip_lib
 from neutron.agent.common import polling
-from neutron.agent.linux import ip_lib
 from neutron.agent.linux import iptables_firewall
 from neutron.agent import rpc as agent_rpc
 from neutron.agent import securitygroups_rpc as sg_rpc

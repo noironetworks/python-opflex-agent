@@ -10,8 +10,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from neutron.plugins.common import constants as n_constants
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
+from neutron_lib import constants as n_constants
 from neutron_lib.utils import helpers
 from opflexagent import constants as ofcst
 from opflexagent.utils.bridge_managers import bridge_manager_base

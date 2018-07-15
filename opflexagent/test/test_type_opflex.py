@@ -14,7 +14,7 @@
 #    under the License.
 
 from neutron.common import config as nconfig  # noqa
-from neutron.plugins.ml2 import config  # noqa
+from neutron.conf.plugins.ml2 import config  # noqa
 from neutron.tests.unit import testlib_api
 from oslo_config import cfg
 
@@ -29,6 +29,7 @@ class OpflexTypeTest(testlib_api.SqlTestCase):
 
     def setUp(self):
         super(OpflexTypeTest, self).setUp()
+        config.register_ml2_plugin_opts()
         cfg.CONF.set_override('opflex_networks', OPFLEX_NETWORKS,
                               group='OPFLEX')
         self.driver = type_opflex.OpflexTypeDriver()
