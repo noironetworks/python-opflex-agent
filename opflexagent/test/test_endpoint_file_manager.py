@@ -333,7 +333,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
                            'name': 'kubernetes', 'type': 'nested-kubernetes'},
                    'trunk-vlans': [{'start': 2, 'end': 4},
                        {'start': 1000, 'end': 1001},
-                       {'start': 4093, 'end': 4093}]}
+                       {'start': 4093}]}
         uplink_lbiface_file = {
                    "interface-name": 'patch-fabric-ex',
                    "uuid": mock.ANY,
@@ -341,13 +341,35 @@ class TestEndpointFileManager(base.OpflexTestBase):
                            'name': 'kubernetes', 'type': 'nested-kubernetes'},
                    'trunk-vlans': [{'start': 2, 'end': 4},
                        {'start': 1000, 'end': 1001},
-                       {'start': 4093, 'end': 4093}]}
+                       {'start': 4093}]}
         self.manager._write_endpoint_file.assert_called_once_with(
                 ep_name, ep_file)
         calls = [call(ep_name, lbiface_file),
                  call(ep_name + '_uplink', uplink_lbiface_file)]
         self.assertEqual(2, self.manager._write_lbiface_file.call_count)
         self.manager._write_lbiface_file.assert_has_calls(calls)
+
+    def test_list_to_ranges(self):
+        li = [1, 2, 3, 3000, 4093]
+        exp_rng = [{'start': 1, 'end': 3},
+                   {'start': 3000}, {'start': 4093}]
+        rng = self.manager._list_to_range(li)
+        self.assertEqual(exp_rng, rng)
+        li = [1, 2, 3, 3000, 0, 4093, 3000]
+        exp_rng = [{'start': 1, 'end': 3},
+                   {'start': 3000}, {'start': 4093}]
+        rng = self.manager._list_to_range(li)
+        self.assertEqual(exp_rng, rng)
+        li = [1, 2, 3000, 0, -2, 4093, 4094, 5000, 3000]
+        exp_rng = [{'start': 1, 'end': 2},
+                   {'start': 3000}, {'start': 4093}]
+        rng = self.manager._list_to_range(li)
+        self.assertEqual(exp_rng, rng)
+        li = [3000, 1, 4093]
+        exp_rng = [{'start': 1},
+                   {'start': 3000}, {'start': 4093}]
+        rng = self.manager._list_to_range(li)
+        self.assertEqual(exp_rng, rng)
 
     def test_port_multiple_ep_files(self):
         # Prepare AAP list
