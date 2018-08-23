@@ -415,11 +415,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         if 'nested_host_vlan' in mapping and mapping['nested_host_vlan']:
             mapping_dict['access-interface-vlan'] = mapping['nested_host_vlan']
         if allowed_vlans:
-            vlan_ranges = self._list_to_range(allowed_vlans)
-            rngs_dict = []
-            for rng in vlan_ranges:
-                rngs_dict.append({'start': rng[0], 'end': rng[-1]})
-            nested_domain_dict['trunk-vlans'] = rngs_dict
+            nested_domain_dict['trunk-vlans'] = self._list_to_range(
+                    allowed_vlans)
         if 'trunk-vlans' in nested_domain_dict and (
                 nested_domain_dict['trunk-vlans']):
             # First write the lbiface file for the VM's interface
@@ -448,6 +445,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 self._write_lbiface_file(
                         lbiface_file_name + '_' + NESTED_DOMAIN_UPLINK,
                         nested_domain_dict)
+            # REVISIT: Do not configure SG for VMs hosting nested k8s
+            mapping_dict.pop('security-group', None)
 
         # Create one file per MAC address.
         LOG.debug("Final endpoint file for port %(port)s: \n %(mapping)s" %
@@ -461,21 +460,31 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
     def _list_to_range(self, vlans_list):
         vlans_list = list(set(vlans_list))
+        vlans_list = filter(lambda a: a > 0 and a < 4094, vlans_list)
         vlans_list.sort()
-        length = len(vlans_list)
+        vlan_ranges = []
         while vlans_list:
             if len(vlans_list) == 1:
-                yield range(vlans_list[0], vlans_list[0] + 1)
+                vlan_ranges.append({'start': vlans_list[0]})
+                vlans_list.remove(vlans_list[0])
                 break
 
-            step = vlans_list[1] - vlans_list[0]
-            i = next(i for i in range(1, length) if i + 1 == length or (
-                vlans_list[i + 1] - vlans_list[i] != step))
+            start = vlans_list[0]
+            end = start
+            vlans_list.remove(vlans_list[0])
+            while vlans_list:
+                if (vlans_list[0] - end) == 1:
+                    end = vlans_list[0]
+                    vlans_list.remove(vlans_list[0])
+                else:
+                    break
 
-            yield range(vlans_list[0], vlans_list[i] + 1, step)
+            if end and end != start:
+                vlan_ranges.append({'start': start, 'end': end})
+            else:
+                vlan_ranges.append({'start': start})
 
-            vlans_list = vlans_list[i + 1:]
-            length -= i + 1
+        return vlan_ranges
 
     def _handle_host_snat_ip(self, host_snat_ips):
         for hsi in host_snat_ips:
