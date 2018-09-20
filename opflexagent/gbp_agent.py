@@ -647,6 +647,7 @@ def main():
     config.register_root_helper(cfg.CONF)
     common_config.init(sys.argv[1:])
     common_config.setup_logging()
+    config.setup_privsep()
     q_utils.log_opt_values(LOG)
 
     agent_mode = cfg.CONF.OPFLEX.agent_mode

@@ -757,6 +757,7 @@ def init_env():
     cfg.CONF.register_opts(gbp_opts, "OPFLEX")
     common_config.init(sys.argv[1:])
     common_config.setup_logging()
+    config.setup_privsep()
     utils.log_opt_values(LOG)
 
 
