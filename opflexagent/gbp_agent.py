@@ -15,6 +15,11 @@ import signal
 import sys
 import time
 
+# We need to ensure that the monkey-patch gets applied
+# before other packages that use eventlet get imported
+from neutron.common import eventlet_utils  # noqa
+eventlet_utils.monkey_patch()
+
 from neutron._i18n import _LE, _LI, _LW
 from neutron.agent.common import config
 from neutron.agent.common import polling
@@ -23,7 +28,6 @@ from neutron.agent.linux import iptables_firewall
 from neutron.agent import rpc as agent_rpc
 from neutron.agent import securitygroups_rpc as sg_rpc
 from neutron.common import config as common_config
-from neutron.common import eventlet_utils
 from neutron.common import topics
 from neutron.common import utils as q_utils
 from neutron.conf.agent import dhcp as dhcp_config
@@ -48,7 +52,6 @@ from oslo_log import log as logging
 from oslo_service import loopingcall
 from oslo_utils import excutils
 
-eventlet_utils.monkey_patch()
 LOG = logging.getLogger(__name__)
 
 DVS_AGENT_MODULE = 'vmware_dvs.agent.dvs_neutron_agent'
