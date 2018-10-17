@@ -67,6 +67,12 @@ gbp_opts = [
                default='ovs',
                help=_("The class to use for OVS bridge management. "
                       "Options are: 'ovs' (default), 'vpp' and 'fake'.")),
+    cfg.StrOpt('conn_track_syslog_facility', default='user',
+               help=_("The syslog facility used by opflex-conn-track "
+                      "program")),
+    cfg.StrOpt('conn_track_syslog_severity', default='info',
+               help=_("The syslog severity used by opflex-conn-track "
+                      "program")),
 ]
 
 vpp_opts = [
