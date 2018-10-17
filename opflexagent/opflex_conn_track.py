@@ -42,7 +42,7 @@ def main():
     config.setup_logging()
     comm_utils.log_opt_values(LOG)
     command = ("ip netns exec %s conntrack -E -o timestamp 2>&1 | logger "
-               "-p %s.%s -t conn_track") % (
+               "-p %s.%s -t opflex-conn-track") % (
                    sys.argv[1], sys.argv[2], sys.argv[3])
     LOG.debug("conn_track command: %s" % command)
     sh(command)
