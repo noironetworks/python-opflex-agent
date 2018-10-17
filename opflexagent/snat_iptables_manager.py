@@ -16,6 +16,7 @@ import netaddr
 
 from neutron.agent.linux import ip_lib
 from neutron.agent.linux import iptables_manager
+from oslo_config import cfg
 from oslo_log import log as logging
 
 from opflexagent import as_metadata_manager
@@ -36,7 +37,8 @@ class SnatIptablesManager(object):
         ip_wrapper_root = ip_lib.IPWrapper()
         if ip_wrapper_root.netns.exists(ns_name):
             # This will in turn shut down conn_track process thru supervisord
-            self.snat_conn_track_handler.conn_track_del(ns_name)
+            if cfg.CONF.OPFLEX.enable_snat_conn_track:
+                self.snat_conn_track_handler.conn_track_del(ns_name)
             ip_wrapper_root.netns.delete(ns_name)
 
     def _add_port_and_netns(self, if_name, ns_name, if_mac=None, mtu=None):
@@ -59,7 +61,8 @@ class SnatIptablesManager(object):
         if_dev.link.set_up()
 
         # This will in turn launch the conn_track process thru supervisord
-        self.snat_conn_track_handler.conn_track_create(ns_name)
+        if cfg.CONF.OPFLEX.enable_snat_conn_track:
+            self.snat_conn_track_handler.conn_track_create(ns_name)
         return if_dev
 
     def _setup_routes(self, if_dev, ver, ip_start, ip_end, gw_ip):
