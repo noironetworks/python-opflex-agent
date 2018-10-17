@@ -72,6 +72,8 @@ PID_DIR = "/var/lib/neutron/external/pids"
 PID_FILE_NAME_FORMAT = PID_DIR + "/%s.pid"
 PROXY_FILE_EXTENSION = "proxy"
 PROXY_FILE_NAME_FORMAT = "%s." + PROXY_FILE_EXTENSION
+SNAT_FILE_EXTENSION = "snat"
+SNAT_FILE_NAME_FORMAT = "%s." + SNAT_FILE_EXTENSION
 STATE_ANYCAST_SERVICES = "anycast_services"
 STATE_INSTANCE_NETWORKS = "instance_networks"
 STATE_FILE_EXTENSION = "state"
@@ -524,6 +526,52 @@ class StateWatcher(FileWatcher):
         return proxystr
 
 
+class SnatConnTrackHandler(object):
+    def __init__(self):
+        root_helper = cfg.CONF.AGENT.root_helper
+        self.mgr = AsMetadataManager(LOG, root_helper)
+        self.syslog_facility = cfg.CONF.OPFLEX.conn_track_syslog_facility
+        self.syslog_severity = cfg.CONF.OPFLEX.conn_track_syslog_severity
+
+    def conn_track_create(self, netns):
+        snatfilename = SNAT_FILE_NAME_FORMAT % netns
+        snatfilename = "%s/%s" % (MD_DIR, snatfilename)
+        conn_track_str = self.conn_track_config(netns)
+        try:
+            with open(snatfilename, "w") as f:
+                f.write(conn_track_str)
+            pidfile = PID_FILE_NAME_FORMAT % netns
+            self.mgr.sh("rm -f %s" % pidfile)
+            self.mgr.update_supervisor()
+        except Exception as e:
+            LOG.warn("ConnTrack: Exception in writing snat file: %s" %
+                     str(e))
+
+    def conn_track_del(self, netns):
+        snatfilename = SNAT_FILE_NAME_FORMAT % netns
+        snatfilename = "%s/%s" % (MD_DIR, snatfilename)
+        try:
+            os.remove(snatfilename)
+            self.mgr.update_supervisor()
+        except Exception as e:
+            LOG.warn("ConnTrack: Exception in deleting file: %s" % str(e))
+
+    def conn_track_config(self, netns):
+        snatstr = "\n".join([
+            "[program:opflex-conn-track-%s]" % netns,
+            "command=/usr/bin/opflex-conn-track %s %s %s" % (
+                netns, self.syslog_facility, self.syslog_severity),
+            "exitcodes=0,2",
+            "stopasgroup=true",
+            "startsecs=10",
+            "startretries=3",
+            "stopwaitsecs=10",
+            "stdout_logfile=NONE",
+            "stderr_logfile=NONE",
+        ])
+        return snatstr
+
+
 class AsMetadataManager(object):
     def __init__(self, logger, root_helper):
         global LOG
@@ -745,7 +793,7 @@ class AsMetadataManager(object):
             "user=neutron",
             "",
             "[include]",
-            "files = %s/*.proxy" % MD_DIR,
+            "files = %s/*.proxy %s/*.snat" % (MD_DIR, MD_DIR),
         ])
         config_file = "%s/%s" % (MD_DIR, MD_SUP_FILE_NAME)
         self.write_file(config_file, config_str)
