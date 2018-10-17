@@ -32,6 +32,8 @@ setuptools.setup(
                 'opflexagent.as_metadata_manager:ep_watcher_main',
             'opflex-state-watcher = '
                 'opflexagent.as_metadata_manager:state_watcher_main',
+            'opflex-conn-track = '
+                'opflexagent.opflex_conn_track:main',
         ],
         'neutron.ml2.type_drivers': [
             'opflex = opflexagent.type_opflex:OpflexTypeDriver',
