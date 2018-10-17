@@ -73,6 +73,9 @@ gbp_opts = [
     cfg.StrOpt('conn_track_syslog_severity', default='info',
                help=_("The syslog severity used by opflex-conn-track "
                       "program")),
+    cfg.BoolOpt('enable_snat_conn_track', default=True,
+                help=("Enable the SNAT connection track which will dump "
+                      "the output to syslog.")),
 ]
 
 vpp_opts = [
