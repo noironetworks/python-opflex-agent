@@ -9,7 +9,7 @@ Type=simple
 User=neutron
 ExecStart=/usr/bin/neutron-opflex-agent --config-file=/etc/neutron/neutron.conf --log-file=/var/log/neutron/opflex-agent.log
 PrivateTmp=false
-KillMode=process
+KillMode=mixed
 Restart=always
 
 [Install]
