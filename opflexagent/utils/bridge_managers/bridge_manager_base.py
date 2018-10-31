@@ -57,12 +57,13 @@ class BridgeManagerBase(object):
         """
 
     @abc.abstractmethod
-    def scan_ports(self, registered_ports, updated_ports=None):
+    def scan_ports(self, registered_ports, updated_ports=None, em=None):
         """ Scan Bridge ports.
 
         :param registered_ports: ports already managed by the agent.
         :param updated_ports: ports for which the Openstack server requested
         an update.
+        :param em: endpoint file manager
 
         :return: None
         """
@@ -88,4 +89,15 @@ class BridgeManagerBase(object):
 
         :param id: mac or device id of the guest device
         :return Port object
+        """
+
+    @abc.abstractmethod
+    def handle_removed_eps(self, em, removed_eps):
+        """
+        prune the set of eps to be removed based
+        on vhost-user socket files persisting
+
+        :param em: endpoint file manager
+        :param removed_eps: candidate set of vif_ids to remove
+        :return set of ep to be removed
         """
