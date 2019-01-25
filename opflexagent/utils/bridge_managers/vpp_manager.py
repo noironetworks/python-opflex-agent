@@ -34,7 +34,12 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
         self.int_br_device_count = 0
         vpp_config = conf.VPP
         agent_state['agent_type'] = ofcst.AGENT_TYPE_OPFLEX_VPP
-        agent_state['vhostuser_socket_dir'] = vpp_config.vhostuser_socket_dir
+        if 'configurations' not in agent_state:
+            agent_state['configurations'] = {}
+        #only supported datapath type with VPP is netdev
+        agent_state['configurations']['datapath_type'] = 'netdev'
+        agent_state['configurations']['vhostuser_socket_dir'] = (
+            vpp_config.vhostuser_socket_dir)
         return self, agent_state
 
     def get_local_ip(self):
