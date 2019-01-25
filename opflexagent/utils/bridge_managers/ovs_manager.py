@@ -40,14 +40,20 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
         except ValueError as e:
             raise ValueError(_("Parsing bridge_mappings failed: %s.") % e)
         self.int_br_device_count = 0
-        self.int_br = ovs_lib.OVSBridge(ovs_config.integration_bridge)
-        self.fabric_br = ovs_lib.OVSBridge(conf.OPFLEX.fabric_bridge)
+        self.int_br = ovs_lib.OVSBridge(ovs_config.integration_bridge,
+            ovs_config.datapath_type)
+        self.fabric_br = ovs_lib.OVSBridge(conf.OPFLEX.fabric_bridge,
+            ovs_config.datapath_type)
         self.local_ip = ovs_config.local_ip
         self.setup_integration_bridge()
         agent_state['agent_type'] = ofcst.AGENT_TYPE_OPFLEX_OVS
-        agent_state['bridge_mappings'] = bridge_mappings
-        agent_state['datapath_type'] = ovs_config.datapath_type
-        agent_state['vhostuser_socket_dir'] = ovs_config.vhostuser_socket_dir
+        if 'configurations' not in agent_state:
+            agent_state['configurations'] = {}
+        agent_state['configurations']['bridge_mappings'] = bridge_mappings
+        agent_state['configurations']['datapath_type'] = (
+            ovs_config.datapath_type)
+        agent_state['configurations']['vhostuser_socket_dir'] = (
+            ovs_config.vhostuser_socket_dir)
         return self, agent_state
 
     def get_local_ip(self):
