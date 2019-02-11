@@ -334,13 +334,42 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                     self._map_dhcp_info(fixed_ips, mapping,
                                         mapping_dict)
         ips_aap = []
-        for aap in mapping.get('allowed_address_pairs', []):
+
+        def filter_cidr_aaps(aaps):
+            cidr_aaps = []
+            cidr_aap_ips = []
+            # Remove any CIDRs in the AAP list
+            for index in range(len(aaps))[::-1]:
+                cidr = netaddr.IPNetwork(aaps[index]['ip_address'])
+                if ((cidr.version == 4 and cidr.prefixlen != 32) or
+                    (cidr.version == 6 and cidr.prefixlen != 128)):
+                    cidr_aaps = aaps.pop(index)
+                    cidr_aap_ips.append(cidr)
+            # IPSet allows matching the prefixes in a list/set form
+            aaps_set = netaddr.IPSet(cidr_aap_ips)
+            # remove any entries that appear in the set
+            # (e.g. IP appears is in a CIDR element in the set)
+            removed_aaps = [aaps.pop(index)
+                            for index in range(len(aaps))[::-1]
+                            if aaps[index]['ip_address'] in aaps_set]
+            # Add the CIDRs back in to the list
+            if cidr_aaps:
+                aaps.append(cidr_aaps)
+            return removed_aaps
+
+        aaps = mapping.get('allowed_address_pairs', [])
+        removed_aaps = filter_cidr_aaps(aaps)
+        for aap in aaps:
             if aap.get('ip_address'):
                 virtual_ips.append(
                     {'ip': aap['ip_address'],
                      'mac': aap.get('mac_address', mac)})
                 if aap.get('active'):
                     ips_aap.append(aap['ip_address'])
+        # The removed /32 and /128 IPs still need to appear in the other lists
+        for aap in removed_aaps:
+            if aap.get('active'):
+                ips_aap.append(aap['ip_address'])
         if ips or ips_aap or ips_ext:
             mapping_dict['ip'] = sorted(ips + ips_aap + ips_ext)
             # Mac should only exist when the ip field is actually set
