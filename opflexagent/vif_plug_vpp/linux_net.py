@@ -17,10 +17,9 @@
 
 """Creates VPP ports so that VPP renderer can add it to the right bridge."""
 
-import opflexagent.vpplib.VPPApi as vpp_api
+from opflexagent.vif_plug_vpp import constants
 from opflexagent.vpplib.VPPApi import VPPApi
 from oslo_log import log as logging
-from vif_plug_vpp import constants
 
 LOG = logging.getLogger(__name__)
 
@@ -31,7 +30,7 @@ def _create_vpp_vif(dev, iface_id, mac, mtu,
     vapi = VPPApi(LOG, 'nova_os_vif')
     # iface_id is the port UUID as seen in neutron. Use this as the tag
     # on the interface which will be later used as the key for endpoint lookup
-    mac_address = vpp_api.mac_to_bytes(mac)
+    mac_address = VPPApi.mac_to_bytes(mac)
     if interface_type == constants.VPP_VHOSTUSER_CLIENT_INTERFACE_TYPE:
         sw_if_index = vapi.create_vhost_user_if(
                         str(vhost_server_path).encode('utf-8'),
@@ -42,7 +41,7 @@ def _create_vpp_vif(dev, iface_id, mac, mtu,
                         1, mac_address, iface_id)
     LOG.debug("sw_if_index:{}".format(sw_if_index))
     if mtu:
-        vapi.set_interface_mtu(sw_if_index, mtu)
+        vapi.set_interface_mtu(sw_if_index, [mtu, 0, 0, 0])
     # Default admin state  for port in VPP is down, so do admin-up here
     vapi.set_interface_state(sw_if_index, 1)
     return sw_if_index

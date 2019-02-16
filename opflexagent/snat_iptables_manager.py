@@ -27,13 +27,13 @@ LOG = logging.getLogger(__name__)
 class SnatIptablesManager(object):
     IFACE_PREFIX = 'of-'
 
-    def __init__(self, int_br):
-        self.int_br = int_br
+    def __init__(self, bridge_manager):
+        self.bridge_manager = bridge_manager
         self.snat_conn_track_handler = (
-            as_metadata_manager.SnatConnTrackHandler())
+            as_metadata_manager.SnatConnTrackHandler(bridge_manager))
 
     def _cleanup(self, if_name, ns_name):
-        self.int_br.delete_port(if_name)
+        self.bridge_manager.delete_port(if_name)
         ip_wrapper_root = ip_lib.IPWrapper()
         if ip_wrapper_root.netns.exists(ns_name):
             # This will in turn shut down conn_track process thru supervisord
@@ -42,7 +42,7 @@ class SnatIptablesManager(object):
             ip_wrapper_root.netns.delete(ns_name)
 
     def _add_port_and_netns(self, if_name, ns_name, if_mac=None, mtu=None):
-        self.int_br.add_port(if_name, ('type', 'internal'))
+        self.bridge_manager.add_port(if_name, ('type', 'internal'))
         ip_wrapper_root = ip_lib.IPWrapper()
         if_dev = ip_wrapper_root.device(if_name)
         if if_mac:
@@ -155,7 +155,7 @@ class SnatIptablesManager(object):
 
     def cleanup_snat_all(self, exclude_es=[]):
         exclude_ports = set([self._get_hash_for_es(e) for e in exclude_es])
-        ports = [p for p in self.int_br.get_port_name_list()
+        ports = [p for p in self.bridge_manager.get_port_name_list()
                  if p.startswith(self.IFACE_PREFIX) and p not in exclude_ports]
         for ifn in ports:
             self._cleanup(ifn, ifn)

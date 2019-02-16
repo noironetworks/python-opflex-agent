@@ -49,8 +49,7 @@ class VppCtxt(object):
         self.connected = False
 
     def __enter__(self):
-        self.vppp = VppPapiProvider(self.client_name, self.LOG,
-            None, self.read_timeout)
+        self.vppp = VppPapiProvider(self.client_name, None, self.read_timeout)
         self.reconnect()
         return self.vppp
 
