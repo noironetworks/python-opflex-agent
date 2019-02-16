@@ -148,9 +148,10 @@ class VppPapiProvider(object):
 
     def connect(self):
         """Connect the API to VPP"""
-        self.vpp.connect(self.name, self.shm_prefix)
+        rv = self.vpp.connect(self.name, self.shm_prefix)
         self.papi = self.vpp.api
         self.vpp.register_event_callback(self)
+        return rv
 
     def disconnect(self):
         """Disconnect the API from VPP"""
