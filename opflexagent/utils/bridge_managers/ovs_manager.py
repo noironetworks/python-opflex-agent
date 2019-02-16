@@ -169,6 +169,18 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
     def handle_removed_eps(self, em, removed_eps):
         return removed_eps
 
+    def plug_metadata_port(self, dst_shell, port):
+        dst_shell("ovs-vsctl add-port %s %s" % (self.fabric_br.br_name, port))
+
+    def delete_port(self, port):
+        self.fabric_br.delete_port(port)
+
+    def add_port(self, port, type_tuple):
+        self.fabric_br.add_port(port, type_tuple)
+
+    def get_port_name_list(self):
+        return self.fabric_br.get_port_name_list()
+
 
 class FakeManager(OvsManager):
     """ Fake Bridge Manager for OpenVSwitch."""

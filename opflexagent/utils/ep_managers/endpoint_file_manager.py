@@ -94,7 +94,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             self.int_fip_pool[4].remove(ofcst.METADATA_DEFAULT_IP)
 
         self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
-            bridge_manager.fabric_br)
+            bridge_manager)
         self._registered_endpoints = set()
         self._stale_endpoints = set()
         self.vif_int_dict = {}

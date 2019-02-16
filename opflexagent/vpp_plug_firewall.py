@@ -28,8 +28,7 @@ def wrap_nova_to_osvif_vif_vhostuser(fn):
         except NotImplementedError as e:
             if vif['details'].get("vhostuser_vpp_plug", False):
                 profile = objects.vif.VIFPortProfileOpenVSwitch(
-                    interface_id=vif.get('ovs_interfaceid') or vif['id'],
-                    datapath_type=model.VIF_DETAILS_OVS_DATAPATH_NETDEV)
+                    interface_id=vif.get('ovs_interfaceid') or vif['id'])
                 obj = os_vif_util._get_vif_instance(
                         vif, objects.vif.VIFVHostUser,
                         port_profile=profile, plugin="vpp",
