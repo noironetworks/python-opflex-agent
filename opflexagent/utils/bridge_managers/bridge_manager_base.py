@@ -101,3 +101,41 @@ class BridgeManagerBase(object):
         :param removed_eps: candidate set of vif_ids to remove
         :return set of ep to be removed
         """
+
+    @abc.abstractmethod
+    def plug_metadata_port(self, dst_shell, port):
+        """
+        create the metadata terminal port in the
+        host datapath
+
+        :param dst_shell: shell to add given port
+        :param port: metadata reception port
+        :return none
+        """
+
+    @abc.abstractmethod
+    def delete_port(self, port):
+        """
+        delete the port from the host datapath
+
+        :param port: name of the port to be deleted
+        :return none
+        """
+
+    @abc.abstractmethod
+    def add_port(self, port, type_tuple):
+        """
+        add the port to the host datapath
+
+        :param port: name of the port to be added
+        :param type_tuple: tuple with type and type value
+        :return none
+        """
+
+    @abc.abstractmethod
+    def get_port_name_list(self):
+        """
+        get the list of port names in the host datapath
+
+        :return port name list
+        """

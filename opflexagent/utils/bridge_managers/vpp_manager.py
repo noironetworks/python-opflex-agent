@@ -156,3 +156,19 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
                 retain |= {ep}
         removed_eps -= retain
         return removed_eps
+
+    def plug_metadata_port(self, dst_shell, port):
+        dst_shell("vppctl create host-interface name %s" % port)
+        dst_shell("vppctl set interface state %s up" % port)
+
+    #The following methods are called with host-interfaces for SNAT
+    #This feature is currently not implemented by VPP
+    #Hence stubbing it out
+    def delete_port(self, port):
+        pass
+
+    def add_port(self, port, type_tuple):
+        pass
+
+    def get_port_name_list(self):
+        return []
