@@ -20,9 +20,9 @@ from os_vif import objects
 from os_vif import plugin
 from oslo_config import cfg
 
-from vif_plug_vpp import constants
-from vif_plug_vpp import exception
-from vif_plug_vpp import linux_net
+from opflexagent.vif_plug_vpp import constants
+from opflexagent.vif_plug_vpp import exception
+from opflexagent.vif_plug_vpp import linux_net
 
 
 class VppPlugin(plugin.PluginBase):
