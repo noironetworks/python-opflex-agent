@@ -527,9 +527,9 @@ class StateWatcher(FileWatcher):
 
 
 class SnatConnTrackHandler(object):
-    def __init__(self):
+    def __init__(self, bridge_manager):
         root_helper = cfg.CONF.AGENT.root_helper
-        self.mgr = AsMetadataManager(LOG, root_helper)
+        self.mgr = AsMetadataManager(LOG, root_helper, bridge_manager)
         self.syslog_facility = cfg.CONF.OPFLEX.conn_track_syslog_facility
         self.syslog_severity = cfg.CONF.OPFLEX.conn_track_syslog_severity
 
@@ -573,17 +573,17 @@ class SnatConnTrackHandler(object):
 
 
 class AsMetadataManager(object):
-    def __init__(self, logger, root_helper):
+    def __init__(self, logger, root_helper, bridge_manager):
         global LOG
         LOG = logger
         self.root_helper = root_helper
         self.name = "AsMetadataManager"
         self.md_filename = "%s/%s" % (MD_DIR, MD_SUP_FILE_NAME)
-        self.integ_bridge = cfg.CONF.OPFLEX.fabric_bridge
+        self.bridge_manager = bridge_manager
         self.initialized = False
 
     def init_all(self):
-        self.init_host(self.integ_bridge)
+        self.init_host()
         self.init_supervisor()
         self.start_supervisor()
         return
@@ -676,7 +676,7 @@ class AsMetadataManager(object):
             "gawk -e '/link\/ether/ {print $2}'" %
             (SVC_NS, SVC_NS_PORT))
 
-    def init_host(self, integ_br):
+    def init_host(self):
         # Create required directories
         self.sh("mkdir -p %s" % PID_DIR)
         self.sh("rm -f %s/*.pid" % PID_DIR)
@@ -705,7 +705,7 @@ class AsMetadataManager(object):
             self.sh("ethtool --offload %s tx off" % SVC_OVS_PORT)
             self.sh("ip netns exec %s ethtool --offload %s tx off" %
                     (SVC_NS, SVC_NS_PORT))
-        self.sh("ovs-vsctl add-port %s %s" % (integ_br, SVC_OVS_PORT))
+        self.bridge_manager.plug_metadata_port(self.sh, SVC_OVS_PORT)
 
     def init_supervisor(self):
         def conf(*fnames):
