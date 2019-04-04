@@ -61,7 +61,7 @@ class AgentNotifierApi(object):
 
     def opflex_endpoint_update(self, context, details, host=None):
         cctxt = self.client.prepare(
-            fanout=True, topic=self.topic_opflex_endpoint_update, server=host)
+            topic=self.topic_opflex_endpoint_update, server=host)
         cctxt.cast(context, 'opflex_endpoint_update', details=details)
 
     def opflex_vrf_update(self, context, details):
