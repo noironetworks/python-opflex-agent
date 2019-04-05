@@ -458,3 +458,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.assertFalse(self.agent.ep_manager._mapping_to_file.called)
         self.agent.ep_manager._mapping_cleanup.assert_called_once_with(
             port_details['device'])
+
+    def test_vrf_update(self):
+        fake_vrf = 'coke-tenant coke-vrf'
+        self.agent.opflex_notify_vrf(mock.Mock(), fake_vrf)
+        self.assertEqual(set(['coke-tenant coke-vrf']), self.agent.updated_vrf)
