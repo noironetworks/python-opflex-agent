@@ -187,6 +187,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                      [topics.PORT, topics.DELETE],
                      [topics.SECURITY_GROUP, topics.UPDATE],
                      [topics.SUBNET, topics.UPDATE],
+                     [rpc.TOPIC_OPFLEX, rpc.NOTIFY_VRF, topics.UPDATE],
                      [rpc.TOPIC_OPFLEX, rpc.VRF, topics.UPDATE]]
         self.connection = agent_rpc.create_consumers(
             self.endpoints, self.topic, consumers, start_listening=False)
