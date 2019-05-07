@@ -7,7 +7,7 @@ Before=openstack-nova-compute.service
 [Service]
 Type=simple
 User=neutron
-ExecStart=/usr/bin/neutron-cisco-apic-host-agent --config-file=/etc/neutron/neutron.conf --config-file=/etc/neutron/opflex-agent/apic_topology_service.ini --log-file=/var/log/neutron/opflex-agent.log
+ExecStart=/usr/bin/neutron-cisco-apic-host-agent --config-file=/etc/neutron/neutron.conf --config-file=/etc/neutron/opflex-agent/apic_topology_service.ini --log-file=/var/log/neutron/cisco-apic-host-agent.log
 PrivateTmp=false
 KillMode=process
 Restart=always
