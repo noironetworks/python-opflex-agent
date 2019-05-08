@@ -29,6 +29,7 @@ from neutron.common import config as common_config
 from neutron.common import utils
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import (  # noqa
     config as ovs_config)
+from opflexagent.utils import utils as opflexagent_utils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
@@ -527,9 +528,9 @@ class StateWatcher(FileWatcher):
 
 
 class SnatConnTrackHandler(object):
-    def __init__(self, bridge_manager):
+    def __init__(self):
         root_helper = cfg.CONF.AGENT.root_helper
-        self.mgr = AsMetadataManager(LOG, root_helper, bridge_manager)
+        self.mgr = AsMetadataManager(LOG, root_helper)
         self.syslog_facility = cfg.CONF.OPFLEX.conn_track_syslog_facility
         self.syslog_severity = cfg.CONF.OPFLEX.conn_track_syslog_severity
 
@@ -573,13 +574,14 @@ class SnatConnTrackHandler(object):
 
 
 class AsMetadataManager(object):
-    def __init__(self, logger, root_helper, bridge_manager):
+    def __init__(self, logger, root_helper):
         global LOG
         LOG = logger
         self.root_helper = root_helper
         self.name = "AsMetadataManager"
         self.md_filename = "%s/%s" % (MD_DIR, MD_SUP_FILE_NAME)
-        self.bridge_manager = bridge_manager
+        self.bridge_manager = opflexagent_utils.get_bridge_manager(
+                              cfg.CONF.OPFLEX)
         self.initialized = False
 
     def init_all(self):

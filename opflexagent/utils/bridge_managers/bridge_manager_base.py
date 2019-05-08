@@ -102,6 +102,7 @@ class BridgeManagerBase(object):
         :return set of ep to be removed
         """
 
+    @staticmethod
     @abc.abstractmethod
     def plug_metadata_port(self, dst_shell, port):
         """
