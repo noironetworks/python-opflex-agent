@@ -30,7 +30,7 @@ class SnatIptablesManager(object):
     def __init__(self, bridge_manager):
         self.bridge_manager = bridge_manager
         self.snat_conn_track_handler = (
-            as_metadata_manager.SnatConnTrackHandler(bridge_manager))
+            as_metadata_manager.SnatConnTrackHandler())
 
     def _cleanup(self, if_name, ns_name):
         self.bridge_manager.delete_port(if_name)

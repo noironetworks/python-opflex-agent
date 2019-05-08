@@ -17,8 +17,8 @@ from opflexagent import constants as ofcst
 from opflexagent.utils.bridge_managers import bridge_manager_base
 from opflexagent.utils.bridge_managers import ovs_lib
 from opflexagent.utils.bridge_managers import trunk_skeleton
+from oslo_config import cfg
 from oslo_log import log as logging
-
 
 LOG = logging.getLogger(__name__)
 DEAD_VLAN_TAG = n_constants.MAX_VLAN_TAG + 1
@@ -169,7 +169,8 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
         return removed_eps
 
     def plug_metadata_port(self, dst_shell, port):
-        dst_shell("ovs-vsctl add-port %s %s" % (self.fabric_br.br_name, port))
+        dst_shell("ovs-vsctl add-port %s %s" % (
+                  cfg.CONF.OPFLEX.fabric_bridge, port))
 
     def delete_port(self, port):
         self.fabric_br.delete_port(port)
