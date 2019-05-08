@@ -8,6 +8,15 @@ include /usr/share/dpkg/default.mk
 %:
 	dh $@ --with systemd --with python2 --buildsystem=python_distutils
 
+override_dh_installinit:
+	dh_systemd_enable -pneutron-opflex-agent --name=neutron-cisco-apic-host-agent neutron-cisco-apic-host-agent.service
+	dh_systemd_enable -pneutron-opflex-agent --name=neutron-opflex-agent neutron-opflex-agent.service
+	dh_installinit -pneutron-opflex-agent --no-start
+	dh_installinit -pneutron-opflex-agent --name=neutron-cisco-apic-host-agent --no-start --noscripts
+	dh_installinit -pneutron-opflex-agent --name=neutron-opflex-agent --no-start --noscripts
+	dh_systemd_start -pneutron-opflex-agent neutron-opflex-agent.service
+	dh_systemd_start -pneutron-opflex-agent neutron-cisco-apic-host-agent.service
+
 override_dh_auto_clean:
 	dh_clean
 
