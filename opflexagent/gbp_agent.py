@@ -36,17 +36,13 @@ from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from neutron_lib import constants as n_constants
 from neutron_lib import context
 from neutron_lib import exceptions
-from neutron_lib.utils import runtime
-
 from opflexagent import as_metadata_manager
 from opflexagent import constants as ofcst
 from opflexagent import opflex_notify
 from opflexagent import rpc
-from opflexagent.utils.bridge_managers import (
-    bridge_manager_base as bridge_manager)
-
 from opflexagent.utils.ep_managers import endpoint_file_manager as ep_manager
 from opflexagent.utils.port_managers import async_port_manager as port_manager
+from opflexagent.utils import utils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_service import loopingcall
@@ -61,23 +57,6 @@ DVS_AGENT_MODULE = 'vmware_dvs.agent.dvs_neutron_agent'
 # get_devices_details_list_and_failed_devices
 class DeviceListRetrievalError(exceptions.NeutronException):
     message = _("Unable to retrieve port details for devices: %(devices)s ")
-
-
-def load_bridge_manager(conf):
-    """Load Bridge Manager.
-
-    :param conf: bridge manager configuration object
-    :raises SystemExit of 1 if driver cannot be loaded
-    """
-
-    try:
-        loaded_class = runtime.load_class_by_alias_or_classname(
-                bridge_manager.BRIDGE_MANAGER_NAMESPACE, conf.bridge_manager)
-        return loaded_class()
-    except ImportError:
-        LOG.error(_("Error loading bridge manager '%s'"),
-                  conf.bridge_manager)
-        raise SystemExit(1)
 
 
 class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
@@ -110,7 +89,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             'start_flag': True}
 
         # Initialize OVS Manager
-        bridge_manager_class = load_bridge_manager(
+        bridge_manager_class = utils.get_bridge_manager(
             opflex_conf)
         self.bridge_manager, self.agent_state = (
             bridge_manager_class.initialize(
@@ -748,8 +727,7 @@ def main_opflex():
     # Start everything.
     LOG.info(_("Initializing metadata service ... "))
     helper = cfg.CONF.AGENT.root_helper
-    metadata_mgr = as_metadata_manager.AsMetadataManager(LOG, helper,
-                        agent.bridge_manager)
+    metadata_mgr = as_metadata_manager.AsMetadataManager(LOG, helper)
     metadata_mgr.ensure_initialized()
     return agent
 
