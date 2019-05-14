@@ -50,31 +50,37 @@ class AgentNotifierApi(object):
             topic, TOPIC_OPFLEX, VRF, topics.UPDATE)
 
     def port_update(self, context, port):
-        cctxt = self.client.prepare(fanout=True, topic=self.topic_port_update)
+        cctxt = self.client.prepare(fanout=True, topic=self.topic_port_update,
+                                    version='1.1')
         cctxt.cast(context, 'port_update', port=port)
 
     def port_delete(self, context, port):
-        cctxt = self.client.prepare(fanout=True, topic=self.topic_port_delete)
+        cctxt = self.client.prepare(fanout=True, topic=self.topic_port_delete,
+                                    version='1.1')
         cctxt.cast(context, 'port_delete', port=port)
 
     def subnet_update(self, context, subnet):
         cctxt = self.client.prepare(fanout=True,
-                                    topic=self.topic_subnet_update)
+                                    topic=self.topic_subnet_update,
+                                    version='1.1')
         cctxt.cast(context, 'subnet_update', subnet=subnet)
 
     def opflex_notify_vrf(self, context, vrf):
         cctxt = self.client.prepare(fanout=True,
-                                    topic=self.topic_opflex_notify_vrf)
+                                    topic=self.topic_opflex_notify_vrf,
+                                    version='1.3')
         cctxt.cast(context, 'opflex_notify_vrf', vrf=vrf)
 
     def opflex_endpoint_update(self, context, details, host=None):
         cctxt = self.client.prepare(
-            topic=self.topic_opflex_endpoint_update, server=host)
+            topic=self.topic_opflex_endpoint_update, server=host,
+            version='1.2')
         cctxt.cast(context, 'opflex_endpoint_update', details=details)
 
     def opflex_vrf_update(self, context, details):
         cctxt = self.client.prepare(fanout=True,
-                                    topic=self.topic_opflex_vrf_update)
+                                    topic=self.topic_opflex_vrf_update,
+                                    version='1.2')
         cctxt.cast(context, 'opflex_vrf_update', details=details)
 
 
