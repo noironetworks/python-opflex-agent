@@ -45,9 +45,7 @@ def main():
                "-p %s.%s -t opflex-conn-track") % (
                    sys.argv[1], sys.argv[2], sys.argv[3])
     LOG.debug("conn_track command: %s" % command)
-    sh(command)
-
-    return
+    return sh(command)
 
 
 if __name__ == "__main__":
