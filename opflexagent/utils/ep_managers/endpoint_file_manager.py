@@ -113,7 +113,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
         if not mapping:
             return
-        else:
+        try:
             # Multiple files will be created based on how many MAC
             # addresses are owned by the specific port.
             mapping_copy = copy.deepcopy(mapping)
@@ -203,6 +203,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                                   mac_exceptions=macs)
             self._registered_endpoints.add(port.vif_id)
             self.vif_int_dict.update({port.vif_id: port.port_name})
+        except Exception as e:
+            LOG.exception(_("Error while parsing ep file for "
+                            "port %(port)s: %(ex)s"), {'port': port, 'ex': e})
 
     def undeclare_endpoint(self, port_id):
         LOG.info("Endpoint undeclare requested for port %s", port_id)
