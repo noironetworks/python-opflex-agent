@@ -1074,3 +1074,11 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.manager.declare_endpoint(port, mapping)
         self.manager._write_endpoint_file.assert_called_with(ep_name, ep_file)
         self.manager.bridge_manager.get_port_vif_name = old_method
+
+    def test_bad_mapping(self):
+        mapping = self._get_gbp_details()
+        port_1 = self._port()
+
+        # Get rid of the EPG, verify we don't get an exception
+        mapping['endpoint_group_name'] = None
+        self.manager.declare_endpoint(port_1, mapping)
