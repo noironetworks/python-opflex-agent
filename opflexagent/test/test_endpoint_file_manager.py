@@ -335,7 +335,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
                        {'start': 1000, 'end': 1001},
                        {'start': 4093}]}
         uplink_lbiface_file = {
-                   "interface-name": 'patch-fabric-ex',
+                   "interface-name": 'patch-fab-ex',
                    "uuid": mock.ANY,
                    'openstack_nested_domain_metadata': {
                            'name': 'kubernetes', 'type': 'nested-kubernetes'},
