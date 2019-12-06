@@ -388,6 +388,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         if ips or ips_aap:
             mapping_dict['anycast-return-ip'] = sorted(ips + ips_aap)
 
+        if 'active_active_aap' in mapping:
+            mapping_dict['active-active-aap'] = mapping['active_active_aap']
         if 'vm-name' in mapping:
             mapping_dict['attributes'] = {'vm-name': mapping['vm-name']}
         if 'vrf_name' in mapping:
