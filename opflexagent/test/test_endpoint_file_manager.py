@@ -799,7 +799,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
                                         dhcp_lease_time=100,
                                         security_group=[
                                             {'policy-space': 'common',
-                                             'name': 'gbp_default'}])
+                                             'name': 'gbp_default'}],
+                                        active_active_aap=True)
         port = self._port()
         self.manager._release_int_fip = mock.Mock()
         self.manager.declare_endpoint(port, mapping)
@@ -816,6 +817,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.assertEqual(ep_file['security-group'],
                          [{'policy-space': 'common',
                            'name': 'gbp_default'}])
+        self.assertTrue(ep_file['active-active-aap'])
 
     def test_dns_domain(self):
         cfg.CONF.set_override('dns_domain', 'my_domain')
