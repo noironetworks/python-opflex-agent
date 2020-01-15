@@ -312,11 +312,6 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                                                                 port.vif_id)
         mapping_dict = {
             "policy-space-name": mapping['ptg_tenant'],
-            "endpoint-group-name": (mapping['app_profile_name'] + "|" +
-                                    mapping['endpoint_group_name']),
-            "eg-mapping-alias": "%s_%s_%s" % (mapping['ptg_tenant'],
-                                              mapping['app_profile_name'],
-                                              mapping['endpoint_group_name']),
             "access-interface": access_interface,
             "access-uplink-interface": port_f,
             "interface-name": port_i,
@@ -326,6 +321,23 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             'neutron-metadata-optimization':
                 mapping['enable_metadata_optimization'],
         }
+        if mapping.get('svi'):
+            # VM on SVI type network, in addition to the flag and
+            # vlan-id, epg is set to a unique id so using the network
+            # id provided in this field in the response to gbp details.
+            mapping_dict['endpoint-group-name'] = (
+                mapping['endpoint_group_name'])
+            mapping_dict['eg-mapping-alias'] = None
+            mapping_dict['ext-svi'] = True
+            mapping_dict['ext-encap-id'] = mapping.get('svi_vlan')
+        else:
+            mapping_dict['endpoint-group-name'] = (
+                mapping['app_profile_name'] + "|" +
+                mapping['endpoint_group_name'])
+            mapping_dict['eg-mapping-alias'] = "%s_%s_%s" % (
+                mapping['ptg_tenant'],
+                mapping['app_profile_name'],
+                mapping['endpoint_group_name'])
         if vlan:
             mapping_dict['access-interface-vlan'] = vlan
         ips = [x['ip_address'] for x in fixed_ips]
