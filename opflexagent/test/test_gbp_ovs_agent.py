@@ -413,15 +413,16 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.bridge_manager.delete_patch_ports.assert_called_with(
             [subports[0].port_id, subports[1].port_id])
 
-    def test_port_bound_to_host(self):
+    def _test_port_bound_to_host(self, net_type):
         mapping = self._get_gbp_details(device='some_device')
+        seg_id = 1234 if net_type is 'vlan' else ''
         port_details = {'device': 'some_device',
                         'admin_state_up': True,
                         'port_id': mapping['port_id'],
                         'network_id': 'some-net',
-                        'network_type': 'opflex',
+                        'network_type': net_type,
                         'physical_network': 'phys_net',
-                        'segmentation_id': '',
+                        'segmentation_id': seg_id,
                         'fixed_ips': [],
                         'device_owner': 'some-vm'}
         self.agent.plugin_rpc.update_device_up = mock.Mock()
@@ -455,6 +456,12 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.assertFalse(self.agent.ep_manager._mapping_to_file.called)
         self.agent.ep_manager._mapping_cleanup.assert_called_once_with(
             port_details['device'])
+
+    def test_port_bound_to_host_net_opflex(self):
+        self._test_port_bound_to_host('opflex')
+
+    def test_port_bound_to_host_net_vlan(self):
+        self._test_port_bound_to_host('vlan')
 
     def test_vrf_update(self):
         fake_vrf = 'coke-tenant coke-vrf'
