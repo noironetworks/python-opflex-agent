@@ -110,7 +110,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             agent_conf.ovsdb_monitor_respawn_interval or
             constants.DEFAULT_OVSDBMON_RESPAWN)
         self.setup_report()
-        self.supported_pt_network_types = [ofcst.TYPE_OPFLEX]
+        self.supported_pt_network_types = [
+            ofcst.TYPE_OPFLEX, n_constants.TYPE_VLAN
+        ]
 
         # Initialize iteration counter
         self.iter_num = 0
