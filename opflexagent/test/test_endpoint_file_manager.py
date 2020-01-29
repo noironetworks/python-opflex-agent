@@ -1084,3 +1084,23 @@ class TestEndpointFileManager(base.OpflexTestBase):
         # Get rid of the EPG, verify we don't get an exception
         mapping['endpoint_group_name'] = None
         self.manager.declare_endpoint(port_1, mapping)
+
+    def test_svi_port_bound(self):
+        # the SVI related info we expect to see
+        # on get_gbp_details
+        svi_info = {}
+        svi_info['svi'] = True
+        svi_info['svi_vlan'] = 1234
+        svi_info['endpoint_group_name'] = 'svi-net-id'
+
+        mapping = self._get_gbp_details(**svi_info)
+        port = self._port()
+
+        self.manager.declare_endpoint(port, mapping)
+        epargs = self.manager._write_endpoint_file.call_args_list
+
+        self.assertEqual(svi_info['svi'], epargs[1][0][1].get('ext-svi'))
+        self.assertEqual(svi_info['svi_vlan'],
+            epargs[1][0][1].get('ext-encap-id'))
+        self.assertEqual(svi_info['endpoint_group_name'],
+            epargs[1][0][1].get('endpoint-group-name'))
