@@ -69,7 +69,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                                'ip_address': '192.168.0.2'},
                               {'subnet_id': 'id2',
                                'ip_address': '192.168.1.2'}],
-                'device_owner': 'compute:'}
+                'device_owner': 'compute:',
+                'segmentation_id': ''}
 
     def _purge_endpoint_dir(self):
         try:
@@ -414,7 +415,14 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             [subports[0].port_id, subports[1].port_id])
 
     def _test_port_bound_to_host(self, net_type):
-        mapping = self._get_gbp_details(device='some_device')
+        if net_type is 'vlan':
+            svi_info = {}
+            svi_info['device'] = 'some_device'
+            svi_info['svi'] = True
+            svi_info['endpoint_group_name'] = 'svi-net-id'
+            mapping = self._get_gbp_details(**svi_info)
+        else:
+            mapping = self._get_gbp_details(device='some_device')
         seg_id = 1234 if net_type is 'vlan' else ''
         port_details = {'device': 'some_device',
                         'admin_state_up': True,
@@ -440,7 +448,20 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.treat_devices_added_or_updated(
             {'device': 'some_device', 'neutron_details': port_details,
              'gbp_details': mapping, 'port_id': 'port_id'})
-        self.assertTrue(self.agent.ep_manager._mapping_to_file.called)
+        epargs = self.agent.ep_manager._mapping_to_file.call_args_list
+
+        if net_type is 'vlan':
+            self.assertEqual(svi_info['svi'], epargs[0][0][1].get('svi'))
+            self.assertEqual(port_details['segmentation_id'],
+                epargs[0][0][0].segmentation_id)
+            self.assertEqual(svi_info['endpoint_group_name'],
+                epargs[0][0][1].get('endpoint_group_name'))
+        else:
+            self.assertEqual(None, epargs[0][0][1].get('svi'))
+            self.assertEqual(mapping['endpoint_group_name'],
+                epargs[0][0][1].get('endpoint_group_name'))
+            self.assertEqual('', epargs[0][0][0].segmentation_id)
+
         self.agent.ep_manager._mapping_cleanup.assert_called_once_with(
             port_details['port_id'], cleanup_vrf=False,
             mac_exceptions=set([mapping['mac_address']]))
