@@ -70,7 +70,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                                'ip_address': '192.168.0.2'},
                               {'subnet_id': 'id2',
                                'ip_address': '192.168.1.2'}],
-                'device_owner': 'compute:'}
+                'device_owner': 'compute:',
+                'segmentation_id': ''}
 
     def _purge_endpoint_dir(self):
         try:
