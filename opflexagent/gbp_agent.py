@@ -187,10 +187,11 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 port_info.get('vrf_updated'))
 
     def try_port_binding(self, port, net_uuid, network_type, physical_network,
-                         fixed_ips, device_owner):
+                         fixed_ips, device_owner, segmentation_id):
         port.net_uuid = net_uuid
         port.device_owner = device_owner
         port.fixed_ips = fixed_ips
+        port.segmentation_id = segmentation_id
         if not port.gbp_details:
             # Mapping is empty, this port left the Opflex policy space.
             LOG.warn("Mapping for port %s is None, undeclaring the Endpoint",
@@ -371,7 +372,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                                     neutron_details['physical_network'],
                                     neutron_details['admin_state_up'],
                                     neutron_details['fixed_ips'],
-                                    neutron_details['device_owner'])
+                                    neutron_details['device_owner'],
+                                    neutron_details['segmentation_id'])
                 # update plugin about port status
                 if neutron_details.get('admin_state_up'):
                     LOG.debug(_("Setting status for %s to UP"), device)
@@ -398,7 +400,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
     def treat_vif_port(self, vif_port, port_id, network_id, network_type,
                        physical_network, admin_state_up,
-                       fixed_ips, device_owner):
+                       fixed_ips, device_owner, segmentation_id):
         # When this function is called for a port, the port should have
         # an OVS ofport configured, as only these ports were considered
         # for being treated. If that does not happen, it is a potential
@@ -410,7 +412,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             if admin_state_up:
                 self.try_port_binding(vif_port, network_id, network_type,
                                       physical_network, fixed_ips,
-                                      device_owner)
+                                      device_owner, segmentation_id)
             else:
                 self.port_unbound(vif_port.vif_id)
         else:

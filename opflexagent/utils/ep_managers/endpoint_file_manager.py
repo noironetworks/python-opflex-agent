@@ -286,7 +286,6 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         Converts the port mapping into file.
         """
         # Skip router-interface ports - they interfere with OVS pipeline
-
         fixed_ips = mapping.get('fixed_ips') or fixed_ips
         # Routing is handled by ACI
         if port.device_owner in [n_constants.DEVICE_OWNER_ROUTER_INTF]:
@@ -329,7 +328,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 mapping['endpoint_group_name'])
             mapping_dict['eg-mapping-alias'] = None
             mapping_dict['ext-svi'] = True
-            mapping_dict['ext-encap-id'] = mapping.get('svi_vlan')
+            mapping_dict['ext-encap-id'] = port.segmentation_id
         else:
             mapping_dict['endpoint-group-name'] = (
                 mapping['app_profile_name'] + "|" +
