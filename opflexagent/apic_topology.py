@@ -34,6 +34,7 @@ from neutron import service
 
 from neutron._i18n import _LE
 from neutron._i18n import _LI
+from opflexagent import constants
 from opflexagent import host_agent_rpc as arpc
 
 ACI_CHASSIS_DESCR_FORMAT = 'topology/pod-(\d+)/node-(\d+)'
@@ -48,7 +49,6 @@ ACI_VPCPORT_DESCR_FORMAT = ('topology/pod-(\d+)/protpaths-(\d+)-(\d+)/pathep-'
 AGENT_FORCE_UPDATE_COUNT = 5
 BINARY_APIC_HOST_AGENT = 'neutron-cisco-apic-host-agent'
 TYPE_APIC_HOST_AGENT = 'cisco-apic-host-agent'
-VPCMODULE_NAME = 'vpc-%s-%s'
 
 
 LOG = logging.getLogger(__name__)
@@ -214,7 +214,8 @@ class ApicTopologyAgent(manager.Manager):
                             if match:
                                 module, port = match.group(1, 2)
                             if module is not None and port is not None:
-                                vpcmodule = VPCMODULE_NAME % (module, port)
+                                vpcmodule = constants.VPCMODULE_NAME % (
+                                    module, port)
                                 peer = (self.host, interface, mac,
                                         switch, vpcmodule, bundle,
                                         pod_id, port_desc)
