@@ -303,6 +303,9 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                     snat_iptables_manager.SnatIptablesManager,
                     'cleanup_snat_all'),
                 mock.patch.object(
+                    snat_iptables_manager.SnatIptablesManager,
+                    'check_if_exists', return_value=False),
+                mock.patch.object(
                     endpoint_file_manager.EndpointFileManager,
                     'undeclare_endpoint'),
                 mock.patch.object(ovs.OVSPluginApi, 'update_device_down')):
