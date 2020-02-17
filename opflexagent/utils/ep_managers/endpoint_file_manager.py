@@ -243,7 +243,15 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             for f in os.listdir(directory):
                 if f.endswith('.' + FILE_EXTENSION):
                     filename = f[:-len(FILE_EXTENSION) - 1]
-                    if '_' in f:
+                    if self.snat_iptables.check_if_exists(filename):
+                        # check if EP file is for SNAT EP. If so mark it for
+                        # exclusion from clean-up; also don't register the EP
+                        # file, otherwise it will be treated as a removed port
+                        snat_excl.append(filename)
+                    # REVISIT: A more reliable mechanism is needed for
+                    # determining if this EP file should be considered
+                    # as stale or not.
+                    elif '_' in f:
                         self._registered_endpoints.add(f.split('_')[0])
                         fp = file(os.path.join(directory, f))
                         try:
@@ -259,11 +267,6 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                                 "file %(file)s: %(ex)s"),
                                 {'file': f, 'ex': e})
 
-                    elif self.snat_iptables.check_if_exists(filename):
-                        # check if EP file is for SNAT EP. If so mark it for
-                        # exclusion from clean-up; also don't register the EP
-                        # file, otherwise it will be treated as a removed port
-                        snat_excl.append(filename)
                     else:
                         # Mark unknown EP file as stale
                         self._stale_endpoints.add(f)
