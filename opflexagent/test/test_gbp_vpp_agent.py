@@ -119,6 +119,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         agent.ep_manager._delete_endpoint_file = mock.Mock()
         agent.ep_manager._delete_vrf_file = mock.Mock()
         agent.ep_manager.snat_iptables = mock.Mock()
+        agent.ep_manager.snat_iptables.check_if_exists = mock.Mock(
+            return_value=False)
         agent.ep_manager.snat_iptables.setup_snat_for_es = mock.Mock(
             return_value = tuple([None, None]))
         agent.ep_manager._release_int_fip = mock.Mock()
@@ -289,6 +291,9 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                 mock.patch.object(
                     snat_iptables_manager.SnatIptablesManager,
                     'cleanup_snat_all'),
+                mock.patch.object(
+                    snat_iptables_manager.SnatIptablesManager,
+                    'check_if_exists', return_value=False),
                 mock.patch.object(
                     endpoint_file_manager.EndpointFileManager,
                     'undeclare_endpoint'),
