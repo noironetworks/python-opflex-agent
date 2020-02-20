@@ -617,8 +617,13 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.manager._write_file('uuid1_CC', {}, self.manager.epg_mapping_file)
         self.manager._write_file('uuid2_BB', {}, self.manager.epg_mapping_file)
         self.manager._write_file('uuid2_BB', {}, self.manager.epg_mapping_file)
-        with mock.patch.object(snat_iptables_manager.SnatIptablesManager,
-                               'cleanup_snat_all'):
+
+        def dummy_check(self, es):
+            return False
+
+        with mock.patch.multiple(snat_iptables_manager.SnatIptablesManager,
+                                 cleanup_snat_all=mock.DEFAULT,
+                                 check_if_exists=dummy_check):
             manager = self._initialize_agent()
             self._mock_agent(manager)
             self.assertEqual(set(['uuid1', 'uuid2']),
