@@ -17,8 +17,8 @@ import netaddr
 import os
 import os.path
 import pyinotify
-import Queue
 import signal
+from six.moves import queue as Queue
 import subprocess
 import sys
 import time

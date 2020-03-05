@@ -174,7 +174,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             mapping_copy['enable_metadata_optimization'] = True
             mapping_copy['promiscuous_mode'] = False
             # Map to file based on the AAP with a MAC address
-            for mac, aaps in mac_aap_map.iteritems():
+            for mac, aaps in mac_aap_map.items():
                 # Get extra details for this mac (if any)
                 extra_details = mapping.get('extra_details', {}).get(mac,
                                                                      {})
@@ -253,7 +253,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                     # as stale or not.
                     elif '_' in f:
                         self._registered_endpoints.add(f.split('_')[0])
-                        fp = file(os.path.join(directory, f))
+                        fp = open(os.path.join(directory, f))
                         try:
                             ep_opts = json.load(fp)
                             access_int = ep_opts['access-interface']
@@ -507,7 +507,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
     def _list_to_range(self, vlans_list):
         vlans_list = list(set(vlans_list))
-        vlans_list = filter(lambda a: a > 0 and a < 4094, vlans_list)
+        vlans_list = list(filter(lambda a: a > 0 and a < 4094, vlans_list))
         vlans_list.sort()
         vlan_ranges = []
         while vlans_list:
@@ -606,9 +606,10 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 dhcp4['lease-time'] = mapping['dhcp_lease_time']
             mapping_dict['dhcp4'] = dhcp4
             break
-        if len(v6subnets) > 0 and v6subnets.values()[0]['dns_nameservers']:
+        if len(v6subnets) > 0 and list(v6subnets.values())[0][
+            'dns_nameservers']:
             mapping_dict['dhcp6'] = {
-                'dns-servers': v6subnets.values()[0]['dns_nameservers']}
+                'dns-servers': list(v6subnets.values())[0]['dns_nameservers']}
             if 'interface_mtu' in mapping:
                 mapping_dict['dhcp6']['interface-mtu'] = mapping[
                     'interface_mtu']
@@ -625,7 +626,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             return (val and '/' in val[0]) and val[0] or None
 
         self.ext_seg_next_hop = {}
-        for es_name, es_info in es_cfg.iteritems():
+        for es_name, es_info in es_cfg.items():
             nh = ExtSegNextHopInfo(es_name)
             nh.from_config = True
             for key, value in es_info:
@@ -727,7 +728,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         return es
 
     def _alloc_int_fip(self, ip_ver, port_id, port_mac, es, ip):
-        fip = self.int_fip_pool[ip_ver].__iter__().next()
+        fip = next(self.int_fip_pool[ip_ver].__iter__())
         self.int_fip_pool[ip_ver].remove(fip)
         self.int_fip_alloc[ip_ver].setdefault(
             (port_id, port_mac), {}).setdefault(es, {})[ip] = fip
@@ -779,7 +780,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             es_list = self.es_port_dict.keys()
         else:
             es_list = ess
-        for es in es_list:
+        for es in list(es_list):
             if es not in self.es_port_dict:
                 continue
             if port_mac:

@@ -17,7 +17,6 @@ import mock
 sys.modules["apicapi"] = mock.Mock()
 sys.modules["pyinotify"] = mock.Mock()
 
-import contextlib
 from opflexagent import gbp_agent
 from opflexagent import snat_iptables_manager
 from opflexagent.test import base
@@ -89,28 +88,31 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             def start(self, interval=0):
                 self.f()
 
-        with contextlib.nested(
-            mock.patch('opflexagent.utils.bridge_managers.ovs_manager.'
+        with mock.patch('opflexagent.utils.bridge_managers.ovs_manager.'
                        'OvsManager.setup_integration_bridge',
-                       return_value=mock.Mock()),
-            mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
-                       'create'),
-            mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
-                       'set_secure_mode'),
-            mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
-                       'get_local_port_mac',
-                       return_value='00:00:00:00:00:01'),
-            mock.patch('neutron.agent.common.ovs_lib.BaseOVS.get_bridges'),
-            mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
-                       new=MockFixedIntervalLoopingCall),
-            mock.patch('opflexagent.gbp_agent.GBPOpflexAgent.'
-                       '_report_state')):
-            agent = gbp_agent.GBPOpflexAgent(**kwargs)
-            # set back to true because initial report state will succeed due
-            # to mocked out RPC calls
-            agent.use_call = True
-            agent.tun_br = mock.Mock()
-            agent.host = 'host1'
+                       return_value=mock.Mock()):
+            with mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
+                       'create'):
+                with mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
+                       'set_secure_mode'):
+                    with mock.patch('neutron.agent.common.ovs_lib.OVSBridge.'
+                        'get_local_port_mac',
+                        return_value='00:00:00:00:00:01'):
+                        with mock.patch('neutron.agent.common.ovs_lib'
+                                '.BaseOVS.get_bridges'):
+                            with mock.patch('oslo_service.loopingcall'
+                                    '.FixedIntervalLoopingCall',
+                                    new=MockFixedIntervalLoopingCall):
+                                with mock.patch('opflexagent.gbp_agent'
+                                        '.GBPOpflexAgent.'
+                                        '_report_state'):
+                                    agent = gbp_agent.GBPOpflexAgent(**kwargs)
+                                    # set back to true because initial report
+                                    # state will succeed due
+                                    # to mocked out RPC calls
+                                    agent.use_call = True
+                                    agent.tun_br = mock.Mock()
+                                    agent.host = 'host1'
         agent.sg_agent = mock.Mock()
         return agent
 
@@ -296,63 +298,69 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             'uuid2_BB', {}, self.agent.ep_manager.epg_mapping_file)
         self.agent.ep_manager._write_file(
             'uuid2_BB', {}, self.agent.ep_manager.epg_mapping_file)
-        with contextlib.nested(
-                mock.patch.object(
+        with mock.patch.object(
                     snat_iptables_manager.SnatIptablesManager,
-                    'cleanup_snat_all'),
-                mock.patch.object(
+                    'cleanup_snat_all'):
+            with mock.patch.object(
                     snat_iptables_manager.SnatIptablesManager,
-                    'check_if_exists', return_value=False),
-                mock.patch.object(
+                    'check_if_exists', return_value=False):
+                with mock.patch.object(
                     endpoint_file_manager.EndpointFileManager,
-                    'undeclare_endpoint'),
-                mock.patch.object(ovs.OVSPluginApi, 'update_device_down')):
-            port_stats = {'regular': {'added': 0,
-                                      'updated': 0,
-                                      'removed': 0},
-                          'ancillary': {'added': 0,
-                                        'removed': 0}}
-            agent = self._initialize_agent()
-            self._mock_agent(agent)
-            agent.bridge_manager.int_br.get_vif_port_set = mock.Mock(
-                return_value=set(['uuid1']))
-            agent._main_loop(set(), True, 1, port_stats, mock.Mock(), True)
-            agent.ep_manager.undeclare_endpoint.assert_called_once_with(
-                'uuid2')
+                    'undeclare_endpoint'):
+                    with mock.patch.object(ovs.OVSPluginApi,
+                        'update_device_down'):
+                        port_stats = {'regular': {'added': 0,
+                                                  'updated': 0,
+                                                  'removed': 0},
+                                      'ancillary': {'added': 0,
+                                                    'removed': 0}}
+                        agent = self._initialize_agent()
+                        self._mock_agent(agent)
+                        agent.bridge_manager \
+                            .int_br.get_vif_port_set = mock.Mock(
+                                return_value=set(['uuid1']))
+                        agent._main_loop(set(), True, 1, port_stats,
+                            mock.Mock(), True)
+                        agent.ep_manager.undeclare_endpoint \
+                            .assert_called_once_with(
+                                'uuid2')
 
     def test_process_deleted_ports(self):
         self.agent.bridge_manager.delete_patch_ports = mock.Mock()
-        with contextlib.nested(
-                mock.patch.object(
+        with mock.patch.object(
                     snat_iptables_manager.SnatIptablesManager,
-                    'cleanup_snat_all'),
-                mock.patch.object(
+                    'cleanup_snat_all'):
+            with mock.patch.object(
                     endpoint_file_manager.EndpointFileManager,
-                    'undeclare_endpoint'),
-                mock.patch.object(ovs.OVSPluginApi, 'update_device_down')):
-            agent = self._initialize_agent()
-            self._mock_agent(agent)
-            port_info = {'current': set(['1', '2']),
-                         'removed': set(['3', '5'])}
-            agent.bridge_manager.scan_ports = mock.Mock(return_value=port_info)
-            agent.bridge_manager.delete_patch_ports = mock.Mock()
-            agent.deleted_ports.add('3')
-            agent.deleted_ports.add('4')
-            port_stats = {'regular': {'added': 0,
-                                      'updated': 0,
-                                      'removed': 0},
-                          'ancillary': {'added': 0,
-                                        'removed': 0}}
-            agent._main_loop(set(), True, 1, port_stats, mock.Mock(), True)
-            # 3, 4 and 5 are undeclared once
-            expected = [mock.call('3'), mock.call('4'), mock.call('5')]
-            self._check_call_list(
-                expected,
-                agent.ep_manager.undeclare_endpoint.call_args_list)
-            expected = [mock.call(['3']), mock.call(['4']), mock.call(['5'])]
-            self._check_call_list(
-                expected,
-                agent.bridge_manager.delete_patch_ports.call_args_list)
+                    'undeclare_endpoint'):
+                with mock.patch.object(ovs.OVSPluginApi,
+                        'update_device_down'):
+                    agent = self._initialize_agent()
+                    self._mock_agent(agent)
+                    port_info = {'current': set(['1', '2']),
+                                 'removed': set(['3', '5'])}
+                    agent.bridge_manager.scan_ports = mock.Mock(
+                        return_value=port_info)
+                    agent.bridge_manager.delete_patch_ports = mock.Mock()
+                    agent.deleted_ports.add('3')
+                    agent.deleted_ports.add('4')
+                    port_stats = {'regular': {'added': 0,
+                                              'updated': 0,
+                                              'removed': 0},
+                                  'ancillary': {'added': 0,
+                                                'removed': 0}}
+                    agent._main_loop(set(), True, 1, port_stats, mock.Mock(),
+                        True)
+                    # 3, 4 and 5 are undeclared once
+                    expected = [mock.call('3'), mock.call('4'), mock.call('5')]
+                    self._check_call_list(
+                        expected,
+                        agent.ep_manager.undeclare_endpoint.call_args_list)
+                    expected = [mock.call(['3']), mock.call(['4']),
+                        mock.call(['5'])]
+                    self._check_call_list(
+                        expected,
+                        agent.bridge_manager.delete_patch_ports.call_args_list)
 
     def test_process_vrf_update(self):
         self.agent.ep_manager._delete_vrf_file = mock.Mock()

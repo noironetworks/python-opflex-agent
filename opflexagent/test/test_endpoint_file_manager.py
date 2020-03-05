@@ -890,7 +890,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.assertEqual(1, len(snat_ep_file))
         snat_ep_file = snat_ep_file[0]
 
-        for k, v in expected.iteritems():
+        for k, v in expected.items():
             self.assertEqual(v, snat_ep_file[k])
 
         self.manager.undeclare_endpoint(port.vif_id)

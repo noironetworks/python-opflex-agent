@@ -38,10 +38,11 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
             'opflexagent.as_metadata_manager.AsMetadataManager')
         metadata_patch = metadata_mgr.start()
         cfg.CONF.set_override('agent_mode', 'opflex', 'OPFLEX')
-        with mock.patch('sys.argv'):
-            gbp_agent.main()
-            self.assertEqual(1, opflex_patch.call_count)
-            self.assertEqual(1, metadata_patch.call_count)
+        with mock.patch('os.path.basename'):
+            with mock.patch('sys.argv'):
+                gbp_agent.main()
+                self.assertEqual(1, opflex_patch.call_count)
+                self.assertEqual(1, metadata_patch.call_count)
         opflex_agent.stop()
         metadata_mgr.stop()
 
@@ -51,11 +52,12 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
                                  return_value=mock_dvs_instance)
         import_patch = import_mock.start()
         cfg.CONF.set_override('agent_mode', 'dvs', 'OPFLEX')
-        with mock.patch('sys.argv'):
-            gbp_agent.main()
-            self.assertEqual(1, import_patch.call_count)
-            self.assertEqual(
-                1, mock_dvs_instance.create_agent_config_map.call_count)
+        with mock.patch('os.path.basename'):
+            with mock.patch('sys.argv'):
+                gbp_agent.main()
+                self.assertEqual(1, import_patch.call_count)
+                self.assertEqual(
+                    1, mock_dvs_instance.create_agent_config_map.call_count)
         import_mock.stop()
 
     def test_dvs_agent_no_binding_mode(self):
@@ -64,11 +66,12 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
                                  return_value=mock_dvs_instance)
         import_patch = import_mock.start()
         cfg.CONF.set_override('agent_mode', 'dvs_no_binding', 'OPFLEX')
-        with mock.patch('sys.argv'):
-            gbp_agent.main()
-            self.assertEqual(1, import_patch.call_count)
-            self.assertEqual(
-                1, mock_dvs_instance.create_agent_config_map.call_count)
+        with mock.patch('os.path.basename'):
+            with mock.patch('sys.argv'):
+                gbp_agent.main()
+                self.assertEqual(1, import_patch.call_count)
+                self.assertEqual(
+                    1, mock_dvs_instance.create_agent_config_map.call_count)
         import_mock.stop()
 
     def test_dvs_agent_mode_no_package(self):
@@ -76,10 +79,11 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
                                  side_effect=ValueError)
         import_patch = import_mock.start()
         cfg.CONF.set_override('agent_mode', 'dvs', 'OPFLEX')
-        with mock.patch('sys.argv'), mock.patch('sys.exit') as sys_patch:
-            try:
-                gbp_agent.main()
-            except AttributeError:
-                self.assertEqual(1, sys_patch.call_count)
-            self.assertEqual(1, import_patch.call_count)
+        with mock.patch('os.path.basename'):
+            with mock.patch('sys.argv'), mock.patch('sys.exit') as sys_patch:
+                try:
+                    gbp_agent.main()
+                except AttributeError:
+                    self.assertEqual(1, sys_patch.call_count)
+                self.assertEqual(1, import_patch.call_count)
         import_mock.stop()
