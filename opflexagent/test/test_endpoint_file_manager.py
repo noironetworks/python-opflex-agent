@@ -1094,17 +1094,18 @@ class TestEndpointFileManager(base.OpflexTestBase):
         # the SVI related info we expect to see
         # on get_gbp_details
         port = self._port()
-        svi_info = {}
-        svi_info['svi'] = True
-        svi_info['endpoint_group_name'] = 'svi-net-id'
+        provider_vlan_info = {}
+        provider_vlan_info['vlan_only_or_svi'] = True
+        provider_vlan_info['endpoint_group_name'] = 'net-id'
 
-        mapping = self._get_gbp_details(**svi_info)
+        mapping = self._get_gbp_details(**provider_vlan_info)
         port.segmentation_id = 1234
         self.manager.declare_endpoint(port, mapping)
         epargs = self.manager._write_endpoint_file.call_args_list
 
-        self.assertEqual(svi_info['svi'], epargs[1][0][1].get('ext-svi'))
+        self.assertEqual(provider_vlan_info['vlan_only_or_svi'],
+            epargs[1][0][1].get('provider-vlan'))
         self.assertEqual(port.segmentation_id,
             epargs[1][0][1].get('ext-encap-id'))
-        self.assertEqual(svi_info['endpoint_group_name'],
+        self.assertEqual(provider_vlan_info['endpoint_group_name'],
             epargs[1][0][1].get('endpoint-group-name'))
