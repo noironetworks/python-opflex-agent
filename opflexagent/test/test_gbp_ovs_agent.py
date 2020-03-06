@@ -17,11 +17,11 @@ import mock
 sys.modules["apicapi"] = mock.Mock()
 sys.modules["pyinotify"] = mock.Mock()
 
-import contextlib
 from opflexagent import gbp_agent
 from opflexagent import snat_iptables_manager
 from opflexagent.test import base
 from opflexagent.utils.ep_managers import endpoint_file_manager
+from opflexagent.utils import utils
 
 from neutron.api.rpc.callbacks import events
 from neutron.conf.agent import dhcp as dhcp_config
@@ -89,7 +89,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             def start(self, interval=0):
                 self.f()
 
-        with contextlib.nested(
+        resources = [
             mock.patch('opflexagent.utils.bridge_managers.ovs_manager.'
                        'OvsManager.setup_integration_bridge',
                        return_value=mock.Mock()),
@@ -102,9 +102,11 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                        return_value='00:00:00:00:00:01'),
             mock.patch('neutron.agent.common.ovs_lib.BaseOVS.get_bridges'),
             mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
-                       new=MockFixedIntervalLoopingCall),
+                new=MockFixedIntervalLoopingCall),
             mock.patch('opflexagent.gbp_agent.GBPOpflexAgent.'
-                       '_report_state')):
+                '_report_state')]
+
+        with utils.nested_context_manager(*resources):
             agent = gbp_agent.GBPOpflexAgent(**kwargs)
             # set back to true because initial report state will succeed due
             # to mocked out RPC calls
@@ -296,17 +298,20 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             'uuid2_BB', {}, self.agent.ep_manager.epg_mapping_file)
         self.agent.ep_manager._write_file(
             'uuid2_BB', {}, self.agent.ep_manager.epg_mapping_file)
-        with contextlib.nested(
-                mock.patch.object(
+
+        resources = [
+            mock.patch.object(
                     snat_iptables_manager.SnatIptablesManager,
                     'cleanup_snat_all'),
-                mock.patch.object(
+            mock.patch.object(
                     snat_iptables_manager.SnatIptablesManager,
                     'check_if_exists', return_value=False),
-                mock.patch.object(
+            mock.patch.object(
                     endpoint_file_manager.EndpointFileManager,
                     'undeclare_endpoint'),
-                mock.patch.object(ovs.OVSPluginApi, 'update_device_down')):
+            mock.patch.object(ovs.OVSPluginApi, 'update_device_down')]
+
+        with utils.nested_context_manager(*resources):
             port_stats = {'regular': {'added': 0,
                                       'updated': 0,
                                       'removed': 0},
@@ -322,14 +327,17 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
     def test_process_deleted_ports(self):
         self.agent.bridge_manager.delete_patch_ports = mock.Mock()
-        with contextlib.nested(
-                mock.patch.object(
+
+        resources = [
+            mock.patch.object(
                     snat_iptables_manager.SnatIptablesManager,
                     'cleanup_snat_all'),
-                mock.patch.object(
+            mock.patch.object(
                     endpoint_file_manager.EndpointFileManager,
                     'undeclare_endpoint'),
-                mock.patch.object(ovs.OVSPluginApi, 'update_device_down')):
+            mock.patch.object(ovs.OVSPluginApi, 'update_device_down')]
+
+        with utils.nested_context_manager(*resources):
             agent = self._initialize_agent()
             self._mock_agent(agent)
             port_info = {'current': set(['1', '2']),
