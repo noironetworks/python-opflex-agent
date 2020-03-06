@@ -10,6 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from contextlib2 import ExitStack, contextmanager
 from neutron_lib.utils import runtime
 from opflexagent.utils.bridge_managers import (
     bridge_manager_base as bridge_manager)
@@ -33,3 +34,18 @@ def get_bridge_manager(conf):
         LOG.error(_("Error loading bridge manager '%s'"),
                   conf.bridge_manager)
         raise SystemExit(1)
+
+
+@contextmanager
+def nested_context_manager(*contexts):
+    """
+    The new Python 3 contextlib.ExitStack class was
+    added as a replacement for contextlib.nested()
+    Used to combine other context managers.
+
+    :param contexts: list of context managers
+    """
+    with ExitStack() as stack:
+        for ctx in contexts:
+            stack.enter_context(ctx)
+        yield contexts

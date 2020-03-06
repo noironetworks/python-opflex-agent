@@ -15,6 +15,7 @@
 import httplib2
 from oslo_config import cfg
 from oslo_log import log as logging
+import six
 import six.moves.urllib.parse as urlparse
 import webob
 
@@ -58,7 +59,8 @@ class NetworkMetadataProxyHandler(object):
             LOG.exception("Unexpected error.")
             msg = _('An unknown error has occurred. '
                     'Please try your request again.')
-            return webob.exc.HTTPInternalServerError(explanation=unicode(msg))
+            return webob.exc.HTTPInternalServerError(
+                explanation=six.text_type(msg))
 
     def get_network_id(self, domain_id, remote_address):
         filedir = '/var/lib/neutron/opflex_agent'
@@ -131,7 +133,8 @@ class NetworkMetadataProxyHandler(object):
                 'Remote metadata server experienced an internal server error.'
             )
             LOG.debug(msg)
-            return webob.exc.HTTPInternalServerError(explanation=unicode(msg))
+            return webob.exc.HTTPInternalServerError(
+                explanation=six.text_type(msg))
         else:
             raise Exception(_('Unexpected response code: %s') % resp.status)
 
