@@ -76,6 +76,9 @@ gbp_opts = [
     cfg.BoolOpt('enable_snat_conn_track', default=True,
                 help=("Enable the SNAT connection track which will dump "
                       "the output to syslog.")),
+    cfg.BoolOpt('disable_security_group_for_nested_mode', default=False,
+                help=("Disable the security group configuration for ports "
+                      "created under nested mode networks.")),
 ]
 
 vpp_opts = [

@@ -104,6 +104,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         self.bridge_manager = bridge_manager
         self.nested_domain_uplink_interface = (
                 config['nested_domain_uplink_interface'])
+        self.disable_security_group_for_nested_mode = (
+                config['disable_security_group_for_nested_mode'])
         return self
 
     def declare_endpoint(self, port, mapping):
@@ -482,8 +484,10 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 self._write_lbiface_file(
                         lbiface_file_name + '_' + NESTED_DOMAIN_UPLINK,
                         nested_domain_dict)
-            # REVISIT: Do not configure SG for VMs hosting nested k8s
-            mapping_dict.pop('security-group', None)
+            # REVISIT: We should eventually get rid of this config
+            # knob and always enable the SG.
+            if self.disable_security_group_for_nested_mode:
+                mapping_dict.pop('security-group', None)
 
         # Create one file per MAC address.
         LOG.debug("Final endpoint file for port %(port)s: \n %(mapping)s" %

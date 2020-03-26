@@ -302,7 +302,9 @@ class TestEndpointFileManager(base.OpflexTestBase):
             nested_domain_service_vlan=1000,
             nested_domain_node_network_vlan=1001,
             nested_domain_allowed_vlans=[2, 3, 4],
-            nested_host_vlan=4094)
+            nested_host_vlan=4094,
+            security_group=[{'policy-space': 'common',
+                             'name': 'gbp_default'}],)
         port = self._port()
         self.manager.declare_endpoint(port, mapping)
 
@@ -325,7 +327,9 @@ class TestEndpointFileManager(base.OpflexTestBase):
                    "ip": ['192.168.0.2', '192.168.1.2'],
                    "anycast-return-ip": ['192.168.0.2', '192.168.1.2'],
                    "attestation": [],
-                   'policy-space-name': 'apic_tenant'}
+                   'policy-space-name': 'apic_tenant',
+                   'security-group': [{'policy-space': 'common',
+                                       'name': 'gbp_default'}]}
         lbiface_file = {
                    "interface-name": 'qpi',
                    "uuid": mock.ANY,
