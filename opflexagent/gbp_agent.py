@@ -624,6 +624,8 @@ def create_agent_config_map(conf):
     agent_config['nat_mtu_size'] = conf.OPFLEX.nat_mtu_size
     agent_config['nested_domain_uplink_interface'] = (
             conf.OPFLEX.nested_domain_uplink_interface)
+    agent_config['disable_security_group_for_nested_mode'] = (
+            conf.OPFLEX.disable_security_group_for_nested_mode)
     return agent_config
 
 
