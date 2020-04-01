@@ -417,13 +417,14 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.bridge_manager.delete_patch_ports.assert_called_with(
             [subports[0].port_id, subports[1].port_id])
 
-    def _test_port_bound_to_host(self, net_type):
+    def _test_port_bound_to_host(self, net_type, svi=False):
         if net_type is 'vlan':
-            svi_info = {}
-            svi_info['device'] = 'some_device'
-            svi_info['svi'] = True
-            svi_info['endpoint_group_name'] = 'svi-net-id'
-            mapping = self._get_gbp_details(**svi_info)
+            vlan_info = {}
+            vlan_info['device'] = 'some_device'
+            if svi:
+                vlan_info['svi'] = True
+            vlan_info['endpoint_group_name'] = 'svi-net-id'
+            mapping = self._get_gbp_details(**vlan_info)
         else:
             mapping = self._get_gbp_details(device='some_device')
         seg_id = 1234 if net_type is 'vlan' else ''
@@ -453,12 +454,19 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
              'gbp_details': mapping, 'port_id': 'port_id'})
         epargs = self.agent.ep_manager._mapping_to_file.call_args_list
 
+        self.assertEqual(port_details['network_type'],
+            epargs[0][0][0].network_type)
         if net_type is 'vlan':
-            self.assertEqual(svi_info['svi'], epargs[0][0][1].get('svi'))
             self.assertEqual(port_details['segmentation_id'],
                 epargs[0][0][0].segmentation_id)
-            self.assertEqual(svi_info['endpoint_group_name'],
-                epargs[0][0][1].get('endpoint_group_name'))
+            if svi:
+                self.assertEqual(True, epargs[0][0][1].get('svi'))
+                self.assertEqual(vlan_info['endpoint_group_name'],
+                    epargs[0][0][1].get('endpoint_group_name'))
+            else:
+                self.assertEqual(None, epargs[0][0][1].get('svi'))
+                self.assertEqual(mapping['endpoint_group_name'],
+                    epargs[0][0][1].get('endpoint_group_name'))
         else:
             self.assertEqual(None, epargs[0][0][1].get('svi'))
             self.assertEqual(mapping['endpoint_group_name'],
@@ -486,6 +494,9 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
     def test_port_bound_to_host_net_vlan(self):
         self._test_port_bound_to_host('vlan')
+
+    def test_port_bound_to_host_net_vlan_svi(self):
+        self._test_port_bound_to_host('vlan', svi=True)
 
     def test_vrf_update(self):
         fake_vrf = 'coke-tenant coke-vrf'

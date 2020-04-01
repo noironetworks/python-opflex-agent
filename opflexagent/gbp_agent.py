@@ -75,6 +75,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.opflex_networks = kwargs['opflex_networks']
         if self.opflex_networks and self.opflex_networks[0] == '*':
             self.opflex_networks = None
+        self.vlan_networks = kwargs['vlan_networks']
+        if self.vlan_networks and self.vlan_networks[0] == '*':
+            self.vlan_networks = None
         self.root_helper = root_helper
         self.notify_worker = opflex_notify.worker()
         self.host = cfg.CONF.host
@@ -192,12 +195,13 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         port.device_owner = device_owner
         port.fixed_ips = fixed_ips
         port.segmentation_id = segmentation_id
+        port.network_type = network_type
         if not port.gbp_details:
             # Mapping is empty, this port left the Opflex policy space.
             LOG.warn("Mapping for port %s is None, undeclaring the Endpoint",
                      port.vif_id)
             self.port_unbound(port.vif_id)
-        elif network_type in self.supported_pt_network_types:
+        elif network_type == ofcst.TYPE_OPFLEX:
             if ((self.opflex_networks is None) or
                     (physical_network in self.opflex_networks)):
                 # Endpoint Manager to process the EP info
@@ -208,6 +212,21 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 self.port_bound(port)
             else:
                 LOG.error(_("Cannot provision OPFLEX network for "
+                            "net-id=%(net_uuid)s - no bridge for "
+                            "physical_network %(physical_network)s"),
+                          {'net_uuid': net_uuid,
+                           'physical_network': physical_network})
+        elif network_type == n_constants.TYPE_VLAN:
+            if ((self.vlan_networks is None) or
+                    (physical_network in self.vlan_networks)):
+                # Endpoint Manager to process the EP info
+                LOG.debug("Processing the endpoint mapping "
+                          "for port %(port)s: \n mapping: %(mapping)s" % {
+                              'port': port.vif_id,
+                              'mapping': port.gbp_details})
+                self.port_bound(port)
+            else:
+                LOG.error(_("Cannot provision VLAN network for "
                             "net-id=%(net_uuid)s - no bridge for "
                             "physical_network %(physical_network)s"),
                           {'net_uuid': net_uuid,
@@ -595,6 +614,7 @@ def create_agent_config_map(conf):
     agent_config = {}
     agent_config['epg_mapping_dir'] = conf.OPFLEX.epg_mapping_dir
     agent_config['opflex_networks'] = conf.OPFLEX.opflex_networks
+    agent_config['vlan_networks'] = conf.OPFLEX.vlan_networks
     agent_config['endpoint_request_timeout'] = (
         conf.OPFLEX.endpoint_request_timeout)
     agent_config['config_apply_interval'] = conf.OPFLEX.config_apply_interval
