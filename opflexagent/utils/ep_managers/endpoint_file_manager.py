@@ -325,6 +325,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             'neutron-metadata-optimization':
                 mapping['enable_metadata_optimization'],
         }
+        if port.network_type == n_constants.TYPE_VLAN:
+            mapping_dict['provider-vlan'] = True
+            mapping_dict['ext-encap-id'] = port.segmentation_id
         if mapping.get('svi'):
             # VM on SVI type network, in addition to the flag and
             # vlan-id, epg is set to a unique id so using the network
@@ -332,8 +335,6 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             mapping_dict['endpoint-group-name'] = (
                 mapping['endpoint_group_name'])
             mapping_dict['eg-mapping-alias'] = None
-            mapping_dict['ext-svi'] = True
-            mapping_dict['ext-encap-id'] = port.segmentation_id
         else:
             mapping_dict['endpoint-group-name'] = (
                 mapping['app_profile_name'] + "|" +

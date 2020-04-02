@@ -1094,21 +1094,33 @@ class TestEndpointFileManager(base.OpflexTestBase):
         mapping['endpoint_group_name'] = None
         self.manager.declare_endpoint(port_1, mapping)
 
-    def test_svi_port_bound(self):
+    def _test_vlan_net_port_bound(self, svi=False):
         # the SVI related info we expect to see
         # on get_gbp_details
         port = self._port()
-        svi_info = {}
-        svi_info['svi'] = True
-        svi_info['endpoint_group_name'] = 'svi-net-id'
+        vlan_info = {}
+        if svi:
+            vlan_info['svi'] = True
+        vlan_info['endpoint_group_name'] = 'svi-net-id'
 
-        mapping = self._get_gbp_details(**svi_info)
+        mapping = self._get_gbp_details(**vlan_info)
         port.segmentation_id = 1234
+        port.network_type = 'vlan'
         self.manager.declare_endpoint(port, mapping)
         epargs = self.manager._write_endpoint_file.call_args_list
-
-        self.assertEqual(svi_info['svi'], epargs[1][0][1].get('ext-svi'))
+        self.assertEqual(True, epargs[1][0][1].get('provider-vlan'))
         self.assertEqual(port.segmentation_id,
             epargs[1][0][1].get('ext-encap-id'))
-        self.assertEqual(svi_info['endpoint_group_name'],
-            epargs[1][0][1].get('endpoint-group-name'))
+        if vlan_info.get('svi'):
+            self.assertEqual(vlan_info['endpoint_group_name'],
+                epargs[1][0][1].get('endpoint-group-name'))
+        else:
+            self.assertEqual((mapping['app_profile_name'] + '|' +
+                vlan_info['endpoint_group_name']),
+                epargs[1][0][1].get('endpoint-group-name'))
+
+    def test_vlan_net_no_svi_port_bound(self):
+        self._test_vlan_net_port_bound()
+
+    def test_vlan_net_svi_port_bound(self):
+        self._test_vlan_net_port_bound(svi=True)
