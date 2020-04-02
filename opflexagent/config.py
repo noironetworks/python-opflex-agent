@@ -30,6 +30,10 @@ gbp_opts = [
                 default=['*'],
                 help=_("List of the physical networks managed by this agent. "
                        "Use * for binding any opflex network to this agent")),
+    cfg.ListOpt('vlan_networks',
+                default=['*'],
+                help=_("List of the physical networks managed by this agent. "
+                       "Use * for binding any vlan network to this agent")),
     cfg.ListOpt('internal_floating_ip_pool',
                default=['169.254.0.0/16'],
                help=_("IP pool used for intermediate floating-IPs with SNAT")),
