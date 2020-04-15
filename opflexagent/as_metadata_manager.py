@@ -17,8 +17,8 @@ import netaddr
 import os
 import os.path
 import pyinotify
-import Queue
 import signal
+from six.moves import queue as Queue
 import subprocess
 import sys
 import time
@@ -106,7 +106,7 @@ class AddressPool(object):
         self.base = base
         self.size = size
         self.ips = {}
-        for i in xrange(size):
+        for i in range(size):
             self.ips[self.base + i] = True
 
     def reserve(self, ip):

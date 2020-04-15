@@ -11,6 +11,7 @@
 #    under the License.
 import os
 import signal
+import six
 import traceback
 
 # import logging
@@ -197,7 +198,7 @@ class StepHook(PollHook):
         print("Calls in/below that stack frame will be not be stepped anymore")
         print(single_line_delim)
         while True:
-            choice = raw_input("Enter your choice, if any, and press ENTER to "
+            choice = six.input("Enter your choice, if any, and press ENTER to "
                                "continue running the testcase...")
             if choice == "":
                 choice = None

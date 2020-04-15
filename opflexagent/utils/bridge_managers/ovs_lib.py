@@ -15,6 +15,9 @@ import contextlib
 from neutron.agent.common import ovs_lib
 from neutron.agent.ovsdb import impl_vsctl
 
+from neutron.plugins.ml2.drivers.openvswitch.agent.common import config
+from opflexagent import config  # noqa
+
 
 class OVSBridge(ovs_lib.OVSBridge):
 

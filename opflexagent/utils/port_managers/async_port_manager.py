@@ -101,7 +101,7 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
             with excutils.save_and_reraise_exception():
                 # The upper layers will trigger the resync
                 LOG.error("Configuration failed on port manager: %s",
-                          e.message)
+                          str(e))
                 # Newer responses take precedence over old ones.
                 response_by_device_id_copy.update(self.response_by_device_id)
                 self.response_by_device_id = response_by_device_id_copy
@@ -112,7 +112,7 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
         device_ids = set(device_ids or [])
         LOG.debug('Update initially scheduled for port ids %s', device_ids)
         # See if more ports need to be updated due to request timeout
-        for request in self.pending_requests.get_requests():
+        for request in list(self.pending_requests.get_requests()):
             if current_time - request['timestamp'] > self.request_timeout:
                 LOG.info('Request %s has timed out, rescheduling',
                          request['request_id'])
