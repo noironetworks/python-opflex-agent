@@ -316,7 +316,6 @@ class EpWatcher(FileWatcher):
     def process(self, files):
         LOG.debug("EP files: %s" % files)
 
-        curr_metadata_optimization = True
         curr_svc = read_jsonfile(self.svcfile)
         ip_pool = AddressPool(SVC_IP_BASE, SVC_IP_SIZE)
         for domain_uuid in curr_svc:
@@ -337,10 +336,14 @@ class EpWatcher(FileWatcher):
             if ep:
                 metadata_optimization = ep.get(
                     'neutron-metadata-optimization',
-                    curr_metadata_optimization)
+                    False)
                 if metadata_optimization is False:
-                    # as it is a global property, False wins
-                    curr_metadata_optimization = False
+                    # No service file when metadata optimization is False,
+                    # as for VMs on vlan type nets. But we can have another
+                    # VM on an opflex type net on the same compute which can
+                    # have metadata optimization, so we continue and a service
+                    # file can be generated.
+                    continue
 
                 domain_name = ep.get('domain-name')
                 domain_tenant = ep.get('domain-policy-space')
@@ -379,10 +382,6 @@ class EpWatcher(FileWatcher):
 
         if curr_svc:
             updated = True
-
-        if curr_metadata_optimization is False:
-            updated = True
-            new_svc = {}
 
         if updated:
             write_jsonfile(self.svcfile, new_svc)
