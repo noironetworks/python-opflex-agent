@@ -1102,7 +1102,13 @@ class TestEndpointFileManager(base.OpflexTestBase):
         if svi:
             vlan_info['svi'] = True
         vlan_info['endpoint_group_name'] = 'svi-net-id'
-
+        vlan_info['enable_dhcp_optimization'] = True
+        vlan_info['subnets'] = [{'id': 'id1',
+                                 'enable_dhcp': True,
+                                 'ip_version': 4,
+                                 'dns_nameservers': [],
+                                 'cidr': '192.168.0.0/24',
+                                 'host_routes': []}]
         mapping = self._get_gbp_details(**vlan_info)
         port.segmentation_id = 1234
         port.network_type = 'vlan'
@@ -1118,6 +1124,10 @@ class TestEndpointFileManager(base.OpflexTestBase):
             self.assertEqual((mapping['app_profile_name'] + '|' +
                 vlan_info['endpoint_group_name']),
                 epargs[1][0][1].get('endpoint-group-name'))
+
+        self.assertEqual(False,
+            epargs[1][0][1].get('neutron-metadata-optimization'))
+        self.assertEqual(None, epargs[1][0][1].get('dhcp4'))
 
     def test_vlan_net_no_svi_port_bound(self):
         self._test_vlan_net_port_bound()
