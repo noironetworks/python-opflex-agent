@@ -164,6 +164,10 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                     # Store for future processing
                     mac_aap_map.setdefault(
                         aap['mac_address'], []).append(aap)
+            # Metadata optimization always set to false for vlan type nets.
+            if port.network_type == n_constants.TYPE_VLAN:
+                mapping_copy['enable_metadata_optimization'] = False
+                mapping_copy['enable_dhcp_optimization'] = False
             # Create mapping file for base MAC address
             LOG.debug("Main file mapping %s", mapping_copy)
             macs.add(mapping_copy.get('mac_address') or port.vif_mac)
@@ -173,7 +177,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             mapping_copy['fixed_ips'] = []
             mapping_copy['subnets'] = []
             mapping_copy['enable_dhcp_optimization'] = False
-            mapping_copy['enable_metadata_optimization'] = True
+            mapping_copy['enable_metadata_optimization'] = (False
+                if port.network_type == n_constants.TYPE_VLAN else True)
             mapping_copy['promiscuous_mode'] = False
             # Map to file based on the AAP with a MAC address
             for mac, aaps in mac_aap_map.items():
