@@ -469,6 +469,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             allowed_vlans.extend(mapping['nested_domain_allowed_vlans'])
         if 'nested_host_vlan' in mapping and mapping['nested_host_vlan']:
             mapping_dict['access-interface-vlan'] = mapping['nested_host_vlan']
+            mapping_dict['access-allow-untagged'] = True
         if allowed_vlans:
             nested_domain_dict['trunk-vlans'] = self._list_to_range(
                     allowed_vlans)
