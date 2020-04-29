@@ -317,6 +317,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
                    "interface-name": 'qpi',
                    "mac": 'aa:bb:cc:00:11:22',
                    "access-interface-vlan": 4094,
+                   "access-allow-untagged": True,
                    "promiscuous-mode": mapping['promiscuous_mode'],
                    "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
                    "attributes": {'vm-name': 'somename'},
