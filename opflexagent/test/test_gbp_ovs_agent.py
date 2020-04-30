@@ -398,18 +398,24 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.assertEqual(0.5, self.agent.config_apply_interval)
 
     def test_trunk_handler(self):
+        port = mock.Mock()
+        port.vif_id = uuidutils.generate_uuid()
         trunk_id = uuidutils.generate_uuid()
         subports = [
             trunk_obj.SubPort(
                 port_id=uuidutils.generate_uuid(), trunk_id=trunk_id,
                 segmentation_type='foo', segmentation_id=i)
             for i in range(2)]
+        trunk_details = {}
+        trunk_details['trunk_id'] = trunk_id
+        trunk_details['master_port_id'] = port.vif_id
+        trunk_details['subports'] = subports
+        port.trunk_details = trunk_details
+
         self.agent.bridge_manager.handle_subports(subports, events.CREATED)
         self.agent.bridge_manager.handle_subports(subports, events.DELETED)
         self.assertFalse(self.agent.bridge_manager.add_patch_ports.called)
         self.assertFalse(self.agent.bridge_manager.delete_patch_ports.called)
-        self.agent.bridge_manager.managed_trunks[trunk_id] = 'master_port'
-        self.agent.bridge_manager.managed_trunks['master_port'] = trunk_id
 
         def binding_call(context, subports):
             return {trunk_id: [{'id': x.port_id, 'mac_address': '%s' % i}
@@ -417,13 +423,16 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.bridge_manager.trunk_rpc.update_subport_bindings = (
             binding_call)
 
-        self.agent.bridge_manager.handle_subports(subports, events.CREATED)
-        self.agent.bridge_manager.handle_subports(subports, events.DELETED)
+        self.agent.bridge_manager.manage_trunk(port)
+        self.agent.bridge_manager.unmanage_trunk(port.vif_id)
+
         self.agent.bridge_manager.add_patch_ports.assert_called_with(
             [subports[0].port_id, subports[1].port_id],
             attached_macs={subports[0].port_id: '0', subports[1].port_id: '1'})
-        self.agent.bridge_manager.delete_patch_ports.assert_called_with(
-            [subports[0].port_id, subports[1].port_id])
+
+        call_args = self.agent.bridge_manager.delete_patch_ports.call_args
+        self.assertEqual(set(call_args[0][0]),
+            set([subports[0].port_id, subports[1].port_id]))
 
     def _test_port_bound_to_host(self, net_type, svi=False):
         if net_type is 'vlan':

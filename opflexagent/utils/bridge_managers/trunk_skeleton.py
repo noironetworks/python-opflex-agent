@@ -30,6 +30,7 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
         super(OpflexTrunkMixin, self).__init__()
         self.managed_trunks = {}
         registry.unsubscribe(self.handle_trunks, resources.TRUNK)
+        registry.subscribe(self.handle_subports, resources.SUBPORT)
         self._context = n_context.get_admin_context_without_session()
         self.trunk_rpc = agent.TrunkStub()
 
@@ -59,9 +60,20 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
                         # Wire patch ports, the agent loop will do the rest
                         self.add_patch_ports(subport_ids,
                                              attached_macs=subports_mac)
+                        # Subport tracking for the trunk, add as we
+                        # process subports being added.
+                        self.managed_trunks[trunk_id].update(subport_ids)
                     elif event_type == events.DELETED:
                         subport_ids = [p.port_id for p in subports]
                         self.delete_patch_ports(subport_ids)
+                        # Subport tracking for the trunk, remove as we
+                        # process subports being deleted.
+                        for subport_id in subport_ids:
+                            try:
+                                self.managed_trunks[trunk_id].remove(
+                                    subport_id)
+                            except KeyError:
+                                continue
                     self.trunk_rpc.update_trunk_status(
                         self.context, trunk_id, constants.ACTIVE_STATUS)
                 except Exception as e:
@@ -78,7 +90,12 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
         if getattr(port, 'trunk_details', None):
             trunk_id = port.trunk_details['trunk_id']
             master_id = port.trunk_details['master_port_id']
-            self.managed_trunks[trunk_id] = master_id
+            # Track the subports in the trunk. Since we don't get a
+            # notification on unbind - we have no way to clean up
+            # the patch ports for the subports. We trigger the
+            # clean up when our scan finds that the parent is not
+            # present due to unplugging of the VM.
+            self.managed_trunks.setdefault(trunk_id, set())
             self.managed_trunks[master_id] = trunk_id
             # Attach subports
             if port.vif_id == master_id:
@@ -98,4 +115,6 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
     def unmanage_trunk(self, port_id):
         if port_id in self.managed_trunks:
             master_id = self.managed_trunks.pop(port_id, None)
+            # Delete the patch ports for the subports being tracked.
+            self.delete_patch_ports(list(self.managed_trunks[master_id]))
             self.managed_trunks.pop(master_id, None)

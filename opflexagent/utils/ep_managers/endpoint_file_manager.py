@@ -929,9 +929,35 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         directory = os.path.dirname(self.epg_mapping_file)
         # Remove all existing EPs mapping for port_id
         for f in os.listdir(directory):
-            if (f.endswith('.' + FILE_EXTENSION) or f.endswith(
-                '.' + LBIFACE_FILE_EXTENSION)) and port_id in f:
-                if not any(x for x in mac_exceptions if x in f):
+            if f.endswith('.' + FILE_EXTENSION):
+                if f[:-3] in self.ext_seg_next_hop:
+                    # Skip over SNAT ep files.
+                    continue
+                # EP files are named as (along with 'ep' extension):
+                # port_id + '_' + mac  - for regular ports.
+                # Parent port_id + '_' + mac  - for Trunk Parent ports.
+                # Parent port_id + '_' + Child subport_id + '_' + mac -
+                #       for Trunk subports.
+                #
+                # With 2 possible formats, validate the port_id with the
+                # appropriate substring in the the file name.for cleanup.
+                # split fname into the port_id(s) + mac.
+                f_split = os.path.splitext(f)[0].split('_')
+                if not 1 < len(f_split) < 4:
+                    # Based on possible format of filenames,
+                    # we seem to have an invalid file, log an
+                    # error and continue.
+                    LOG.error("Invalid File Format seen with File: %s ", f)
+                    continue
+                if (port_id == f_split[-2] and
+                        f_split[-1] not in mac_exceptions):
+                    try:
+                        os.remove(os.path.join(directory, f))
+                    except OSError as e:
+                        LOG.exception(e)
+            elif f.endswith('.' + LBIFACE_FILE_EXTENSION):
+                if (port_id in f and
+                    not any(x for x in mac_exceptions if x in f)):
                     try:
                         os.remove(os.path.join(directory, f))
                     except OSError as e:
