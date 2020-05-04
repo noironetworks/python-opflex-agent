@@ -25,6 +25,7 @@ from opflexagent.test import base
 from opflexagent.utils.ep_managers import endpoint_file_manager
 
 from neutron.conf.agent import dhcp as dhcp_config
+from neutron_lib import constants as n_constants
 from oslo_config import cfg
 from oslo_utils import uuidutils
 
@@ -1135,3 +1136,40 @@ class TestEndpointFileManager(base.OpflexTestBase):
 
     def test_vlan_net_svi_port_bound(self):
         self._test_vlan_net_port_bound(svi=True)
+
+    def _test_dhcp_ep(self, svi=False):
+
+        port = self._port()
+        port.device_owner = n_constants.DEVICE_OWNER_DHCP
+
+        vlan_info = {}
+        if svi:
+            vlan_info['svi'] = True
+        vlan_info['endpoint_group_name'] = 'svi-net-id'
+        vlan_info['subnets'] = [{'id': 'id1',
+                                 'enable_dhcp': True,
+                                 'ip_version': 4,
+                                 'dns_nameservers': [],
+                                 'cidr': '192.168.0.0/24',
+                                 'host_routes': []}]
+        mapping = self._get_gbp_details(**vlan_info)
+        mapping.pop('vm-name')
+
+        self.manager.declare_endpoint(port, mapping)
+        epargs = self.manager._write_endpoint_file.call_args_list
+        if svi:
+            self.assertEqual(('dhcp' + '|' +
+                vlan_info['endpoint_group_name']),
+                epargs[1][0][1].get('attributes').get('vm-name'))
+        else:
+            self.assertEqual(('dhcp' + '|' +
+                mapping['ptg_tenant'] + '|' +
+                mapping['app_profile_name'] + '|' +
+                vlan_info['endpoint_group_name']),
+                epargs[1][0][1].get('attributes').get('vm-name'))
+
+    def test_dhcp_ep_svi(self):
+        self._test_dhcp_ep(svi=True)
+
+    def test_dhcp_ep_no_svi(self):
+        self._test_dhcp_ep()
