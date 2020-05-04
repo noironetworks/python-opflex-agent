@@ -355,12 +355,20 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         virtual_ips = []
         if port.device_owner == n_constants.DEVICE_OWNER_DHCP:
             # vm-name, if specified in mappings, will override this
-            mapping_dict['attributes'] = {'vm-name': (
-                'dhcp|' +
-                mapping['ptg_tenant'] + '|' +
-                mapping['app_profile_name'] + '|' +
-                mapping['endpoint_group_name'])
-            }
+            if mapping.get('svi'):
+                # On svi nets, ptg_tenant, app_profile_name - N/A,
+                # only contains a fake epg name which is the net-id.
+                mapping_dict['attributes'] = {'vm-name': (
+                    'dhcp|' +
+                    mapping['endpoint_group_name'])
+                }
+            else:
+                mapping_dict['attributes'] = {'vm-name': (
+                    'dhcp|' +
+                    mapping['ptg_tenant'] + '|' +
+                    mapping['app_profile_name'] + '|' +
+                    mapping['endpoint_group_name'])
+                }
         else:
             if (mapping.get('enable_dhcp_optimization', False) and
                'subnets' in mapping):
