@@ -706,6 +706,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
                          set(ls))
 
     def test_delete_ep_and_lbiface_files(self):
+        self.manager.ext_seg_next_hop['uni:snat:l3out'] = 'foo_nh_info'
         self.manager._write_file('uuid1_AA', {}, self.manager.epg_mapping_file)
         self.manager._write_file('uuid1_BB', {}, self.manager.epg_mapping_file)
         self.manager._write_file('uuid1_BB', {},
@@ -714,11 +715,32 @@ class TestEndpointFileManager(base.OpflexTestBase):
                 self.manager.lbiface_mapping_file_fmt)
         self.manager._write_file('uuid1_CC', {}, self.manager.epg_mapping_file)
         self.manager._write_file('uuid2_BB', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid1_uuid2_DD', {},
+                self.manager.epg_mapping_file)
         self.manager._delete_endpoint_files(
             'uuid1', mac_exceptions=set(['AA', 'CC']))
         ls = os.listdir(self.ep_dir)
-        self.assertEqual(set(['uuid1_AA.ep', 'uuid1_CC.ep', 'uuid2_BB.ep']),
+        self.assertEqual(set(['uuid1_AA.ep', 'uuid1_CC.ep', 'uuid2_BB.ep',
+                         'uuid1_uuid2_DD.ep']), set(ls))
+
+        self.manager._delete_endpoint_files(
+            'uuid2', mac_exceptions=set(['DD']))
+        ls = os.listdir(self.ep_dir)
+        self.assertEqual(set(['uuid1_AA.ep', 'uuid1_CC.ep',
+                         'uuid1_uuid2_DD.ep']), set(ls))
+
+        self.manager._write_file('uni:snat:l3out', {},
+            self.manager.epg_mapping_file)
+        self.manager._write_file('InvalidFile', {},
+            self.manager.epg_mapping_file)
+
+        self.manager._delete_endpoint_files(
+            'uuid2', mac_exceptions=set(['AA']))
+        ls = os.listdir(self.ep_dir)
+        self.assertEqual(set(['uuid1_AA.ep', 'uuid1_CC.ep',
+                         'uni:snat:l3out.ep', 'InvalidFile.ep']),
                          set(ls))
+        self.manager.ext_seg_next_hop.pop('uni:snat:l3out')
 
     def test_registered_endpoints(self):
         # Init directory
