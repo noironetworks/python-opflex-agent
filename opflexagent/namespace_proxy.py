@@ -26,6 +26,8 @@ from neutron.common import utils
 from neutron import wsgi
 from oslo_serialization import jsonutils
 
+from opflexagent._i18n import _
+
 LOG = logging.getLogger(__name__)
 
 

@@ -18,24 +18,26 @@ import time
 # We need to ensure that the monkey-patch gets applied
 # before other packages that use eventlet get imported
 from neutron.common import eventlet_utils  # noqa
-eventlet_utils.monkey_patch()
+eventlet_utils.monkey_patch()  # noqa
 
 from neutron.agent.common import ip_lib
 from neutron.agent.common import polling
 from neutron.agent.linux import iptables_firewall
 from neutron.agent import rpc as agent_rpc
-from neutron.agent import securitygroups_rpc as sg_rpc
+from neutron.agent import securitygroups_rpc as agent_sg_rpc
+from neutron.api.rpc.handlers import securitygroups_rpc as sg_rpc
 from neutron.common import config as common_config
-from neutron.common import topics
 from neutron.common import utils as q_utils
 from neutron.conf.agent import common as config
 from neutron.conf.agent import dhcp as dhcp_config
 from neutron.plugins.ml2.drivers.openvswitch.agent import (
     ovs_neutron_agent as ovs)
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
+from neutron_lib.agent import topics
 from neutron_lib import constants as n_constants
 from neutron_lib import context
 from neutron_lib import exceptions
+from opflexagent._i18n import _
 from opflexagent import as_metadata_manager
 from opflexagent import constants as ofcst
 from opflexagent import opflex_notify
@@ -161,7 +163,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.of_rpc = rpc.GBPServerRpcApi(rpc.TOPIC_OPFLEX)
         self.plugin_rpc = ovs.OVSPluginApi(topics.PLUGIN)
         self.sg_plugin_rpc = sg_rpc.SecurityGroupServerRpcApi(topics.PLUGIN)
-        self.sg_agent = sg_rpc.SecurityGroupAgentRpc(
+        self.sg_agent = agent_sg_rpc.SecurityGroupAgentRpc(
             self.context, self.sg_plugin_rpc, defer_refresh_firewall=True)
 
         self.state_rpc = agent_rpc.PluginReportStateAPI(topics.PLUGIN)
@@ -211,9 +213,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                               'mapping': port.gbp_details})
                 self.port_bound(port)
             else:
-                LOG.error(_("Cannot provision OPFLEX network for "
-                            "net-id=%(net_uuid)s - no bridge for "
-                            "physical_network %(physical_network)s"),
+                LOG.error("Cannot provision OPFLEX network for "
+                          "net-id=%(net_uuid)s - no bridge for "
+                          "physical_network %(physical_network)s",
                           {'net_uuid': net_uuid,
                            'physical_network': physical_network})
         elif network_type == n_constants.TYPE_VLAN:
@@ -226,15 +228,15 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                               'mapping': port.gbp_details})
                 self.port_bound(port)
             else:
-                LOG.error(_("Cannot provision VLAN network for "
-                            "net-id=%(net_uuid)s - no bridge for "
-                            "physical_network %(physical_network)s"),
+                LOG.error("Cannot provision VLAN network for "
+                          "net-id=%(net_uuid)s - no bridge for "
+                          "physical_network %(physical_network)s",
                           {'net_uuid': net_uuid,
                            'physical_network': physical_network})
         else:
-            LOG.error(_("Network type %(net_type)s not supported for "
-                        "Policy Target provisioning. Supported types: "
-                        "%(supported)s"),
+            LOG.error("Network type %(net_type)s not supported for "
+                      "Policy Target provisioning. Supported types: "
+                      "%(supported)s",
                       {'net_type': network_type,
                        'supported': self.supported_pt_network_types})
 
@@ -380,7 +382,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                     self.port_unbound(device)
                     return False
             elif neutron_details and 'port_id' in neutron_details:
-                LOG.info(_("Port %(device)s updated. Details: %(details)s"),
+                LOG.info("Port %(device)s updated. Details: %(details)s",
                          {'device': device, 'details': details})
                 # Inject GBP/Trunk details
                 port.gbp_details = gbp_details
@@ -395,24 +397,24 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                                     neutron_details['segmentation_id'])
                 # update plugin about port status
                 if neutron_details.get('admin_state_up'):
-                    LOG.debug(_("Setting status for %s to UP"), device)
+                    LOG.debug("Setting status for %s to UP", device)
                     self.plugin_rpc.update_device_up(
                         self.context, device, self.agent_id, self.host)
                 else:
-                    LOG.debug(_("Setting status for %s to DOWN"), device)
+                    LOG.debug("Setting status for %s to DOWN", device)
                     self.plugin_rpc.update_device_down(
                         self.context, device, self.agent_id, self.host)
-                LOG.info(_("Configuration for device %s completed."),
+                LOG.info("Configuration for device %s completed.",
                          device)
             else:
-                LOG.warn(_("Device %s not defined on plugin"), device)
+                LOG.warn("Device %s not defined on plugin", device)
                 if port and port.ofport != -1:
                     self.port_unbound(port.vif_id)
                     return False
         else:
             # The port disappeared and cannot be processed
-            LOG.info(_("Port %s was not found on the integration bridge "
-                       "and will therefore not be processed"), device)
+            LOG.info("Port %s was not found on the integration bridge "
+                     "and will therefore not be processed", device)
             self.port_unbound(device)
             return False
         return True
@@ -588,26 +590,20 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
 
 def _parse_files(conf_files):
-    try:
-        multi_parser = cfg.MultiConfigParser()
-        multi_parser.read(conf_files)
-        return multi_parser.parsed
-    except AttributeError:
-        # Oslo 6.0.0+
-        sections = {}
-        for filename in conf_files:
-            parser = cfg.ConfigParser(filename, sections)
-            try:
-                parser.parse()
-            except IOError:
-                LOG.warning('IOError failure on %(file)s: %(exc)s',
-                            {'file': filename,
-                             'exc': '(file missing or permission issue?)'})
-                continue
-            except Exception as e:
-                LOG.warning('Failed to parse file %(file)s: %(exc)s',
-                            {'file': filename, 'exc': e})
-        return [sections]
+    sections = {}
+    for filename in conf_files:
+        parser = cfg.ConfigParser(filename, sections)
+        try:
+            parser.parse()
+        except IOError:
+            LOG.warning('IOError failure on %(file)s: %(exc)s',
+                        {'file': filename,
+                         'exc': '(file missing or permission issue?)'})
+            continue
+        except Exception as e:
+            LOG.warning('Failed to parse file %(file)s: %(exc)s',
+                        {'file': filename, 'exc': e})
+    return [sections]
 
 
 def create_agent_config_map(conf):
@@ -669,7 +665,7 @@ def main():
     if not agent:
         sys.exit(1)
 
-    LOG.info(_("Agent initialized successfully, now running... "))
+    LOG.info("Agent initialized successfully, now running... ")
     agent.daemon_loop()
 
 
@@ -677,7 +673,7 @@ def agent_startup_helper(create_config_map_fn, agent_class, root_helper=None):
     try:
         agent_config = create_config_map_fn(cfg.CONF)
     except ValueError as e:
-        LOG.error(_("Couldn't create config map (%s), Agent terminated!"), e)
+        LOG.error("Couldn't create config map (%s), Agent terminated!", e)
         return None
 
     try:
@@ -687,7 +683,7 @@ def agent_startup_helper(create_config_map_fn, agent_class, root_helper=None):
             agent = agent_class(**agent_config)
 
     except RuntimeError as e:
-        LOG.error(_("Couldn't create agent (%s), Agent terminated!"), e)
+        LOG.error("Couldn't create agent (%s), Agent terminated!", e)
         return None
     signal.signal(signal.SIGTERM, agent._handle_sigterm)
     return agent
@@ -752,7 +748,7 @@ def main_opflex():
                          root_helper=root_helper)
 
     # Start everything.
-    LOG.info(_("Initializing metadata service ... "))
+    LOG.info("Initializing metadata service ... ")
     helper = cfg.CONF.AGENT.root_helper
     metadata_mgr = as_metadata_manager.AsMetadataManager(LOG, helper)
     metadata_mgr.ensure_initialized()

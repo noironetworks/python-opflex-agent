@@ -13,7 +13,7 @@
 import time
 
 from neutron.agent import rpc as agent_rpc
-from neutron.common import topics
+from neutron_lib.agent import topics
 from neutron_lib import context
 from oslo_log import log as logging
 from oslo_utils import excutils

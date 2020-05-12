@@ -31,7 +31,7 @@ def get_bridge_manager(conf):
                 bridge_manager.BRIDGE_MANAGER_NAMESPACE, conf.bridge_manager)
         return loaded_class()
     except ImportError:
-        LOG.error(_("Error loading bridge manager '%s'"),
+        LOG.error("Error loading bridge manager '%s'",
                   conf.bridge_manager)
         raise SystemExit(1)
 

@@ -13,6 +13,7 @@
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from neutron_lib import constants as n_constants
 from neutron_lib.utils import helpers
+from opflexagent._i18n import _
 from opflexagent import constants as ofcst
 from opflexagent.utils.bridge_managers import bridge_manager_base
 from opflexagent.utils.bridge_managers import ovs_lib

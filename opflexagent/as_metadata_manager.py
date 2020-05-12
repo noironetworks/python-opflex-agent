@@ -29,6 +29,7 @@ from neutron.common import utils
 from neutron.conf.agent import common as config
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import (  # noqa
     config as ovs_config)
+from opflexagent._i18n import _
 from opflexagent.utils import utils as opflexagent_utils
 from oslo_config import cfg
 from oslo_log import log as logging
