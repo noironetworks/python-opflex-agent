@@ -16,8 +16,8 @@ import sys
 
 import mock
 from mock import call
-sys.modules["apicapi"] = mock.Mock()
-sys.modules["pyinotify"] = mock.Mock()
+sys.modules["apicapi"] = mock.Mock()  # noqa
+sys.modules["pyinotify"] = mock.Mock()  # noqa
 
 from opflexagent import gbp_agent
 from opflexagent import snat_iptables_manager

@@ -1,6 +1,5 @@
 language: python
 
-
 matrix:
   include:
     - python: 2.7
@@ -9,15 +8,12 @@ matrix:
     - python: 2.7
       env:
         - TOX_ENV=pep8
-    - python: 3.6
+    - python: 3.5
       env:
-        - TOX_ENV=py36
-    - python: 3.6
-      env:
-        - TOX_ENV=pep8
+        - TOX_ENV=py35
+
 install:
   - pip install tox
-
 
 script:
   - tox -e $TOX_ENV

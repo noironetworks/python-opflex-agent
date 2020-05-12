@@ -17,8 +17,8 @@ import re
 import sys
 
 import eventlet
+eventlet.monkey_patch()  # noqa
 
-eventlet.monkey_patch()
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_service import periodic_task
@@ -32,6 +32,7 @@ from neutron import manager
 from neutron import service
 from neutron_lib.utils import net as net_utils
 
+from opflexagent._i18n import _
 from opflexagent import constants
 from opflexagent import host_agent_rpc as arpc
 

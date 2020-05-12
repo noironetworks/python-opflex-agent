@@ -14,8 +14,8 @@ import shutil
 import sys
 
 import mock
-sys.modules["apicapi"] = mock.Mock()
-sys.modules["pyinotify"] = mock.Mock()
+sys.modules["apicapi"] = mock.Mock()  # noqa
+sys.modules["pyinotify"] = mock.Mock()  # noqa
 
 from opflexagent import gbp_agent
 from opflexagent import snat_iptables_manager
@@ -412,8 +412,10 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         trunk_details['subports'] = subports
         port.trunk_details = trunk_details
 
-        self.agent.bridge_manager.handle_subports(subports, events.CREATED)
-        self.agent.bridge_manager.handle_subports(subports, events.DELETED)
+        self.agent.bridge_manager.handle_subports(
+            None, None, subports, events.CREATED)
+        self.agent.bridge_manager.handle_subports(
+            None, None, subports, events.DELETED)
         self.assertFalse(self.agent.bridge_manager.add_patch_ports.called)
         self.assertFalse(self.agent.bridge_manager.delete_patch_ports.called)
 

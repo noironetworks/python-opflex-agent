@@ -10,9 +10,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from os_vif.i18n import _
-
 from os_vif import exception as osv_exception
+
+from opflexagent._i18n import _
 
 
 class AgentError(osv_exception.ExceptionBase):

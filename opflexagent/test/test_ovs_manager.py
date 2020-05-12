@@ -14,8 +14,8 @@ import contextlib
 import sys
 
 import mock
-sys.modules["apicapi"] = mock.Mock()
-sys.modules["pyinotify"] = mock.Mock()
+sys.modules["apicapi"] = mock.Mock()  # noqa
+sys.modules["pyinotify"] = mock.Mock()  # noqa
 
 from opflexagent.utils.bridge_managers import ovs_manager
 
