@@ -50,11 +50,9 @@ class AgentNotifierApi(object):
             topic, TOPIC_OPFLEX, VRF, topics.UPDATE)
 
     def port_update(self, context, port):
-        host = port.get('binding:host_id')
-        if host:
-            cctxt = self.client.prepare(
-                server=host, topic=self.topic_port_update, version='1.1')
-            cctxt.cast(context, 'port_update', port=port)
+        cctxt = self.client.prepare(fanout=True, topic=self.topic_port_update,
+                                    version='1.1')
+        cctxt.cast(context, 'port_update', port=port)
 
     def port_delete(self, context, port):
         cctxt = self.client.prepare(fanout=True, topic=self.topic_port_delete,
