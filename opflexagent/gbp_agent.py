@@ -88,7 +88,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             'binary': 'neutron-opflex-agent',
             'host': self.host,
             'topic': n_constants.L2_AGENT_TOPIC,
-            'configurations': {'opflex_networks': self.opflex_networks},
+            'configurations': {'opflex_networks': self.opflex_networks,
+                               'vlan_networks': self.vlan_networks},
             'start_flag': True}
 
         # Initialize OVS Manager
