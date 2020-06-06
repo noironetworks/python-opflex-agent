@@ -11,7 +11,7 @@
 #    under the License.
 
 from neutron.common import rpc as n_rpc
-from neutron.common import topics
+from neutron_lib.agent import topics
 from oslo_log import helpers as log
 from oslo_log import log as logging
 import oslo_messaging

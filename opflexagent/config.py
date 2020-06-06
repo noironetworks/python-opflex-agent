@@ -12,6 +12,8 @@
 
 from oslo_config import cfg
 
+from opflexagent._i18n import _
+
 
 gbp_opts = [
     cfg.StrOpt('epg_mapping_dir',

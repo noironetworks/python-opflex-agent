@@ -16,6 +16,7 @@ from neutron_lib.plugins.ml2 import api
 from oslo_config import cfg
 from oslo_log import log as logging
 
+from opflexagent._i18n import _
 from opflexagent import constants
 
 LOG = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ cfg.CONF.register_opts(flat_opts, "ml2_type_opflex")
 class OpflexTypeDriver(helpers.BaseTypeDriver):
 
     def __init__(self):
-        LOG.info(_("ML2 OpflexTypeDriver initialization complete"))
+        LOG.info("ML2 OpflexTypeDriver initialization complete")
         self.default_opflex_network = (cfg.CONF.ml2_type_opflex.
                                        default_opflex_network)
         super(OpflexTypeDriver, self).__init__()

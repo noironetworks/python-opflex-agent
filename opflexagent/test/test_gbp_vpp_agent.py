@@ -14,10 +14,10 @@ import shutil
 import sys
 
 import mock
-sys.modules["apicapi"] = mock.Mock()
-sys.modules["pyinotify"] = mock.Mock()
-sys.modules['opflexagent.vpplib'] = mock.MagicMock()
-sys.modules['opflexagent.vpplib.VPPApi'] = mock.MagicMock()
+sys.modules["apicapi"] = mock.Mock()  # noqa
+sys.modules["pyinotify"] = mock.Mock()  # noqa
+sys.modules['opflexagent.vpplib'] = mock.MagicMock()  # noqa
+sys.modules['opflexagent.vpplib.VPPApi'] = mock.MagicMock()  # noqa
 
 from neutron.api.rpc.callbacks import events
 from neutron.conf.agent import dhcp as dhcp_config
@@ -393,8 +393,10 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                 port_id=uuidutils.generate_uuid(), trunk_id=trunk_id,
                 segmentation_type='foo', segmentation_id=i)
             for i in range(2)]
-        self.agent.bridge_manager.handle_subports(subports, events.CREATED)
-        self.agent.bridge_manager.handle_subports(subports, events.DELETED)
+        self.agent.bridge_manager.handle_subports(
+            None, None, subports, events.CREATED)
+        self.agent.bridge_manager.handle_subports(
+            None, None, subports, events.DELETED)
         self.assertFalse(self.agent.bridge_manager.add_patch_ports.called)
         self.assertFalse(self.agent.bridge_manager.delete_patch_ports.called)
         self.agent.bridge_manager.managed_trunks[trunk_id] = 'master_port'
@@ -406,8 +408,10 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.bridge_manager.trunk_rpc.update_subport_bindings = (
             binding_call)
 
-        self.agent.bridge_manager.handle_subports(subports, events.CREATED)
-        self.agent.bridge_manager.handle_subports(subports, events.DELETED)
+        self.agent.bridge_manager.handle_subports(
+            None, None, subports, events.CREATED)
+        self.agent.bridge_manager.handle_subports(
+            None, None, subports, events.DELETED)
         self.agent.bridge_manager.add_patch_ports.assert_called_with(
             [subports[0].port_id, subports[1].port_id],
             attached_macs={subports[0].port_id: '0', subports[1].port_id: '1'})
