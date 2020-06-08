@@ -1151,7 +1151,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
 
         self.assertEqual(False,
             epargs[1][0][1].get('neutron-metadata-optimization'))
-        self.assertEqual(None, epargs[1][0][1].get('dhcp4'))
+        self.assertIsNone(epargs[1][0][1].get('dhcp4'))
 
     def test_vlan_net_no_svi_port_bound(self):
         self._test_vlan_net_port_bound()

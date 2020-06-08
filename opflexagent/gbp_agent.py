@@ -209,9 +209,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                     (physical_network in self.opflex_networks)):
                 # Endpoint Manager to process the EP info
                 LOG.debug("Processing the endpoint mapping "
-                          "for port %(port)s: \n mapping: %(mapping)s" % {
-                              'port': port.vif_id,
-                              'mapping': port.gbp_details})
+                          "for port %(port)s: \n mapping: %(mapping)s",
+                          {'port': port.vif_id,
+                           'mapping': port.gbp_details})
                 self.port_bound(port)
             else:
                 LOG.error("Cannot provision OPFLEX network for "
@@ -224,9 +224,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                     (physical_network in self.vlan_networks)):
                 # Endpoint Manager to process the EP info
                 LOG.debug("Processing the endpoint mapping "
-                          "for port %(port)s: \n mapping: %(mapping)s" % {
-                              'port': port.vif_id,
-                              'mapping': port.gbp_details})
+                          "for port %(port)s: \n mapping: %(mapping)s",
+                          {'port': port.vif_id,
+                           'mapping': port.gbp_details})
                 self.port_bound(port)
             else:
                 LOG.error("Cannot provision VLAN network for "
@@ -355,7 +355,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                         # No need to rerise, port could be bound somehow else
                         ctx.reraise = False
                         LOG.warn("Device %s not found while disabling mac "
-                                 "learning" % br_name)
+                                 "learning", br_name)
 
     def treat_devices_added_or_updated(self, details):
         """Process added or updated devices
@@ -380,8 +380,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 details.pop('port_id', None)
             if (gbp_details and gbp_details.get('host') and
                 gbp_details['host'] != self.host):
-                    self.port_unbound(device)
-                    return False
+                self.port_unbound(device)
+                return False
             elif neutron_details and 'port_id' in neutron_details:
                 LOG.info("Port %(device)s updated. Details: %(details)s",
                          {'device': device, 'details': details})

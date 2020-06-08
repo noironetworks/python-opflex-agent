@@ -11,8 +11,9 @@
 #    under the License.
 import os
 import signal
-import six
 import traceback
+
+import six
 
 # import logging
 # from log import RED, single_line_delim, double_line_delim
@@ -47,7 +48,8 @@ class Hook(object):
         @param api_name: name of the API
         @param api_args: tuple containing the API arguments
         """
-        self.LOG.debug("API: %s (%s)" % (api_name, api_args))
+        self.LOG.debug("API: %(name)s (%(args)s)",
+                       {'name': api_name, 'args': api_args})
 
     # noinspection PyTypeChecker
     def after_api(self, api_name, api_args):
@@ -58,7 +60,8 @@ class Hook(object):
         @param api_args: tuple containing the API arguments
         """
 
-        self.LOG.debug("API: %s (%s)" % (api_name, api_args))
+        self.LOG.debug("API: %(name)s (%(args)s)",
+                       {'name': api_name, 'args': api_args})
 
     def before_cli(self, cli):
         """
@@ -67,7 +70,7 @@ class Hook(object):
 
         @param cli: CLI string
         """
-        self.LOG.debug("CLI: %s" % cli)
+        self.LOG.debug("CLI: %s", cli)
 
     def after_cli(self, cli):
         """

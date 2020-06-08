@@ -10,11 +10,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from contextlib2 import ExitStack, contextmanager
+from contextlib2 import contextmanager
+from contextlib2 import ExitStack
 from neutron_lib.utils import runtime
+from oslo_log import log as logging
+
 from opflexagent.utils.bridge_managers import (
     bridge_manager_base as bridge_manager)
-from oslo_log import log as logging
 
 LOG = logging.getLogger(__name__)
 

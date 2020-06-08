@@ -60,12 +60,12 @@ class SnatConntrackLogger(object):
             self.p2 = subprocess.Popen(
                 logger_cmd, stdin=self.p1.stdout, close_fds=True, shell=True)
         except Exception as e:
-            LOG.error("In running commands: %s: %s" %
-                      (conntrack_cmd + logger_cmd, str(e)))
+            LOG.error("In running commands: %(cmds)s: %(exc)s",
+                      {'cmds': conntrack_cmd + logger_cmd, 'exc': str(e)})
 
     def _kill_child_procs(self):
         for proc in [self.p1, self.p2]:
-            LOG.debug("conn_track: proc: %s" % proc.returncode)
+            LOG.debug("conn_track: proc: %s", proc.returncode)
             try:
                 proc.terminate()
             except Exception:
@@ -73,7 +73,7 @@ class SnatConntrackLogger(object):
 
     def terminate(self, signum, frame):
         self._kill_child_procs()
-        LOG.debug("conn_track: returning %s" % -signum)
+        LOG.debug("conn_track: returning %s", -signum)
         sys.exit(-signum)
 
     def wait(self):
@@ -107,13 +107,13 @@ def main():
     cmd1 = ("ip netns exec %s conntrack -E -o timestamp") % (sys.argv[1])
     cmd2 = ("logger -p %s.%s -t opflex-conn-track") % (sys.argv[2],
                                                        sys.argv[3])
-    LOG.debug("conn_track command: %s" % cmd1)
-    LOG.debug("logger command: %s" % cmd2)
+    LOG.debug("conn_track command: %s", cmd1)
+    LOG.debug("logger command: %s", cmd2)
     wrapper = SnatConntrackLogger(cmd1, cmd2)
     return wrapper.wait()
 
 
 if __name__ == "__main__":
     ret = main()
-    LOG.debug("conn_track: returning %s" % ret)
+    LOG.debug("conn_track: returning %s", ret)
     sys.exit(ret)

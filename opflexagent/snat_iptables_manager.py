@@ -12,8 +12,8 @@
 
 
 import hashlib
-import netaddr
 
+import netaddr
 from neutron.agent.linux import ip_lib
 from neutron.agent.linux import iptables_manager
 from oslo_config import cfg

@@ -9,12 +9,14 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+
 from collections import deque
 import fnmatch
-from hook import Hook
 import logging
 import os
 import time
+
+from hook import Hook
 
 # Parse the VPP api json files once and store the object globally
 vpp_jsonfiles = []
@@ -134,7 +136,8 @@ class VppPapiProvider(object):
                     raise Exception(
                         "Unexpected event received: %s, expected: %s" %
                         (type(e).__name__, name))
-                self.LOG.debug("Returning event %s:%s" % (name, e))
+                self.LOG.debug("Returning event %(name)s:%(event)s",
+                               {'name': name, 'event': e})
                 return e
             time.sleep(0)  # yield
         raise Exception("Event did not occur within timeout")
@@ -143,7 +146,8 @@ class VppPapiProvider(object):
         """ Enqueue event in the internal event queue. """
         # FIXME use the name instead of relying on type(e).__name__ ?
         # FIXME #2 if this throws, it is eaten silently, Ole?
-        self.LOG.debug("New event: %s: %s" % (name, event))
+        self.LOG.debug("New event: %(name)s: %(event)s",
+                       {'name': name, 'event': event})
         self._events.append(event)
 
     def connect(self):
@@ -523,7 +527,8 @@ class VppPapiProvider(object):
                          'enable': enable})
 
     def bridge_flags(self, bd_id, is_set, feature_bitmap):
-        """Enable/disable required feature of the bridge domain with defined ID.
+        """
+        Enable/disable required feature of the bridge domain with defined ID.
 
         :param int bd_id: Bridge domain ID.
         :param int is_set: Set to 1 to enable, set to 0 to disable the feature.
