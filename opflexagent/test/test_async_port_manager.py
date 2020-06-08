@@ -186,12 +186,12 @@ class TestAsyncPortManager(base.BaseTestCase):
 
     def test_apply_config_fails(self):
         self.agent.treat_devices_added_or_updated = mock.Mock(
-            side_effect=Exception)
+            side_effect=ValueError)
         to_schedule = set(['1', '2', '3', '4'])
         self.manager.schedule_update(to_schedule)
         update = self._get_device_requests(['1', '2', '4'])
         self.manager._opflex_endpoint_update(mock.Mock(), update)
-        self.assertRaises(Exception, self.manager.apply_config)
+        self.assertRaises(ValueError, self.manager.apply_config)
         # responses are restored after the exception
         self.assertEqual(3, len(self.manager.response_by_device_id))
 

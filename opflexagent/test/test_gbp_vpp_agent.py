@@ -121,7 +121,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         agent.ep_manager.snat_iptables.check_if_exists = mock.Mock(
             return_value=False)
         agent.ep_manager.snat_iptables.setup_snat_for_es = mock.Mock(
-            return_value = tuple([None, None]))
+            return_value=tuple([None, None]))
         agent.ep_manager._release_int_fip = mock.Mock()
 
         agent.opflex_networks = ['phys_net']
@@ -308,7 +308,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             agent = self._initialize_agent()
             self._mock_agent(agent)
             agent.bridge_manager.get_vif_port_set = mock.Mock(
-                return_value = {'uuid1': 'someint'})
+                return_value={'uuid1': 'someint'})
             agent._main_loop(set(), True, 1, port_stats, mock.Mock(), True)
             agent.ep_manager.undeclare_endpoint.assert_called_once_with(
                 'uuid2')

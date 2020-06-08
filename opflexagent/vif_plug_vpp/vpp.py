@@ -54,14 +54,14 @@ class VppPlugin(plugin.PluginBase):
 
     def describe(self):
         pp_ovs = objects.host_info.HostPortProfileInfo(
-            profile_object_name=
-            objects.vif.VIFPortProfileOpenVSwitch.__name__,
+            profile_object_name=(
+                objects.vif.VIFPortProfileOpenVSwitch.__name__),
             min_version="1.0",
             max_version="1.0",
         )
         pp_ovs_representor = objects.host_info.HostPortProfileInfo(
-            profile_object_name=
-            objects.vif.VIFPortProfileOVSRepresentor.__name__,
+            profile_object_name=(
+                objects.vif.VIFPortProfileOVSRepresentor.__name__),
             min_version="1.0",
             max_version="1.0",
         )

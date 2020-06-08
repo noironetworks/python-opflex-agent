@@ -14,10 +14,8 @@
 #    under the License.
 
 import mock
-
-from oslo_config import cfg
-
 from neutron.tests import base
+from oslo_config import cfg
 
 from opflexagent import apic_topology
 
@@ -61,78 +59,78 @@ LLDPCTL_RES = (
 
 class TestCiscoApicTopologyAgent(base.BaseTestCase):
 
-        def setUp(self):
-            super(TestCiscoApicTopologyAgent, self).setUp()
-            # Configure the Cisco APIC mechanism driver
-            cfg.CONF.set_override('apic_host_uplink_ports',
-                                  APIC_UPLINK_PORTS, 'apic_host_agent')
-            # Patch device_exists
-            self.dev_exists = mock.patch(DEV_EXISTS).start()
-            # Patch IPDevice
-            ipdev_c = mock.patch(IP_DEVICE).start()
-            self.ipdev = mock.Mock()
-            ipdev_c.return_value = self.ipdev
-            self.ipdev.link.address = SERVICE_HOST_MAC
-            # Patch execute
-            self.execute = mock.patch(EXECUTE).start()
-            self.execute.return_value = LLDPCTL_RES
-            # Patch tasks
-            self.periodic_task = mock.patch(PERIODIC_TASK).start()
-            self.agent = apic_topology.ApicTopologyAgent()
-            self.agent.host = SERVICE_HOST
-            self.agent.service_agent = mock.Mock()
-            self.agent.lldpcmd = LLDP_CMD
+    def setUp(self):
+        super(TestCiscoApicTopologyAgent, self).setUp()
+        # Configure the Cisco APIC mechanism driver
+        cfg.CONF.set_override('apic_host_uplink_ports',
+                              APIC_UPLINK_PORTS, 'apic_host_agent')
+        # Patch device_exists
+        self.dev_exists = mock.patch(DEV_EXISTS).start()
+        # Patch IPDevice
+        ipdev_c = mock.patch(IP_DEVICE).start()
+        self.ipdev = mock.Mock()
+        ipdev_c.return_value = self.ipdev
+        self.ipdev.link.address = SERVICE_HOST_MAC
+        # Patch execute
+        self.execute = mock.patch(EXECUTE).start()
+        self.execute.return_value = LLDPCTL_RES
+        # Patch tasks
+        self.periodic_task = mock.patch(PERIODIC_TASK).start()
+        self.agent = apic_topology.ApicTopologyAgent()
+        self.agent.host = SERVICE_HOST
+        self.agent.service_agent = mock.Mock()
+        self.agent.lldpcmd = LLDP_CMD
 
-        def test_init_host_device_exists(self):
-            self.agent.lldpcmd = None
-            self.dev_exists.return_value = True
-            self.agent.init_host()
-            self.assertEqual(LLDP_CMD + APIC_UPLINK_PORTS,
-                             self.agent.lldpcmd)
+    def test_init_host_device_exists(self):
+        self.agent.lldpcmd = None
+        self.dev_exists.return_value = True
+        self.agent.init_host()
+        self.assertEqual(LLDP_CMD + APIC_UPLINK_PORTS,
+                         self.agent.lldpcmd)
 
-        def test_init_host_device_not_exist(self):
-            self.agent.lldpcmd = None
-            self.dev_exists.return_value = False
-            self.agent.init_host()
-            self.assertEqual(LLDP_CMD, self.agent.lldpcmd)
+    def test_init_host_device_not_exist(self):
+        self.agent.lldpcmd = None
+        self.dev_exists.return_value = False
+        self.agent.init_host()
+        self.assertEqual(LLDP_CMD, self.agent.lldpcmd)
 
-        def test_get_peers(self):
-            self.agent.peers = {}
-            peers = self.agent._get_peers()
-            expected = [(SERVICE_HOST, SERVICE_HOST_IFACE,
-                         SERVICE_HOST_MAC, APIC_EXT_SWITCH,
-                         APIC_EXT_MODULE, APIC_EXT_PORT,
-                         '2', SERVICE_PEER_PORT_DESC)]
+    def test_get_peers(self):
+        self.agent.peers = {}
+        peers = self.agent._get_peers()
+        expected = [(SERVICE_HOST, SERVICE_HOST_IFACE,
+                     SERVICE_HOST_MAC, APIC_EXT_SWITCH,
+                     APIC_EXT_MODULE, APIC_EXT_PORT,
+                     '2', SERVICE_PEER_PORT_DESC)]
+        self.assertEqual(expected,
+                         peers[SERVICE_HOST_IFACE])
+
+    def test_check_for_new_peers_no_peers(self):
+        self.agent.peers = {}
+        expected = (SERVICE_HOST, SERVICE_HOST_IFACE,
+                    SERVICE_HOST_MAC, APIC_EXT_SWITCH,
+                    APIC_EXT_MODULE, APIC_EXT_PORT, '2',
+                    SERVICE_PEER_PORT_DESC)
+        peers = {SERVICE_HOST_IFACE: [expected]}
+        context = mock.Mock()
+        with mock.patch.object(self.agent, '_get_peers',
+                               return_value=peers):
+            self.agent._check_for_new_peers(context)
             self.assertEqual(expected,
-                             peers[SERVICE_HOST_IFACE])
-
-        def test_check_for_new_peers_no_peers(self):
-            self.agent.peers = {}
-            expected = (SERVICE_HOST, SERVICE_HOST_IFACE,
-                        SERVICE_HOST_MAC, APIC_EXT_SWITCH,
-                        APIC_EXT_MODULE, APIC_EXT_PORT, '2',
-                        SERVICE_PEER_PORT_DESC)
-            peers = {SERVICE_HOST_IFACE: [expected]}
-            context = mock.Mock()
-            with mock.patch.object(self.agent, '_get_peers',
-                                   return_value=peers):
-                self.agent._check_for_new_peers(context)
-                self.assertEqual(expected,
-                                 self.agent.peers[SERVICE_HOST_IFACE])
-                self.agent.service_agent.update_link.assert_called_once_with(
+                             self.agent.peers[SERVICE_HOST_IFACE])
+            self.agent.service_agent.update_link.assert_called_once_with(
                     context, *expected)
 
-        def test_check_for_new_peers_with_peers(self):
-            expected = (SERVICE_HOST, SERVICE_HOST_IFACE,
-                        SERVICE_HOST_MAC, APIC_EXT_SWITCH,
-                        APIC_EXT_MODULE, APIC_EXT_PORT, '2',
-                        SERVICE_PEER_PORT_DESC)
-            peers = {SERVICE_HOST_IFACE: [expected]}
-            self.agent.peers = {SERVICE_HOST_IFACE:
-                                [tuple(x + '1' for x in expected)]}
-            context = mock.Mock()
-            with mock.patch.object(self.agent, '_get_peers',
-                                   return_value=peers):
-                self.agent._check_for_new_peers(context)
-                self.agent.service_agent.update_link.assert_called_with(
-                    context, *expected)
+    def test_check_for_new_peers_with_peers(self):
+        expected = (SERVICE_HOST, SERVICE_HOST_IFACE,
+                    SERVICE_HOST_MAC, APIC_EXT_SWITCH,
+                    APIC_EXT_MODULE, APIC_EXT_PORT, '2',
+                    SERVICE_PEER_PORT_DESC)
+        peers = {SERVICE_HOST_IFACE: [expected]}
+        self.agent.peers = {SERVICE_HOST_IFACE:
+                            [tuple(x + '1' for x in expected)]}
+        context = mock.Mock()
+        with mock.patch.object(self.agent, '_get_peers',
+                               return_value=peers):
+            self.agent._check_for_new_peers(context)
+            self.agent.service_agent.update_link.assert_called_with(
+                context, *expected)
