@@ -10,8 +10,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from neutron.common import exceptions as exc
 from neutron.plugins.ml2.drivers import helpers
+from neutron_lib import exceptions as exc
 from neutron_lib.plugins.ml2 import api
 from oslo_config import cfg
 from oslo_log import log as logging
