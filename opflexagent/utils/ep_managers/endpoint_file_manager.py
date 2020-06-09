@@ -12,9 +12,9 @@
 
 import copy
 import json
-import netaddr
 import os
 
+import netaddr
 from neutron_lib import constants as n_constants
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
@@ -110,7 +110,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
     def declare_endpoint(self, port, mapping):
         LOG.info("Endpoint declaration requested for port %s",
                  port.vif_id)
-        LOG.debug("Mapping file for port %(port)s, %(mapping)s" %
+        LOG.debug("Mapping file for port %(port)s, %(mapping)s",
                   {'port': port.vif_id, 'mapping': mapping})
 
         if not mapping:
@@ -372,8 +372,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         else:
             if (mapping.get('enable_dhcp_optimization', False) and
                'subnets' in mapping):
-                    self._map_dhcp_info(fixed_ips, mapping,
-                                        mapping_dict)
+                self._map_dhcp_info(fixed_ips, mapping, mapping_dict)
         ips_aap = []
 
         def filter_cidr_aaps(aaps):
@@ -487,7 +486,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             nested_domain_dict["interface-name"] = mapping_dict[
                     "interface-name"]
             nested_domain_dict["uuid"] = uuidutils.generate_uuid()
-            LOG.debug("lbiface file for port %(port)s: \n %(mapping)s" %
+            LOG.debug("lbiface file for port %(port)s: \n %(mapping)s",
                       {'port': port.vif_id, 'mapping': nested_domain_dict})
             lbiface_file_name = port.vif_id + '_' + mac
             self._write_lbiface_file(lbiface_file_name, nested_domain_dict)
@@ -503,7 +502,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 nested_domain_dict = nested_domain_dict.copy()
                 nested_domain_dict["interface-name"] = self.uplink_intf_name
                 nested_domain_dict["uuid"] = uuidutils.generate_uuid()
-                LOG.debug("Uplink lbiface file for %(intf)s: \n %(mapping)s" %
+                LOG.debug("Uplink lbiface file for %(intf)s: \n %(mapping)s",
                           {'intf': self.uplink_intf_name,
                            'mapping': nested_domain_dict})
                 self._write_lbiface_file(
@@ -515,7 +514,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 mapping_dict.pop('security-group', None)
 
         # Create one file per MAC address.
-        LOG.debug("Final endpoint file for port %(port)s: \n %(mapping)s" %
+        LOG.debug("Final endpoint file for port %(port)s: \n %(mapping)s",
                   {'port': port.vif_id, 'mapping': mapping_dict})
         file_name = port.vif_id + '_' + mac
         if master_port_id:
@@ -658,7 +657,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 elif key == 'ip6_gateway':
                     nh.ip6_gateway = parse_gateway(value)
             self.ext_seg_next_hop[es_name] = nh
-            LOG.debug("Found external segment: %s" % nh)
+            LOG.debug("Found external segment: %s", nh)
 
     def _fill_ip_mapping_info(self, port_id, port_mac, gbp_details, ips,
                               mapping):

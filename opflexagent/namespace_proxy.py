@@ -74,14 +74,14 @@ class NetworkMetadataProxyHandler(object):
             with open(fqfn, "r") as f:
                 nets = jsonutils.load(f)
         except Exception as e:
-            LOG.warning("Exception in reading file: %s" % str(e))
+            LOG.warning("Exception in reading file: %s", str(e))
 
         if nets:
             if domain_id in nets:
                 if remote_address in nets[domain_id]:
                     return nets[domain_id][remote_address]
-        LOG.warning("IP address not found: domain=%s, addr=%s" % (
-                    domain_id, remote_address))
+        LOG.warning("IP address not found: domain=%(domain)s, addr=%(addr)s",
+                    {'domain': domain_id, 'addr': remote_address})
         return None
 
     def _proxy_request(self, remote_address, method, path_info,

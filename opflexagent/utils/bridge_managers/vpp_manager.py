@@ -10,16 +10,17 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import os
+
 from neutron.agent.linux import ip_lib
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from neutron_lib import constants as lib_constants
+from oslo_log import log as logging
+
 from opflexagent import constants as ofcst
 from opflexagent.utils.bridge_managers import bridge_manager_base
 from opflexagent.utils.bridge_managers import trunk_skeleton
 from opflexagent.vpplib.VPPApi import VPPApi
-import os
-from oslo_log import log as logging
-
 
 LOG = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
         agent_state['agent_type'] = ofcst.AGENT_TYPE_OPFLEX_VPP
         if 'configurations' not in agent_state:
             agent_state['configurations'] = {}
-        #only supported datapath type with VPP is netdev
+        # only supported datapath type with VPP is netdev
         agent_state['configurations']['datapath_type'] = 'netdev'
         agent_state['configurations']['vhostuser_socket_dir'] = (
             vpp_config.vhostuser_socket_dir)
@@ -162,9 +163,9 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
         dst_shell("vppctl create host-interface name %s" % port)
         dst_shell("vppctl set interface state %s up" % port)
 
-    #The following methods are called with host-interfaces for SNAT
-    #This feature is currently not implemented by VPP
-    #Hence stubbing it out
+    # The following methods are called with host-interfaces for SNAT
+    # This feature is currently not implemented by VPP
+    # Hence stubbing it out
     def delete_port(self, port):
         pass
 

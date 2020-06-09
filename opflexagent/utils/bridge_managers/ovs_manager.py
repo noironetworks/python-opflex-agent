@@ -81,7 +81,7 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
         self.int_br.set_secure_mode()
         self.int_br.set_db_attribute('Bridge', self.int_br.br_name,
                                      'protocols', '[]', check_error=True)
-        #self.int_br.reset_ofversion()
+        # self.int_br.reset_ofversion()
 
         self.fabric_br.create()
         self.fabric_br.set_secure_mode()

@@ -315,8 +315,8 @@ class VPPApi(object):
 
         # Check for a socket error
         if 'sock_errno' in vint[0]:
-                if vint[0]['sock_errno'] != 0:
-                    return 2, ''
+            if vint[0]['sock_errno'] != 0:
+                return 2, ''
         else:
             return 3, ''
 

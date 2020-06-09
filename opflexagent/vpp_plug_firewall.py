@@ -11,11 +11,11 @@
 #    under the License.
 
 import functools
-from os_vif import objects
-from oslo_log import log as logging
 
 from nova.network import model
 import nova.network.os_vif_util as os_vif_util
+from os_vif import objects
+from oslo_log import log as logging
 
 LOG = logging.getLogger(__name__)
 

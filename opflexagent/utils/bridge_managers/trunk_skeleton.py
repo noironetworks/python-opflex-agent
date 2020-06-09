@@ -44,7 +44,8 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
 
     def handle_subports(self, context, resource_type, subports, event_type,
                         trunk_id=None):
-        LOG.info("Handling subports %s event %s" % (subports, event_type))
+        LOG.info("Handling subports %(subports)s event %(event)s",
+                 {'subports': subports, 'event': event_type})
         if subports:
             trunk_id = trunk_id or subports[0].trunk_id
             if trunk_id in self.managed_trunks:
@@ -87,7 +88,7 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
                         self.context, trunk_id, constants.DEGRADED_STATUS)
 
     def manage_trunk(self, port):
-        LOG.debug("Managing trunk for port: %s" % port)
+        LOG.debug("Managing trunk for port: %s", port)
         if getattr(port, 'trunk_details', None):
             trunk_id = port.trunk_details['trunk_id']
             master_id = port.trunk_details['master_port_id']

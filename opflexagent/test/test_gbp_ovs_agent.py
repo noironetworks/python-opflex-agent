@@ -125,7 +125,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         agent.ep_manager._delete_vrf_file = mock.Mock()
         agent.ep_manager.snat_iptables = mock.Mock()
         agent.ep_manager.snat_iptables.setup_snat_for_es = mock.Mock(
-            return_value = tuple([None, None]))
+            return_value=tuple([None, None]))
         agent.ep_manager._release_int_fip = mock.Mock()
 
         agent.opflex_networks = ['phys_net']
@@ -483,11 +483,11 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                 self.assertEqual(vlan_info['endpoint_group_name'],
                     epargs[0][0][1].get('endpoint_group_name'))
             else:
-                self.assertEqual(None, epargs[0][0][1].get('svi'))
+                self.assertIsNone(epargs[0][0][1].get('svi'))
                 self.assertEqual(mapping['endpoint_group_name'],
                     epargs[0][0][1].get('endpoint_group_name'))
         else:
-            self.assertEqual(None, epargs[0][0][1].get('svi'))
+            self.assertIsNone(epargs[0][0][1].get('svi'))
             self.assertEqual(mapping['endpoint_group_name'],
                 epargs[0][0][1].get('endpoint_group_name'))
             self.assertEqual('', epargs[0][0][0].segmentation_id)
