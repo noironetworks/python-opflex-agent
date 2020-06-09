@@ -10,8 +10,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from neutron.common import exceptions as exc
 from neutron.plugins.ml2.drivers import helpers
+from neutron_lib import exceptions as exc
 from neutron_lib.plugins.ml2 import api
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -44,6 +44,15 @@ class OpflexTypeDriver(helpers.BaseTypeDriver):
     def initialize(self):
         pass
 
+    def initialize_network_segment_range_support(self):
+        pass
+
+    def update_network_segment_range_allocations(self):
+        pass
+
+    def get_network_segment_ranges(self):
+        pass
+
     def is_partial_segment(self, segment):
         return False
 
@@ -60,12 +69,12 @@ class OpflexTypeDriver(helpers.BaseTypeDriver):
                 msg = _("%s prohibited for opflex provider network") % key
                 raise exc.InvalidInput(error_message=msg)
 
-    def reserve_provider_segment(self, session, segment):
+    def reserve_provider_segment(self, session, segment, filters=None):
         # No resources to reserve
         segment[api.MTU] = self.get_mtu(segment[api.PHYSICAL_NETWORK])
         return segment
 
-    def allocate_tenant_segment(self, session):
+    def allocate_tenant_segment(self, session, filters=None):
         return {api.NETWORK_TYPE: constants.TYPE_OPFLEX,
                 api.PHYSICAL_NETWORK: self.default_opflex_network,
                 api.MTU: self.get_mtu(self.default_opflex_network)}

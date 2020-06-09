@@ -10,8 +10,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from neutron.common import rpc as n_rpc
 from neutron_lib.agent import topics
+from neutron_lib import rpc as n_rpc
 from oslo_log import helpers as log
 from oslo_log import log as logging
 import oslo_messaging

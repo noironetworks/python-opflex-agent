@@ -15,7 +15,7 @@
 
 import oslo_messaging
 
-from neutron.common import rpc
+from neutron_lib import rpc
 
 TOPIC_APIC_SERVICE = 'apic-service'
 VERSION = '1.2'
