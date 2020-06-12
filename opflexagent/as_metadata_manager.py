@@ -13,28 +13,30 @@
 import functools
 import hashlib
 import multiprocessing
-import netaddr
 import os
 import os.path
-import pyinotify
 import signal
-from six.moves import queue as Queue
 import subprocess
 import sys
 import time
 import uuid
+
+import netaddr
+import pyinotify
+from six.moves import queue as Queue
 
 from neutron.common import config as common_config
 from neutron.common import utils
 from neutron.conf.agent import common as config
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import (  # noqa
     config as ovs_config)
-from opflexagent.utils import utils as opflexagent_utils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
 
+from opflexagent._i18n import _
 from opflexagent import config as oscfg  # noqa
+from opflexagent.utils import utils as opflexagent_utils
 
 LOG = logging.getLogger(__name__)
 
@@ -89,7 +91,7 @@ def read_jsonfile(name):
         with open(name, "r") as f:
             retval = jsonutils.load(f)
     except Exception as e:
-        LOG.warn("Exception in reading file: %s" % str(e))
+        LOG.warn("Exception in reading file: %s", str(e))
     return retval
 
 
@@ -98,7 +100,7 @@ def write_jsonfile(name, data):
         with open(name, "w") as f:
             jsonutils.dump(data, f)
     except Exception as e:
-        LOG.warn("Exception in writing file: %s" % str(e))
+        LOG.warn("Exception in writing file: %s", str(e))
 
 
 class AddressPool(object):
@@ -127,13 +129,13 @@ class FileProcessor(object):
         self.processfn = processfn
 
     def scanfiles(self, files):
-        LOG.debug("FileProcessor: processing files: %s" % files)
+        LOG.debug("FileProcessor: processing files: %s", files)
         relevant_files = []
         for (action, filename) in files:
             if all(not filename.endswith(ext) for ext in self.extensions):
                 continue
             relevant_files.append((action, filename))
-        LOG.debug("FileProcessor: relevant files %s" % relevant_files)
+        LOG.debug("FileProcessor: relevant files %s", relevant_files)
         return self.processfn(relevant_files)
 
     def scan(self):
@@ -153,7 +155,7 @@ class FileProcessor(object):
                 event = self.eventq.get()
                 while event is not None:
                     # drain all events in queue and batch them
-                    LOG.debug("FileProcessor: event: %s" % event)
+                    LOG.debug("FileProcessor: event: %s", event)
                     if event == EOQ:
                         connected = False
                         event = None
@@ -175,7 +177,7 @@ class FileProcessor(object):
         except KeyboardInterrupt:
             pass
         except Exception as e:
-            LOG.warn("FileProcessor: Exception: %s" % str(e))
+            LOG.warn("FileProcessor: Exception: %s", str(e))
         return
 
 
@@ -214,18 +216,19 @@ class FileWatcher(object):
             functools.partial(self.process))
         fprun = functools.partial(fp.run)
         self.processor = multiprocessing.Process(target=fprun)
-        LOG.debug("FileWatcher: %s: starting" % self.name)
+        LOG.debug("FileWatcher: %s: starting", self.name)
         self.processor.start()
 
     def action(self, event):
         # event.maskname, event.filename
-        LOG.debug("FileWatcher: %s: event: %s" % (self.name, event))
+        LOG.debug("FileWatcher: %(name)s: event: %(event)s",
+                  {'name': self.name, 'event': event})
         self.eventq.put(event)
 
     def process(self, files):
         # Override in child class
-        LOG.debug("FileWatcher: %s: process: %s" % (
-            self.name, files))
+        LOG.debug("FileWatcher: %(name)s: process: %(files)s",
+                  {'name': self.name, 'files': files})
 
     def terminate(self, signum, frame):
         self.eventq.put(EOQ)
@@ -241,13 +244,13 @@ class FileWatcher(object):
         notifier = pyinotify.Notifier(wm, handler)
         wm.add_watch(self.watchdir, handler.events, rec=False)
         try:
-            LOG.debug("FileWatcher: %s: notifier waiting ..." % self.name)
+            LOG.debug("FileWatcher: %s: notifier waiting ...", self.name)
             notifier.loop()
         finally:
-            LOG.debug("FileWatcher: %s: notifier returned" % self.name)
+            LOG.debug("FileWatcher: %s: notifier returned", self.name)
             self.terminate(None, None)
 
-        LOG.debug("FileWatcher: %s: processor returned" % self.name)
+        LOG.debug("FileWatcher: %s: processor returned", self.name)
         self.processor.join()
         return True
 
@@ -261,7 +264,7 @@ class TmpWatcher(FileWatcher):
             filedir, extensions, name="ep-watcher")
 
     def process(self, files):
-        LOG.debug("TmpWatcher files: %s" % files)
+        LOG.debug("TmpWatcher files: %s", files)
 
 
 class EpWatcher(FileWatcher):
@@ -314,7 +317,7 @@ class EpWatcher(FileWatcher):
         return fquuid
 
     def process(self, files):
-        LOG.debug("EP files: %s" % files)
+        LOG.debug("EP files: %s", files)
 
         curr_svc = read_jsonfile(self.svcfile)
         ip_pool = AddressPool(SVC_IP_BASE, SVC_IP_SIZE)
@@ -405,7 +408,7 @@ class StateWatcher(FileWatcher):
         super(StateWatcher, self).terminate(signum, frame)
 
     def process(self, files):
-        LOG.debug("State Event: %s" % files)
+        LOG.debug("State Event: %s", files)
 
         curr_alloc = read_jsonfile(self.svcfile)
 
@@ -439,16 +442,15 @@ class StateWatcher(FileWatcher):
         for idx in ["uuid", "domain-name", "domain-policy-space"]:
             if asvc[idx] != alloc[idx]:
                 return False
-        if asvc["service-mapping"][0]["next-hop-ip"] != \
-           alloc["next-hop-ip"]:
-                return False
+        if asvc["service-mapping"][0]["next-hop-ip"] != alloc["next-hop-ip"]:
+            return False
         return True
 
     def as_del(self, filename, asvc):
         try:
             self.mgr.del_ip(asvc["service-mapping"]["next-hop-ip"])
         except Exception as e:
-            LOG.warn("EPwatcher: Exception in deleting IP: %s" %
+            LOG.warn("EPwatcher: Exception in deleting IP: %s",
                      str(e))
 
         proxyfilename = PROXY_FILE_NAME_FORMAT % asvc["uuid"]
@@ -457,7 +459,7 @@ class StateWatcher(FileWatcher):
             os.remove(filename)
             os.remove(proxyfilename)
         except Exception as e:
-            LOG.warn("EPwatcher: Exception in deleting file: %s" % str(e))
+            LOG.warn("EPwatcher: Exception in deleting file: %s", str(e))
 
     def as_create(self, alloc):
         asvc = {
@@ -478,7 +480,7 @@ class StateWatcher(FileWatcher):
         try:
             self.mgr.add_ip(alloc["next-hop-ip"])
         except Exception as e:
-            LOG.warn("EPwatcher: Exception in adding IP: %s" %
+            LOG.warn("EPwatcher: Exception in adding IP: %s",
                      str(e))
 
         asfilename = AS_FILE_NAME_FORMAT % asvc["uuid"]
@@ -487,7 +489,7 @@ class StateWatcher(FileWatcher):
             with open(asfilename, "w") as f:
                 jsonutils.dump(asvc, f)
         except Exception as e:
-            LOG.warn("EPwatcher: Exception in writing services file: %s" %
+            LOG.warn("EPwatcher: Exception in writing services file: %s",
                      str(e))
 
         proxyfilename = PROXY_FILE_NAME_FORMAT % asvc["uuid"]
@@ -499,7 +501,7 @@ class StateWatcher(FileWatcher):
             pidfile = PID_FILE_NAME_FORMAT % asvc["uuid"]
             self.mgr.sh("rm -f %s" % pidfile)
         except Exception as e:
-            LOG.warn("EPwatcher: Exception in writing proxy file: %s" %
+            LOG.warn("EPwatcher: Exception in writing proxy file: %s",
                      str(e))
 
     def proxyconfig(self, alloc):
@@ -544,7 +546,7 @@ class SnatConnTrackHandler(object):
             self.mgr.sh("rm -f %s" % pidfile)
             self.mgr.update_supervisor()
         except Exception as e:
-            LOG.warn("ConnTrack: Exception in writing snat file: %s" %
+            LOG.warn("ConnTrack: Exception in writing snat file: %s",
                      str(e))
 
     def conn_track_del(self, netns):
@@ -554,7 +556,7 @@ class SnatConnTrackHandler(object):
             os.remove(snatfilename)
             self.mgr.update_supervisor()
         except Exception as e:
-            LOG.warn("ConnTrack: Exception in deleting file: %s" % str(e))
+            LOG.warn("ConnTrack: Exception in deleting file: %s", str(e))
 
     def conn_track_config(self, netns):
         snatstr = "\n".join([
@@ -596,8 +598,9 @@ class AsMetadataManager(object):
                 self.init_all()
                 self.initialized = True
             except Exception as e:
-                LOG.error("%s: in initializing anycast metadata service: %s" %
-                          (self.name, str(e)))
+                LOG.error("%(name)s: in initializing anycast metadata "
+                          "service: %(exc)s",
+                          {'name': self.name, 'exc': str(e)})
 
     def ensure_terminated(self):
         if self.initialized:
@@ -606,27 +609,29 @@ class AsMetadataManager(object):
                 self.clean_files()
                 self.stop_supervisor()
             except Exception as e:
-                LOG.error("%s: in shuttingdown anycast metadata service: %s" %
-                          (self.name, str(e)))
+                LOG.error("%(name)s: in shuttingdown anycast metadata "
+                          "service: %(exc)s",
+                          {'name': self.name, 'exc': str(e)})
 
     def sh(self, cmd, as_root=True):
         if as_root and self.root_helper:
             cmd = "%s %s" % (self.root_helper, cmd)
-        LOG.debug("%s: Running command: %s" % (
-            self.name, cmd))
+        LOG.debug("%(name)s: Running command: %(cmd)s",
+                  {'name': self.name, 'cmd': cmd})
         ret = ''
         try:
             ret = subprocess.check_output(
                 cmd, stderr=subprocess.STDOUT, shell=True)
         except Exception as e:
-            LOG.error("In running command: %s: %s" % (cmd, str(e)))
-        LOG.debug("%s: Command output: %s" % (
-            self.name, ret))
+            LOG.error("In running command: %(cmd)s: %(exc)s",
+                      {'cmd': cmd, 'exc': str(e)})
+        LOG.debug("%(name)s: Command output: %(ret)s",
+                  {'name': self.name, 'ret': ret})
         return ret
 
     def write_file(self, name, data):
-        LOG.debug("%s: Writing file: name=%s, data=%s" % (
-            self.name, name, data))
+        LOG.debug("%(name)s: Writing file: name=%(file)s, data=%(data)s",
+                  {'name': self.name, 'file': name, 'data': data})
         with open(name, "w") as f:
             f.write(data)
 

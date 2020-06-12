@@ -30,7 +30,7 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
         super(OpflexTrunkMixin, self).__init__()
         self.managed_trunks = {}
         registry.unsubscribe(self.handle_trunks, resources.TRUNK)
-        registry.subscribe(self.handle_subports, resources.SUBPORT)
+        registry.register(self.handle_subports, resources.SUBPORT)
         self._context = n_context.get_admin_context_without_session()
         self.trunk_rpc = agent.TrunkStub()
 
@@ -39,11 +39,13 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
         self._context.request_id = o_context.generate_request_id()
         return self._context
 
-    def handle_trunks(self, trunks, event_type):
+    def handle_trunks(self, context, resource_type, trunks, event_type):
         pass
 
-    def handle_subports(self, subports, event_type, trunk_id=None):
-        LOG.info("Handling subports %s event %s" % (subports, event_type))
+    def handle_subports(self, context, resource_type, subports, event_type,
+                        trunk_id=None):
+        LOG.info("Handling subports %(subports)s event %(event)s",
+                 {'subports': subports, 'event': event_type})
         if subports:
             trunk_id = trunk_id or subports[0].trunk_id
             if trunk_id in self.managed_trunks:
@@ -86,7 +88,7 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
                         self.context, trunk_id, constants.DEGRADED_STATUS)
 
     def manage_trunk(self, port):
-        LOG.debug("Managing trunk for port: %s" % port)
+        LOG.debug("Managing trunk for port: %s", port)
         if getattr(port, 'trunk_details', None):
             trunk_id = port.trunk_details['trunk_id']
             master_id = port.trunk_details['master_port_id']
@@ -107,8 +109,9 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
                         segmentation_type=x['segmentation_type'],
                         segmentation_id=x['segmentation_id'])
                     for x in port.trunk_details['subports']]
-                self.handle_subports(subports, events.CREATED,
-                                     trunk_id=trunk_id)
+                self.handle_subports(
+                    self.context, None, subports, events.CREATED,
+                    trunk_id=trunk_id)
             self.trunk_rpc.update_trunk_status(self.context, trunk_id,
                                                constants.ACTIVE_STATUS)
 

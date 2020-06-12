@@ -12,9 +12,9 @@
 
 import copy
 import json
-import netaddr
 import os
 
+import netaddr
 from neutron_lib import constants as n_constants
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
@@ -110,7 +110,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
     def declare_endpoint(self, port, mapping):
         LOG.info("Endpoint declaration requested for port %s",
                  port.vif_id)
-        LOG.debug("Mapping file for port %(port)s, %(mapping)s" %
+        LOG.debug("Mapping file for port %(port)s, %(mapping)s",
                   {'port': port.vif_id, 'mapping': mapping})
 
         if not mapping:
@@ -211,8 +211,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             self._registered_endpoints.add(port.vif_id)
             self.vif_int_dict.update({port.vif_id: port.port_name})
         except Exception as e:
-            LOG.exception(_("Error while parsing ep file for "
-                            "port %(port)s: %(ex)s"), {'port': port, 'ex': e})
+            LOG.exception("Error while parsing ep file for "
+                          "port %(port)s: %(ex)s", {'port': port, 'ex': e})
 
     def undeclare_endpoint(self, port_id):
         LOG.info("Endpoint undeclare requested for port %s", port_id)
@@ -270,8 +270,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                                 # KeyError should only happen for UT
                                 # EP File would be deleted if parsing fails
                                 # for a VPP endpoint at restart
-                                LOG.exception(_("Error while parsing ep "
-                                    "file %(file)s: %(ex)s"),
+                                LOG.exception("Error while parsing ep "
+                                    "file %(file)s: %(ex)s",
                                     {'file': f, 'ex': e})
 
                     else:
@@ -372,8 +372,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         else:
             if (mapping.get('enable_dhcp_optimization', False) and
                'subnets' in mapping):
-                    self._map_dhcp_info(fixed_ips, mapping,
-                                        mapping_dict)
+                self._map_dhcp_info(fixed_ips, mapping, mapping_dict)
         ips_aap = []
 
         def filter_cidr_aaps(aaps):
@@ -487,7 +486,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             nested_domain_dict["interface-name"] = mapping_dict[
                     "interface-name"]
             nested_domain_dict["uuid"] = uuidutils.generate_uuid()
-            LOG.debug("lbiface file for port %(port)s: \n %(mapping)s" %
+            LOG.debug("lbiface file for port %(port)s: \n %(mapping)s",
                       {'port': port.vif_id, 'mapping': nested_domain_dict})
             lbiface_file_name = port.vif_id + '_' + mac
             self._write_lbiface_file(lbiface_file_name, nested_domain_dict)
@@ -503,7 +502,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 nested_domain_dict = nested_domain_dict.copy()
                 nested_domain_dict["interface-name"] = self.uplink_intf_name
                 nested_domain_dict["uuid"] = uuidutils.generate_uuid()
-                LOG.debug("Uplink lbiface file for %(intf)s: \n %(mapping)s" %
+                LOG.debug("Uplink lbiface file for %(intf)s: \n %(mapping)s",
                           {'intf': self.uplink_intf_name,
                            'mapping': nested_domain_dict})
                 self._write_lbiface_file(
@@ -515,7 +514,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 mapping_dict.pop('security-group', None)
 
         # Create one file per MAC address.
-        LOG.debug("Final endpoint file for port %(port)s: \n %(mapping)s" %
+        LOG.debug("Final endpoint file for port %(port)s: \n %(mapping)s",
                   {'port': port.vif_id, 'mapping': mapping_dict})
         file_name = port.vif_id + '_' + mac
         if master_port_id:
@@ -554,7 +553,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
     def _handle_host_snat_ip(self, host_snat_ips):
         for hsi in host_snat_ips:
-            LOG.debug(_("Auto-allocated host SNAT IP: %s"), hsi)
+            LOG.debug("Auto-allocated host SNAT IP: %s", hsi)
             es = hsi.get('external_segment_name')
             if not es:
                 continue
@@ -576,13 +575,13 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                     nh.ip6_gateway = gw
                     updated = True
             else:
-                LOG.info(_("Ignoring invalid auto-allocated SNAT IP %s"), ip)
+                LOG.info("Ignoring invalid auto-allocated SNAT IP %s", ip)
             if updated:
                 # Clear the interface so that SNAT iptables will be
                 # re-created as required; leave MAC as is so that it will
                 # be re-used
                 nh.next_hop_iface = None
-                LOG.info(_("Add/update SNAT info: %s"), nh)
+                LOG.info("Add/update SNAT info: %s", nh)
 
     def _map_dhcp_info(self, fixed_ips, mapping, mapping_dict):
         """ Add DHCP specific info to the EP file."""
@@ -658,7 +657,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 elif key == 'ip6_gateway':
                     nh.ip6_gateway = parse_gateway(value)
             self.ext_seg_next_hop[es_name] = nh
-            LOG.debug(_("Found external segment: %s") % nh)
+            LOG.debug("Found external segment: %s", nh)
 
     def _fill_ip_mapping_info(self, port_id, port_mac, gbp_details, ips,
                               mapping):
@@ -751,9 +750,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         self.int_fip_pool[ip_ver].remove(fip)
         self.int_fip_alloc[ip_ver].setdefault(
             (port_id, port_mac), {}).setdefault(es, {})[ip] = fip
-        LOG.debug(_("Allocated internal v%(version)d FIP %(fip)s to "
-                    "port %(port)s, %(mac)s, fixed IP %(ip)s "
-                    "in external segment %(es)s"),
+        LOG.debug("Allocated internal v%(version)d FIP %(fip)s to "
+                  "port %(port)s, %(mac)s, fixed IP %(ip)s "
+                  "in external segment %(es)s",
                   {'fip': fip, 'port': port_id, 'mac': port_mac,
                    'es': es, 'ip': ip, 'version': ip_ver})
         return fip
@@ -783,9 +782,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 fips.extend(x.values())
         for float_ip in fips:
             self.int_fip_pool[ip_ver].add(float_ip)
-        LOG.debug(_("Released internal v%(version)d FIP(s) %(fip)s "
-                    "for port %(port)s, mac %(mac)s, "
-                    "fixed IP %(ip)s, external segment %(es)s"),
+        LOG.debug("Released internal v%(version)d FIP(s) %(fip)s "
+                  "for port %(port)s, mac %(mac)s, "
+                  "fixed IP %(ip)s, external segment %(es)s",
                   {'fip': fips, 'port': port_id, 'mac': port_mac or '<all>',
                    'es': es or '<all>', 'ip': ip or '<all>',
                    'version': ip_ver})
@@ -819,8 +818,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 self.snat_iptables.cleanup_snat_for_es(es)
                 LOG.debug("Removed SNAT iptables for %s", es)
             except Exception as e:
-                LOG.warn(_("Failed to remove SNAT iptables for "
-                           "%(es)s: %(ex)s"),
+                LOG.warn("Failed to remove SNAT iptables for "
+                         "%(es)s: %(ex)s",
                          {'es': es, 'ex': e})
 
     def _get_next_hop_info_for_es(self, ipm, host_snat_ip_es):
@@ -840,13 +839,13 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                         nh.ip_start, nh.ip_end, nh.ip_gateway,
                         nh.ip6_start, nh.ip6_end, nh.ip6_gateway,
                         nh.next_hop_mac, mtu=self.nat_mtu_size))
-                LOG.info(_("Created SNAT iptables for %(es)s: "
-                           "iface %(if)s, mac %(mac)s"),
+                LOG.info("Created SNAT iptables for %(es)s: "
+                         "iface %(if)s, mac %(mac)s",
                          {'es': es_name, 'if': nh.next_hop_iface,
                           'mac': nh.next_hop_mac})
             except Exception as e:
-                LOG.exception(_("Error while creating SNAT iptables for "
-                                "%(es)s: %(ex)s"),
+                LOG.exception("Error while creating SNAT iptables for "
+                              "%(es)s: %(ex)s",
                               {'es': es_name, 'ex': e})
             self._create_host_endpoint_file(ipm, nh)
         return (nh.next_hop_iface, nh.next_hop_mac)

@@ -13,8 +13,8 @@
 import sys
 
 import mock
-sys.modules["apicapi"] = mock.Mock()
-sys.modules["pyinotify"] = mock.Mock()
+sys.modules["apicapi"] = mock.Mock()  # noqa
+sys.modules["pyinotify"] = mock.Mock()  # noqa
 
 from opflexagent import rpc
 from opflexagent.test import base

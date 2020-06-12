@@ -13,7 +13,7 @@
 import time
 
 from neutron.agent import rpc as agent_rpc
-from neutron.common import topics
+from neutron_lib.agent import topics
 from neutron_lib import context
 from oslo_log import log as logging
 from oslo_utils import excutils
@@ -80,9 +80,11 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
         return self
 
     def apply_config(self):
-        LOG.debug("Apply config, pending requests: %s. current responses: "
-                  "%s" % (self.pending_requests._pending_requests_by_device_id,
-                          self.response_by_device_id))
+        LOG.debug("Apply config, pending requests: %(reqs)s. current "
+                  "responses: %(resps)s",
+                  {'reqs':
+                   self.pending_requests._pending_requests_by_device_id,
+                   'resps': self.response_by_device_id})
         skipped = []
         response_by_device_id_copy = self.response_by_device_id
         self.response_by_device_id = {}
@@ -169,7 +171,7 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
                 self.response_by_device_id[detail['device']] = detail
             else:
                 LOG.warn("Endpoint update for port %s is malformed "
-                         "(request_id missing)" % detail.get('device'))
+                         "(request_id missing)", detail.get('device'))
             LOG.debug("Got response for port %(port_id)s in "
                       "%(secs)s seconds",
                       {'port_id': detail.get('device'),

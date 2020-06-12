@@ -12,8 +12,8 @@
 
 
 import hashlib
-import netaddr
 
+import netaddr
 from neutron.agent.linux import ip_lib
 from neutron.agent.linux import iptables_manager
 from oslo_config import cfg
@@ -133,20 +133,20 @@ class SnatIptablesManager(object):
         if_dev = self._add_port_and_netns(next_hop_if, ns,
                                           if_mac=next_hop_mac, mtu=mtu)
         next_hop_mac = if_dev.link.address
-        LOG.debug(_("Created namespace %(ns)s, and added port %(pt)s to it"),
+        LOG.debug("Created namespace %(ns)s, and added port %(pt)s to it",
                   {'ns': ns, 'pt': next_hop_if})
 
         if use_v4:
             self._setup_routes(if_dev, 4, ip_start, ip_end, ip_gw)
-            LOG.debug(_("Set IPv4 address and routes"))
+            LOG.debug("Set IPv4 address and routes")
 
         if use_v6:
             self._setup_routes(if_dev, 6, ip6_start, ip6_end, ip6_gw)
-            LOG.debug(_("Set IPv6 address and routes"))
+            LOG.debug("Set IPv6 address and routes")
 
         self._setup_iptables(ns, next_hop_if, ip_start, ip_end,
                              ip6_start, ip6_end)
-        LOG.debug(_("Installed iptables rules"))
+        LOG.debug("Installed iptables rules")
         return (next_hop_if, next_hop_mac)
 
     def cleanup_snat_for_es(self, es_name, next_hop_if=None):

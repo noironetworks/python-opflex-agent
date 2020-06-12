@@ -14,8 +14,8 @@ import contextlib
 import sys
 
 import mock
-sys.modules["apicapi"] = mock.Mock()
-sys.modules["pyinotify"] = mock.Mock()
+sys.modules["apicapi"] = mock.Mock()  # noqa
+sys.modules["pyinotify"] = mock.Mock()  # noqa
 
 from opflexagent.utils.bridge_managers import ovs_manager
 
@@ -89,7 +89,7 @@ class TestOVSManager(base.BaseTestCase):
         # Ports added
         new_curr = curr | set(['5', '6'])
         self.manager.int_br.get_vif_port_set = mock.Mock(
-            return_value= new_curr)
+            return_value=new_curr)
         res = self.manager.scan_ports(curr)
         self.assertEqual({'current': new_curr, 'added': set(['5', '6']),
                           'removed': set()}, res)
