@@ -1,3 +1,4 @@
 etc/gbp-opflex.filters etc/neutron/rootwrap.d
 etc/cisco-apic.filters etc/neutron/rootwrap.d
 debian/neutron-cisco-apic-host-agent.conf /etc/init/
+etc/neutron/opflex-agent/apic_topology_service.ini /etc/neutron/opflex-agent
