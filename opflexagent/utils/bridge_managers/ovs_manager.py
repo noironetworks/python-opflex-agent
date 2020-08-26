@@ -81,12 +81,13 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
         self.int_br.set_secure_mode()
         self.int_br.set_db_attribute('Bridge', self.int_br.br_name,
                                      'protocols', '[]', check_error=True)
-        # self.int_br.reset_ofversion()
+        self.int_br.add_protocols(constants.OPENFLOW13)
 
         self.fabric_br.create()
         self.fabric_br.set_secure_mode()
         self.fabric_br.set_db_attribute('Bridge', self.fabric_br.br_name,
                                         'protocols', '[]', check_error=True)
+        self.fabric_br.add_protocols(constants.OPENFLOW13)
 
         # Add a canary flow to int_br to track OVS restarts
         self.int_br.add_flow(table=constants.CANARY_TABLE, priority=0,

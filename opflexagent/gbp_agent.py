@@ -649,7 +649,6 @@ def create_agent_config_map(conf):
 def main():
     cfg.CONF.register_opts(ip_lib.OPTS)
     dhcp_config.register_agent_dhcp_opts(cfg.CONF)
-    cfg.CONF.set_override("ovsdb_interface", "vsctl", group="OVS")
     config.register_root_helper(cfg.CONF)
     common_config.init(sys.argv[1:])
     common_config.setup_logging()

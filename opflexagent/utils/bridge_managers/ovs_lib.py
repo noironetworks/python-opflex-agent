@@ -13,7 +13,6 @@
 import contextlib
 
 from neutron.agent.common import ovs_lib
-from neutron.agent.ovsdb import impl_vsctl
 
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import config
 from opflexagent import config  # noqa
@@ -24,11 +23,6 @@ class OVSBridge(ovs_lib.OVSBridge):
     def __init__(self, *args, **kwargs):
         self._transaction = None
         super(OVSBridge, self).__init__(*args, **kwargs)
-
-    def reset_ofversion(self):
-        context = self.ovsdb.context
-        return impl_vsctl.BaseCommand(context, 'set',
-                                      args=[self.br_name, 'protocols=[]'])
 
     @contextlib.contextmanager
     def ovsdb_transaction(self):

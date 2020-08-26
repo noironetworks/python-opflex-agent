@@ -41,7 +41,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
     def setUp(self):
         cfg.CONF.register_opts(dhcp_config.DHCP_OPTS)
         super(TestGBPOpflexAgent, self).setUp()
-        cfg.CONF.set_override("ovsdb_interface", "vsctl", group="OVS")
+        mock.patch('neutron.agent.ovsdb.impl_idl.api_factory').start()
         notifier_p = mock.patch(NOTIFIER)
         notifier_cls = notifier_p.start()
         self.notifier = mock.Mock()
