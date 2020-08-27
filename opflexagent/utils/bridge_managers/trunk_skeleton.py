@@ -15,9 +15,9 @@ from neutron.api.rpc.callbacks import events
 from neutron.api.rpc.callbacks import resources
 
 from neutron.objects import trunk as trunk_objects
-from neutron.services.trunk import constants
 from neutron.services.trunk.rpc import agent
 from neutron_lib import context as n_context
+from neutron_lib.services.trunk import constants
 from oslo_context import context as o_context
 from oslo_log import log as logging
 
@@ -77,7 +77,7 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
                             except KeyError:
                                 continue
                     self.trunk_rpc.update_trunk_status(
-                        self.context, trunk_id, constants.ACTIVE_STATUS)
+                        self.context, trunk_id, constants.TRUNK_ACTIVE_STATUS)
                 except Exception as e:
                     LOG.error(
                         "Failed to %(event)s subport for trunk %(trunk_id)s: "
@@ -85,7 +85,8 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
                                        'trunk_id': trunk_id,
                                        'reason': e})
                     self.trunk_rpc.update_trunk_status(
-                        self.context, trunk_id, constants.DEGRADED_STATUS)
+                        self.context, trunk_id,
+                        constants.TRUNK_DEGRADED_STATUS)
 
     def manage_trunk(self, port):
         LOG.debug("Managing trunk for port: %s", port)
@@ -113,7 +114,7 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
                     self.context, None, subports, events.CREATED,
                     trunk_id=trunk_id)
             self.trunk_rpc.update_trunk_status(self.context, trunk_id,
-                                               constants.ACTIVE_STATUS)
+                                               constants.TRUNK_ACTIVE_STATUS)
 
     def unmanage_trunk(self, port_id):
         if port_id in self.managed_trunks:
