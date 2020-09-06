@@ -11,8 +11,8 @@ URL:		https://github.com/noironetworks/python-opflex-agent
 Source:		neutron-opflex-agent-%{version}.tar.gz
 BuildArch:	noarch
 BuildRequires:	python2-devel
-BuildRequires:	python-pbr
-BuildRequires:	python-setuptools
+BuildRequires:	python2-pbr
+BuildRequires:	python2-setuptools
 Requires:	gawk
 Requires:	openstack-neutron
 Requires:   python-inotify
