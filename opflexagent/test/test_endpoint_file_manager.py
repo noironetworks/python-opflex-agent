@@ -305,7 +305,9 @@ class TestEndpointFileManager(base.OpflexTestBase):
             nested_domain_allowed_vlans=[2, 3, 4],
             nested_host_vlan=4094,
             security_group=[{'policy-space': 'common',
-                             'name': 'gbp_default'}],)
+                             'name': 'gbp_default'}],
+            qos_policy={'policy-space': 'common',
+                         'name': 'gbp_default'},)
         port = self._port()
         self.manager.declare_endpoint(port, mapping)
 
@@ -331,7 +333,9 @@ class TestEndpointFileManager(base.OpflexTestBase):
                    "attestation": [],
                    'policy-space-name': 'apic_tenant',
                    'security-group': [{'policy-space': 'common',
-                                       'name': 'gbp_default'}]}
+                                       'name': 'gbp_default'}],
+                   'qos-policy': {'policy-space': 'common',
+                                   'name': 'gbp_default'}}
         lbiface_file = {
                    "interface-name": 'qpi',
                    "uuid": mock.ANY,
@@ -833,6 +837,9 @@ class TestEndpointFileManager(base.OpflexTestBase):
                                         security_group=[
                                             {'policy-space': 'common',
                                              'name': 'gbp_default'}],
+                                        qos_policy=
+                                            {'policy-space': 'common',
+                                             'name': 'gbp_default'},   
                                         active_active_aap=True)
         port = self._port()
         self.manager._release_int_fip = mock.Mock()
@@ -850,6 +857,9 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.assertEqual(ep_file['security-group'],
                          [{'policy-space': 'common',
                            'name': 'gbp_default'}])
+        self.assertEqual(ep_file['qos-policy'],
+                         {'policy-space': 'common',
+                           'name': 'gbp_default'})
         self.assertTrue(ep_file['active-active-aap'])
 
     def test_dns_domain(self):
