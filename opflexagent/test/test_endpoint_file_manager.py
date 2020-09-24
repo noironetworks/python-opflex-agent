@@ -308,6 +308,7 @@ class TestEndpointFileManager(base.OpflexTestBase):
                              'name': 'gbp_default'}],
             qos_policy={'policy-space': 'common',
                         'name': 'gbp_default'},)
+
         port = self._port()
         self.manager.declare_endpoint(port, mapping)
 
