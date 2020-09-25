@@ -450,6 +450,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         if 'security_group' in mapping:
             mapping_dict['security-group'] = mapping['security_group']
 
+        if 'qos_policy' in mapping:
+            mapping_dict['qos-policy'] = mapping['qos_policy']
+
         nested_domain_dict = {}
         allowed_vlans = []
         if 'nested_domain_name' in mapping and mapping['nested_domain_name']:
