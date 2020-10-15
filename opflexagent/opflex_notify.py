@@ -79,7 +79,7 @@ class OpflexNotifyAgent(object):
                         ],
                     },
                 }
-                msg = bytearray(json.dumps(subscribe))
+                msg = bytearray(json.dumps(subscribe).encode('utf-8'))
                 msg_len = socket.htonl(len(msg))
                 client.send(struct.pack('I', msg_len))
                 client.send(msg)
@@ -110,7 +110,7 @@ class OpflexNotifyAgent(object):
                 raise ValueError('Unexpected message length {} (msg_len {})'.
                     format(len(msg), msg_len))
 
-            notif = json.loads(msg)
+            notif = json.loads(msg.decode('utf-8'))
             if ('method' not in notif or 'params' not in notif):
                 raise ValueError('Unexpected message {}'.format(notif))
 
