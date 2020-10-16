@@ -14,8 +14,7 @@ import os
 import shutil
 import sys
 
-import mock
-from mock import call
+from unittest import mock
 sys.modules["apicapi"] = mock.Mock()  # noqa
 sys.modules["pyinotify"] = mock.Mock()  # noqa
 
@@ -355,8 +354,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
                        {'start': 4093}]}
         self.manager._write_endpoint_file.assert_called_once_with(
                 ep_name, ep_file)
-        calls = [call(ep_name, lbiface_file),
-                 call(ep_name + '_uplink', uplink_lbiface_file)]
+        calls = [mock.call(ep_name, lbiface_file),
+                 mock.call(ep_name + '_uplink', uplink_lbiface_file)]
         self.assertEqual(2, self.manager._write_lbiface_file.call_count)
         self.manager._write_lbiface_file.assert_has_calls(calls)
 

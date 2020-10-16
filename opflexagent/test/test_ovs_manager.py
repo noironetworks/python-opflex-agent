@@ -13,7 +13,7 @@
 import contextlib
 import sys
 
-import mock
+from unittest import mock
 sys.modules["apicapi"] = mock.Mock()  # noqa
 sys.modules["pyinotify"] = mock.Mock()  # noqa
 
