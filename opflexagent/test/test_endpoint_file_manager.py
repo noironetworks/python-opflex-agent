@@ -1127,6 +1127,18 @@ class TestEndpointFileManager(base.OpflexTestBase):
         mapping['endpoint_group_name'] = None
         self.manager.declare_endpoint(port_1, mapping)
 
+    def test_vm_name_sanitization(self):
+        mapping = self._get_gbp_details()
+        port_1 = self._port()
+
+        # Use VM name with backslashes, which should be
+        # converted to avoid interpreting the name as a DN
+        mapping['vm-name'] = 'some/vm/name/here'
+        self.manager.declare_endpoint(port_1, mapping)
+        epargs = self.manager._write_endpoint_file.call_args_list
+        ep_file_vm_name = epargs[1][0][1].get('attributes').get('vm-name')
+        self.assertFalse("/" in ep_file_vm_name)
+
     def _test_vlan_net_port_bound(self, svi=False):
         # the SVI related info we expect to see
         # on get_gbp_details
