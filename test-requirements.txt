@@ -3,7 +3,7 @@
 # process, which may cause wedges in the gate later.
 hacking>=1.1.0,<1.2.0 # Apache-2.0
 
-neutron
+-e git+https://opendev.org/openstack/neutron.git@stable/train#egg=neutron
 
 contextlib2>=0.5.4
 coverage!=4.4,>=4.0 # Apache-2.0
