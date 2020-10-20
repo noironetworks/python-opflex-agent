@@ -423,7 +423,11 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         if 'active_active_aap' in mapping:
             mapping_dict['active-active-aap'] = mapping['active_active_aap']
         if 'vm-name' in mapping:
-            mapping_dict['attributes'] = {'vm-name': mapping['vm-name']}
+            # ACI interprets backslash characters as part of a DN.
+            # To avoid this, convert all backslash characters to
+            # pipe characters.
+            sanitized_vm_name = mapping['vm-name'].replace("/", "|")
+            mapping_dict['attributes'] = {'vm-name': sanitized_vm_name}
         if 'vrf_name' in mapping:
             mapping_dict['domain-policy-space'] = mapping['vrf_tenant']
             mapping_dict['domain-name'] = mapping['vrf_name']
