@@ -312,7 +312,7 @@ class EpWatcher(FileWatcher):
 
     def gen_domain_uuid(self, tenant, name):
         fqname = '%s|%s' % (tenant, name)
-        fqhash = hashlib.md5(fqname).hexdigest()
+        fqhash = hashlib.md5(fqname.encode('utf-8')).hexdigest()
         fquuid = str(uuid.UUID(fqhash))
         return fquuid
 
