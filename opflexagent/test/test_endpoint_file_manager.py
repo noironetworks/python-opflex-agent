@@ -832,6 +832,11 @@ class TestEndpointFileManager(base.OpflexTestBase):
                                                   'ip_version': 4,
                                                   'dns_nameservers': [],
                                                   'cidr': '192.168.0.0/24',
+                                                  'dhcp_server_ports': {
+                                                      'fa:16:3e:a7:a3:aa': [
+                                                          '192.168.0.2'
+                                                      ]
+                                                  },
                                                   'host_routes': []}],
                                         dhcp_lease_time=100,
                                         security_group=[
@@ -1216,3 +1221,24 @@ class TestEndpointFileManager(base.OpflexTestBase):
 
     def test_dhcp_ep_no_svi(self):
         self._test_dhcp_ep()
+
+    def test_snat_to_fip(self):
+        """Test mapping between host snat ips to floating ips."""
+        self.manager.snat_iptables.setup_snat_for_es.return_value = tuple(
+            ['foo-if', 'foo-mac'])
+        mapping = self._get_gbp_details(floating_ip=[])
+        port_1 = self._port()
+        self.manager.declare_endpoint(port_1, mapping)
+
+        mapping['host_snat_ips'] = []
+        mapping = self._get_gbp_details(host_snat_ips=[],
+            ip_mapping=[],
+            floating_ip=[{'id': '2',
+                          'floating_ip_address': '172.10.0.2',
+                          'floating_network_id': 'ext_net',
+                          'router_id': 'ext_rout',
+                          'port_id': 'port_id',
+                          'fixed_ip_address': '192.168.0.2',
+                          'nat_epg_name': 'EXT-1',
+                          'nat_epg_tenant': 'nat-epg-tenant'}])
+        self.manager.declare_endpoint(port_1, mapping)
