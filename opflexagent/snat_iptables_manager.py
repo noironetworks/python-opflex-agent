@@ -111,7 +111,7 @@ class SnatIptablesManager(object):
 
     def _get_hash_for_es(self, es_name):
         return ("%s%s" % (self.IFACE_PREFIX,
-                          hashlib.md5(es_name).hexdigest()[:12]))
+            hashlib.md5(es_name.encode('utf-8')).hexdigest()[:12]))
 
     def setup_snat_for_es(self, es_name,
                           ip_start=None, ip_end=None, ip_gw=None,
