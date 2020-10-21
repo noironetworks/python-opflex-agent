@@ -14,7 +14,6 @@ from unittest import mock
 
 from opflexagent import gbp_agent
 from opflexagent.test import base
-from opflexagent.utils import utils
 
 from oslo_config import cfg
 
@@ -44,7 +43,7 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
             mock.patch('os.path.basename'),
             mock.patch('sys.argv')]
 
-        with utils.nested_context_manager(*resources):
+        with base.nested_context_manager(*resources):
             gbp_agent.main()
             self.assertEqual(1, opflex_patch.call_count)
             self.assertEqual(1, metadata_patch.call_count)
@@ -62,7 +61,7 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
             mock.patch('os.path.basename'),
             mock.patch('sys.argv')]
 
-        with utils.nested_context_manager(*resources):
+        with base.nested_context_manager(*resources):
             gbp_agent.main()
             self.assertEqual(1, import_patch.call_count)
             self.assertEqual(
@@ -80,7 +79,7 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
             mock.patch('os.path.basename'),
             mock.patch('sys.argv')]
 
-        with utils.nested_context_manager(*resources):
+        with base.nested_context_manager(*resources):
             gbp_agent.main()
             self.assertEqual(1, import_patch.call_count)
             self.assertEqual(
@@ -98,7 +97,7 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
             mock.patch('sys.argv'),
         ]
 
-        with utils.nested_context_manager(*resources):
+        with base.nested_context_manager(*resources):
             with mock.patch('sys.exit') as sys_patch:
                 try:
                     gbp_agent.main()
