@@ -9,8 +9,25 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
+from contextlib2 import contextmanager
+from contextlib2 import ExitStack
 
 from neutron.tests import base
+
+
+@contextmanager
+def nested_context_manager(*contexts):
+    """
+    The new Python 3 contextlib.ExitStack class was
+    added as a replacement for contextlib.nested()
+    Used to combine other context managers.
+
+    :param contexts: list of context managers
+    """
+    with ExitStack() as stack:
+        for ctx in contexts:
+            stack.enter_context(ctx)
+        yield contexts
 
 
 class OpflexTestBase(base.BaseTestCase):
