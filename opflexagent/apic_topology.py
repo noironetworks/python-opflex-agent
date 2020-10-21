@@ -278,8 +278,10 @@ class ApicTopologyAgent(manager.Manager):
 
 def launch(binary, manager, topic=None):
     cfg.CONF(project='neutron')
+    config.register_root_helper(cfg.CONF)
     common_cfg.init(sys.argv[1:])
     config.setup_logging()
+    config.setup_privsep()
     report_period = cfg.CONF.apic_host_agent.apic_agent_report_interval
     poll_period = cfg.CONF.apic_host_agent.apic_agent_poll_interval
     server = service.Service.create(
