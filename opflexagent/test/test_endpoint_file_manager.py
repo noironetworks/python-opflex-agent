@@ -1226,19 +1226,22 @@ class TestEndpointFileManager(base.OpflexTestBase):
         """Test mapping between host snat ips to floating ips."""
         self.manager.snat_iptables.setup_snat_for_es.return_value = tuple(
             ['foo-if', 'foo-mac'])
-        mapping = self._get_gbp_details(floating_ip=[])
         port_1 = self._port()
+        mapping = self._get_gbp_details(port_id=port_1.vif_id,
+                                        floating_ip=[])
         self.manager.declare_endpoint(port_1, mapping)
 
         mapping['host_snat_ips'] = []
-        mapping = self._get_gbp_details(host_snat_ips=[],
+        mapping = self._get_gbp_details(port_id=port_1.vif_id,
+                                        host_snat_ips=[],
             ip_mapping=[],
             floating_ip=[{'id': '2',
                           'floating_ip_address': '172.10.0.2',
                           'floating_network_id': 'ext_net',
                           'router_id': 'ext_rout',
-                          'port_id': 'port_id',
+                          'port_id': port_1.vif_id,
                           'fixed_ip_address': '192.168.0.2',
                           'nat_epg_name': 'EXT-1',
                           'nat_epg_tenant': 'nat-epg-tenant'}])
         self.manager.declare_endpoint(port_1, mapping)
+        self.manager.undeclare_endpoint(port_1.vif_id)
