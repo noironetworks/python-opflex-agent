@@ -622,7 +622,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 # IP, so just use the first IP from the first entry in
                 # the dict. Once the agent supports additional IPs, we
                 # can provide the full dict.
-                dhcp_mac = sn['dhcp_server_ports'].keys()[0]
+                dhcp_mac = list(sn['dhcp_server_ports'].keys())[0]
                 dhcp4['server-mac'] = dhcp_mac
                 dhcp4['server-ip'] = sn['dhcp_server_ports'][dhcp_mac][0]
             if 'interface_mtu' in mapping:
@@ -732,7 +732,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
         for ip_ver in es_using_int_fip.keys():
             fip_alloc = self._get_int_fips(ip_ver, port_id, port_mac)
-            for es in fip_alloc.keys():
+            for es in list(fip_alloc.keys()):
                 if es not in es_using_int_fip[ip_ver]:
                     self._release_int_fip(ip_ver, port_id, port_mac, es)
                 else:
