@@ -779,7 +779,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                     (port_id, port_mac), {}).values()
             else:
                 fip_map_list = []
-                for id_mac in self.int_fip_alloc[ip_ver].keys():
+                for id_mac in list(self.int_fip_alloc[ip_ver].keys()):
                     if id_mac[0] == port_id:
                         fip_map_list.extend(
                             self.int_fip_alloc[ip_ver].pop(
