@@ -12,9 +12,12 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import json
+
 import httplib2
 from oslo_config import cfg
 from oslo_log import log as logging
+import setproctitle
 import six
 import six.moves.urllib.parse as urlparse
 import webob
@@ -24,7 +27,6 @@ from neutron.agent.linux import utils as agent_utils
 from neutron.common import config
 from neutron.common import utils
 from neutron import wsgi
-from oslo_serialization import jsonutils
 
 from opflexagent._i18n import _
 
@@ -72,7 +74,7 @@ class NetworkMetadataProxyHandler(object):
         nets = None
         try:
             with open(fqfn, "r") as f:
-                nets = jsonutils.load(f)
+                nets = json.load(f)
         except Exception as e:
             LOG.warning("Exception in reading file: %s", str(e))
 
@@ -155,6 +157,7 @@ class ProxyDaemon(daemon.Daemon):
         self.host = host
 
     def run(self):
+        self._parent_proctitle = setproctitle.getproctitle()
         handler = NetworkMetadataProxyHandler(
             self.network_id,
             self.router_id,
