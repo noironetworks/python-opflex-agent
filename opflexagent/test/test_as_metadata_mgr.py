@@ -13,6 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import sys
+
 from unittest import mock
 
 from neutron.tests import base
@@ -24,6 +26,11 @@ TEST_NAME = 'some_name'
 HASH_RESULT = 'a6cb6f24-92d6-31b5-21e6-25b41c0fddc1'
 JSON_DATA = {"foo": "bar"}
 JSON_FILE_DATA = '{"foo": "bar"}'
+
+if sys.version_info.major == 2:
+    MOCK_MODULE = '__builtin__.open'
+else:
+    MOCK_MODULE = 'builtins.open'
 
 
 class TestEpWatcher(base.BaseTestCase):
@@ -38,14 +45,14 @@ class TestEpWatcher(base.BaseTestCase):
             self.assertEqual(hash, HASH_RESULT)
 
     def test_read_json_file(self):
-        with mock.patch('builtins.open',
+        with mock.patch(MOCK_MODULE,
                 new=mock.mock_open(read_data=JSON_FILE_DATA)) as open_file:
             data = as_metadata_manager.read_jsonfile('foo')
             open_file.assert_called_once_with('foo', 'r')
             self.assertEqual(data, JSON_DATA)
 
     def test_write_json_file(self):
-        with mock.patch('builtins.open') as open_file:
+        with mock.patch(MOCK_MODULE) as open_file:
             as_metadata_manager.write_jsonfile('foo', JSON_DATA)
             open_file.assert_called_once_with('foo', 'w')
             write_list = []
