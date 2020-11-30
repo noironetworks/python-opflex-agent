@@ -79,7 +79,7 @@ class ApicTopologyAgent(manager.Manager):
         self.interfaces = {}
         self.lldpcmd = None
         self.peers = {}
-        self.port_desc_re = map(re.compile, ACI_PORT_DESCR_FORMATS)
+        self.port_desc_re = list(map(re.compile, ACI_PORT_DESCR_FORMATS))
         self.port_local_re = re.compile(ACI_PORT_LOCAL_FORMAT)
         self.vpcport_desc_re = re.compile(ACI_VPCPORT_DESCR_FORMAT)
         self.chassis_desc_re = re.compile(ACI_CHASSIS_DESCR_FORMAT)
