@@ -21,7 +21,6 @@ from opflexagent import gbp_agent
 from opflexagent import snat_iptables_manager
 from opflexagent.test import base
 from opflexagent.utils.ep_managers import endpoint_file_manager
-from opflexagent.utils import utils
 
 from neutron.api.rpc.callbacks import events
 from neutron.conf.agent import dhcp as dhcp_config
@@ -106,7 +105,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             mock.patch('opflexagent.gbp_agent.GBPOpflexAgent.'
                 '_report_state')]
 
-        with utils.nested_context_manager(*resources):
+        with base.nested_context_manager(*resources):
             agent = gbp_agent.GBPOpflexAgent(**kwargs)
             # set back to true because initial report state will succeed due
             # to mocked out RPC calls
@@ -311,7 +310,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                     'undeclare_endpoint'),
             mock.patch.object(ovs.OVSPluginApi, 'update_device_down')]
 
-        with utils.nested_context_manager(*resources):
+        with base.nested_context_manager(*resources):
             port_stats = {'regular': {'added': 0,
                                       'updated': 0,
                                       'removed': 0},
@@ -337,7 +336,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                     'undeclare_endpoint'),
             mock.patch.object(ovs.OVSPluginApi, 'update_device_down')]
 
-        with utils.nested_context_manager(*resources):
+        with base.nested_context_manager(*resources):
             agent = self._initialize_agent()
             self._mock_agent(agent)
             port_info = {'current': set(['1', '2']),
