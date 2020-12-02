@@ -12,6 +12,7 @@
 
 import functools
 import hashlib
+import json
 import multiprocessing
 import os
 import os.path
@@ -30,9 +31,10 @@ from neutron.common import utils
 from neutron.conf.agent import common as config
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import (  # noqa
     config as ovs_config)
+from neutron_lib.utils import helpers
 from oslo_config import cfg
 from oslo_log import log as logging
-from oslo_serialization import jsonutils
+from oslo_utils import encodeutils
 
 from opflexagent._i18n import _
 from opflexagent import config as oscfg  # noqa
@@ -89,7 +91,7 @@ def read_jsonfile(name):
     retval = {}
     try:
         with open(name, "r") as f:
-            retval = jsonutils.load(f)
+            retval = json.load(f)
     except Exception as e:
         LOG.warn("Exception in reading file: %s", str(e))
     return retval
@@ -98,7 +100,7 @@ def read_jsonfile(name):
 def write_jsonfile(name, data):
     try:
         with open(name, "w") as f:
-            jsonutils.dump(data, f)
+            json.dump(data, f)
     except Exception as e:
         LOG.warn("Exception in writing file: %s", str(e))
 
@@ -485,12 +487,7 @@ class StateWatcher(FileWatcher):
 
         asfilename = AS_FILE_NAME_FORMAT % asvc["uuid"]
         asfilename = "%s/%s" % (AS_MAPPING_DIR, asfilename)
-        try:
-            with open(asfilename, "w") as f:
-                jsonutils.dump(asvc, f)
-        except Exception as e:
-            LOG.warn("EPwatcher: Exception in writing services file: %s",
-                     str(e))
+        write_jsonfile(asfilename, asvc)
 
         proxyfilename = PROXY_FILE_NAME_FORMAT % asvc["uuid"]
         proxyfilename = "%s/%s" % (MD_DIR, proxyfilename)
@@ -620,8 +617,10 @@ class AsMetadataManager(object):
                   {'name': self.name, 'cmd': cmd})
         ret = ''
         try:
-            ret = subprocess.check_output(
-                cmd, stderr=subprocess.STDOUT, shell=True)
+            sanitized_cmd = encodeutils.to_utf8(cmd)
+            data = subprocess.check_output(
+                sanitized_cmd, stderr=subprocess.STDOUT, shell=True)
+            ret = helpers.safe_decode_utf8(data)
         except Exception as e:
             LOG.error("In running command: %(cmd)s: %(exc)s",
                       {'cmd': cmd, 'exc': str(e)})
