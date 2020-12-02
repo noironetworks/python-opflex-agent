@@ -41,6 +41,9 @@ class TestOpflexNotify(base.BaseTestCase):
                    'mac': 'bar',
                    'ip': '192.168.0.1'}}
         encoded_msg = bytearray(json.dumps(msg).encode('utf-8'))
+        connect_msg = bytearray(json.dumps(
+            {"method": "subscribe",
+             "params": {"type": ["virtual-ip"]}}).encode('utf-8'))
         with mock.patch('os.path.exists') as mock_path:
             mock_path.return_value = True
             with mock.patch('socket.socket') as socket_create:
@@ -50,9 +53,7 @@ class TestOpflexNotify(base.BaseTestCase):
                     mock.call(socket.AF_UNIX, socket.SOCK_STREAM),
                     mock.call().connect('/the/path'),
                     mock.call().send(b'\x00\x00\x00;'),
-                    mock.call().send(bytearray(b'{"method": "subscribe", '
-                                               b'"params": {'
-                                               b'"type": ["virtual-ip"]}}'))]
+                    mock.call().send(connect_msg)]
                 )
                 socket_create.reset_mock()
                 socket_create.recv.side_effect = (
