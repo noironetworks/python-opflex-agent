@@ -118,9 +118,11 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
 
     def get_port_vif_name(self, port_id, bridge=None):
         bridge = bridge or self.int_br
-        ports = bridge.get_vifs_by_ids([port_id])
-        if ports:
-            return ports[port_id].port_name
+        all_ports = bridge.get_vif_ports(
+            ofport_filter=(ovs_lib.INVALID_OFPORT, ovs_lib.UNASSIGNED_OFPORT))
+        for port in all_ports:
+            if port.vif_id == port_id:
+                return port.port_name
 
     def get_patch_port_pair_names(self, port_id):
         return (("qpi%s" % port_id)[:NIC_NAME_LEN],
