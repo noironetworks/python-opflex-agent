@@ -19,6 +19,10 @@ from neutron.plugins.ml2.drivers.openvswitch.agent.common import config
 from opflexagent import config  # noqa
 
 
+INVALID_OFPORT = ovs_lib.INVALID_OFPORT
+UNASSIGNED_OFPORT = ovs_lib.UNASSIGNED_OFPORT
+
+
 class OVSBridge(ovs_lib.OVSBridge):
 
     def __init__(self, *args, **kwargs):
