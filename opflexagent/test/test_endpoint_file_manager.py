@@ -1116,14 +1116,14 @@ class TestEndpointFileManager(base.OpflexTestBase):
         ep_file['uuid'] = port.vif_id + '|aa-bb-cc-00-11-22'
         ep_name = master_port_id + '_sub1_' + mapping['mac_address']
         ep_file['access-interface-vlan'] = 100
-        old_method = self.manager.bridge_manager.get_port_vif_name
 
-        def get_port_vif_name(vif_id):
+        def new_get_port_vif_name(vif_id):
             return 'tap' + vif_id[6:]
-        self.manager.bridge_manager.get_port_vif_name = get_port_vif_name
-        self.manager.declare_endpoint(port, mapping)
-        self.manager._write_endpoint_file.assert_called_with(ep_name, ep_file)
-        self.manager.bridge_manager.get_port_vif_name = old_method
+        with mock.patch.object(self.manager.bridge_manager,
+                               'get_port_vif_name', new=new_get_port_vif_name):
+            self.manager.declare_endpoint(port, mapping)
+            self.manager._write_endpoint_file.assert_called_with(ep_name,
+                                                                 ep_file)
 
     def test_bad_mapping(self):
         mapping = self._get_gbp_details()
