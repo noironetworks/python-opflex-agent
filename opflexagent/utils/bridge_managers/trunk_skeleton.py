@@ -71,13 +71,16 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
                         self.delete_patch_ports(subport_ids)
                         # Subport tracking for the trunk, remove as we
                         # process subports being deleted.
+                        needs_trunk_update = False
                         for subport_id in subport_ids:
                             try:
                                 self.managed_trunks[trunk_id].remove(
                                     subport_id)
-                                update_trunk_status = True
+                                needs_trunk_update = True
                             except KeyError:
                                 continue
+                        if update_trunk_status and not needs_trunk_update:
+                            update_trunk_status = False
                     if update_trunk_status:
                         self.trunk_rpc.update_trunk_status(
                             self.context, trunk_id, trunk_status)
