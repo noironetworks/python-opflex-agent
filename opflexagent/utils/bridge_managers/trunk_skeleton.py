@@ -30,7 +30,6 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
         super(OpflexTrunkMixin, self).__init__()
         self.managed_trunks = {}
         registry.unsubscribe(self.handle_trunks, resources.TRUNK)
-        registry.register(self.handle_subports, resources.SUBPORT)
         self._context = n_context.get_admin_context_without_session()
         self.trunk_rpc = agent.TrunkStub()
 
@@ -43,20 +42,21 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
         pass
 
     def handle_subports(self, context, resource_type, subports, event_type,
-                        trunk_id=None):
+                        trunk_id=None, update_trunk_status=True):
         LOG.info("Handling subports %(subports)s event %(event)s",
                  {'subports': subports, 'event': event_type})
+        trunk_status = constants.ACTIVE_STATUS
         if subports:
             trunk_id = trunk_id or subports[0].trunk_id
             if trunk_id in self.managed_trunks:
                 # Bind subports
                 try:
                     if event_type == events.CREATED:
+                        subport_ids = [p.port_id for p in subports]
                         subport_bindings = (
                             self.trunk_rpc.update_subport_bindings(
                                 self.context, subports))
                         subport_bindings = subport_bindings.get(trunk_id, [])
-                        subport_ids = [p['id'] for p in subport_bindings]
                         subports_mac = {p['id']: p['mac_address'] for p in
                                         subport_bindings}
                         # Wire patch ports, the agent loop will do the rest
@@ -70,25 +70,41 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
                         self.delete_patch_ports(subport_ids)
                         # Subport tracking for the trunk, remove as we
                         # process subports being deleted.
+                        needs_trunk_update = False
                         for subport_id in subport_ids:
                             try:
                                 self.managed_trunks[trunk_id].remove(
                                     subport_id)
+                                needs_trunk_update = True
                             except KeyError:
                                 continue
-                    self.trunk_rpc.update_trunk_status(
-                        self.context, trunk_id, constants.ACTIVE_STATUS)
+                        if update_trunk_status and not needs_trunk_update:
+                            update_trunk_status = False
+                    if update_trunk_status:
+                        self.trunk_rpc.update_trunk_status(
+                            self.context, trunk_id, trunk_status)
                 except Exception as e:
                     LOG.error(
                         "Failed to %(event)s subport for trunk %(trunk_id)s: "
                         "%(reason)s", {'event': event_type,
                                        'trunk_id': trunk_id,
                                        'reason': e})
-                    self.trunk_rpc.update_trunk_status(
-                        self.context, trunk_id, constants.DEGRADED_STATUS)
+                    trunk_status = constants.DEGRADED_STATUS
+                    try:
+                        if update_trunk_status:
+                            self.trunk_rpc.update_trunk_status(
+                                self.context, trunk_id,
+                                trunk_status)
+                    except Exception as e:
+                        LOG.error(
+                            "Failed to update status for trunk %(trunk_id)s: "
+                            "%(reason)s", {'trunk_id': trunk_id,
+                                           'reason': e})
+        return trunk_status
 
     def manage_trunk(self, port):
         LOG.debug("Managing trunk for port: %s", port)
+        trunk_status = constants.ACTIVE_STATUS
         if getattr(port, 'trunk_details', None):
             trunk_id = port.trunk_details['trunk_id']
             master_id = port.trunk_details['master_port_id']
@@ -109,11 +125,11 @@ class OpflexTrunkMixin(agent.TrunkSkeleton):
                         segmentation_type=x['segmentation_type'],
                         segmentation_id=x['segmentation_id'])
                     for x in port.trunk_details['subports']]
-                self.handle_subports(
+                trunk_status = self.handle_subports(
                     self.context, None, subports, events.CREATED,
-                    trunk_id=trunk_id)
+                    trunk_id=trunk_id, update_trunk_status=False)
             self.trunk_rpc.update_trunk_status(self.context, trunk_id,
-                                               constants.ACTIVE_STATUS)
+                                               trunk_status)
 
     def unmanage_trunk(self, port_id):
         if port_id in self.managed_trunks:
