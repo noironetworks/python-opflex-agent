@@ -96,6 +96,7 @@ class OpflexTestBase(base.BaseTestCase):
                                    'nat_epg_name': 'nat-epg-name'}],
                    'host_snat_ips': [{'external_segment_name': 'EXT-1',
                                       'host_snat_ip': '200.0.0.10',
+                                      'host_snat_mac': 'aa:bb:cc:00:11:44',
                                       'gateway_ip': '200.0.0.1',
                                       'prefixlen': 8}],
                    'owned_addresses': ['192.168.0.2'],
