@@ -23,6 +23,7 @@ from opflexagent import snat_iptables_manager
 from opflexagent.test import base
 from opflexagent.utils.ep_managers import endpoint_file_manager
 
+from neutron.agent.linux import ip_lib
 from neutron.conf.agent import dhcp as dhcp_config
 from neutron_lib import constants as n_constants
 from oslo_config import cfg
@@ -43,6 +44,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.manager.nat_mtu_size = 9000
         self._mock_agent(self.manager)
         self.addCleanup(self._purge_endpoint_dir)
+
+        ip_lib.IPDevice = mock.Mock()
 
     def _purge_endpoint_dir(self):
         try:
@@ -82,170 +85,179 @@ class TestEndpointFileManager(base.OpflexTestBase):
         return port
 
     def test_port_bound(self):
-        mapping = self._get_gbp_details()
-        self.manager.snat_iptables.setup_snat_for_es.return_value = tuple(
-            ['foo-if', 'foo-mac'])
-        port = self._port()
-        self.manager._release_int_fip = mock.Mock()
-        self.manager.declare_endpoint(port, mapping)
+        with mock.patch('neutron.agent.linux.ip_lib.IPDevice') as mock1:
+            instance = mock1.return_value
+            instance.link.address = 'foo-mac'
+            mapping = self._get_gbp_details()
+            self.manager.snat_iptables.setup_snat_for_es.return_value = tuple(
+                ['foo-if', 'foo-mac'])
+            port = self._port()
+            self.manager._release_int_fip = mock.Mock()
+            self.manager.declare_endpoint(port, mapping)
 
-        port_id = port.vif_id
-        ep_name = port_id + '_' + mapping['mac_address']
-        ep_file = {"policy-space-name": mapping['ptg_tenant'],
-                   "endpoint-group-name": (mapping['app_profile_name'] + "|" +
-                                           mapping['endpoint_group_name']),
-                   "access-interface": port.port_name,
-                   "access-uplink-interface": 'qpf',
-                   "interface-name": 'qpi',
-                   "mac": 'aa:bb:cc:00:11:22',
-                   "promiscuous-mode": mapping['promiscuous_mode'],
-                   "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
-                   "attributes": {'vm-name': 'somename'},
-                   "neutron-network": port.net_uuid,
-                   "neutron-metadata-optimization": True,
-                   "domain-policy-space": 'apic_tenant',
-                   "domain-name": 'name_of_l3p',
-                   "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
-                          '192.169.8.253', '192.169.8.254'],
-                   "anycast-return-ip": ['192.168.0.2', '192.168.1.2'],
-                   # FIP mapping will be in the file
-                   "ip-address-mapping": [
-                       {'uuid': '1', 'mapped-ip': '192.168.0.2',
-                        'floating-ip': '172.10.0.1',
-                        'endpoint-group-name': 'profile_name|nat-epg-name',
-                        'policy-space-name': 'nat-epg-tenant'},
-                       {'uuid': '2', 'mapped-ip': '192.168.1.2',
-                        'endpoint-group-name': 'profile_name|nat-epg-name',
-                        'policy-space-name': 'nat-epg-tenant',
-                        'floating-ip': '172.10.0.2'},
-                       # for the extra-ip
-                       {'uuid': '7', 'mapped-ip': '192.169.8.1',
-                        'endpoint-group-name': 'profile_name|nat-epg-name',
-                        'policy-space-name': 'nat-epg-tenant',
-                        'floating-ip': '172.10.0.7'},
-                       {'uuid': mock.ANY, 'mapped-ip': '192.169.8.253',
-                        'floating-ip': '169.254.0.0',
-                        'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
-                        'endpoint-group-name': 'profile_name|nat-epg-name',
-                        'policy-space-name': 'nat-epg-tenant'},
-                       {'uuid': mock.ANY, 'mapped-ip': '192.169.8.254',
-                        'floating-ip': '169.254.0.1',
-                        'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
-                        'endpoint-group-name': 'profile_name|nat-epg-name',
-                        'policy-space-name': 'nat-epg-tenant'}],
-                   "attestation": mapping['attestation']}
-        snat_ep_file = {'mac': 'foo-mac', 'interface-name': 'foo-if',
-                        'ip': ['200.0.0.10'],
-                        'policy-space-name': 'nat-epg-tenant',
-                        'attributes': {'vm-name': 'snat|h1|EXT-1'},
-                        'promiscuous-mode': True,
-                        'endpoint-group-name': 'profile_name|nat-epg-name',
-                        'uuid': mock.ANY}
-        snat_ep_uuid = [x[0][1]['uuid']
-            for x in self.manager._write_endpoint_file.call_args_list
-            if x[0][0] == 'EXT-1']
-        self._check_call_list(
-            [mock.call(ep_name, ep_file), mock.call('EXT-1', snat_ep_file)],
-            self.manager._write_endpoint_file.call_args_list)
-        snat_ep_file['uuid'] = snat_ep_uuid[0] if snat_ep_uuid else None
+            port_id = port.vif_id
+            ep_name = port_id + '_' + mapping['mac_address']
+            ep_file = {"policy-space-name": mapping['ptg_tenant'],
+                       "endpoint-group-name": (mapping['app_profile_name'] +
+                           "|" + mapping['endpoint_group_name']),
+                       "access-interface": port.port_name,
+                       "access-uplink-interface": 'qpf',
+                       "interface-name": 'qpi',
+                       "mac": 'aa:bb:cc:00:11:22',
+                       "promiscuous-mode": mapping['promiscuous_mode'],
+                       "uuid": port.vif_id + '|aa-bb-cc-00-11-22',
+                       "attributes": {'vm-name': 'somename'},
+                       "neutron-network": port.net_uuid,
+                       "neutron-metadata-optimization": True,
+                       "domain-policy-space": 'apic_tenant',
+                       "domain-name": 'name_of_l3p',
+                       "ip": ['192.168.0.2', '192.168.1.2', '192.169.8.1',
+                              '192.169.8.253', '192.169.8.254'],
+                       "anycast-return-ip": ['192.168.0.2', '192.168.1.2'],
+                       # FIP mapping will be in the file
+                       "ip-address-mapping": [
+                           {'uuid': '1', 'mapped-ip': '192.168.0.2',
+                            'floating-ip': '172.10.0.1',
+                            'endpoint-group-name': 'profile_name|nat-epg-name',
+                            'policy-space-name': 'nat-epg-tenant'},
+                           {'uuid': '2', 'mapped-ip': '192.168.1.2',
+                            'endpoint-group-name': 'profile_name|nat-epg-name',
+                            'policy-space-name': 'nat-epg-tenant',
+                            'floating-ip': '172.10.0.2'},
+                           # for the extra-ip
+                           {'uuid': '7', 'mapped-ip': '192.169.8.1',
+                            'endpoint-group-name': 'profile_name|nat-epg-name',
+                            'policy-space-name': 'nat-epg-tenant',
+                            'floating-ip': '172.10.0.7'},
+                           {'uuid': mock.ANY, 'mapped-ip': '192.169.8.253',
+                            'floating-ip': '169.254.0.0',
+                            'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                            'endpoint-group-name': 'profile_name|nat-epg-name',
+                            'policy-space-name': 'nat-epg-tenant'},
+                           {'uuid': mock.ANY, 'mapped-ip': '192.169.8.254',
+                            'floating-ip': '169.254.0.1',
+                            'next-hop-if': 'foo-if', 'next-hop-mac': 'foo-mac',
+                            'endpoint-group-name': 'profile_name|nat-epg-name',
+                            'policy-space-name': 'nat-epg-tenant'}],
+                       "attestation": mapping['attestation']}
+            snat_ep_file = {'mac': 'foo-mac', 'interface-name': 'foo-if',
+                            'ip': ['200.0.0.10'],
+                            'policy-space-name': 'nat-epg-tenant',
+                            'attributes': {'vm-name': 'snat|h1|EXT-1'},
+                            'promiscuous-mode': True,
+                            'endpoint-group-name': 'profile_name|nat-epg-name',
+                            'uuid': mock.ANY}
+            snat_ep_uuid = [x[0][1]['uuid']
+                for x in self.manager._write_endpoint_file.call_args_list
+                if x[0][0] == 'EXT-1']
+            self._check_call_list(
+                [mock.call(ep_name, ep_file),
+                mock.call('EXT-1', snat_ep_file)],
+                self.manager._write_endpoint_file.call_args_list)
+            snat_ep_file['uuid'] = snat_ep_uuid[0] if snat_ep_uuid else None
 
-        self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
-            'EXT-1', '200.0.0.10', None, '200.0.0.1/8', None, None,
-            None, None, mtu=9000)
-        self.manager._write_vrf_file.assert_called_once_with(
-            'l3p_id', {
-                "domain-policy-space": 'apic_tenant',
-                "domain-name": 'name_of_l3p',
-                "internal-subnets": sorted(['192.168.0.0/16',
-                                            '192.169.0.0/16',
-                                            '169.254.0.0/16'])})
+            self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
+                'EXT-1', '200.0.0.10', None, '200.0.0.1/8', None, None,
+                None, 'aa:bb:cc:00:11:44', mtu=9000)
+            self.manager._write_vrf_file.assert_called_once_with(
+                'l3p_id', {
+                    "domain-policy-space": 'apic_tenant',
+                    "domain-name": 'name_of_l3p',
+                    "internal-subnets": sorted(['192.168.0.0/16',
+                                                '192.169.0.0/16',
+                                                '169.254.0.0/16'])})
 
-        # Send same port info again
-        self.manager._write_vrf_file.reset_mock()
-        self.manager.snat_iptables.setup_snat_for_es.reset_mock()
+            # Send same port info again
+            self.manager._write_vrf_file.reset_mock()
+            self.manager.snat_iptables.setup_snat_for_es.reset_mock()
 
-        self.manager.declare_endpoint(port, mapping)
-        self.manager._write_endpoint_file.assert_called_with(ep_name, ep_file)
-        self.assertFalse(self.manager._write_vrf_file.called)
-        self.assertFalse(self.manager.snat_iptables.setup_snat_for_es.called)
+            instance.link.address = 'aa:bb:cc:00:11:44'
+            self.manager.declare_endpoint(port, mapping)
+            self.assertFalse(self.manager._write_vrf_file.called)
+            self.assertFalse(
+                self.manager.snat_iptables.setup_snat_for_es.called)
 
-        # Remove an extra-ip
-        self.manager._write_vrf_file.reset_mock()
-        mapping.update({'extra_ips': ['192.169.8.1', '192.169.8.253']})
-        ep_file["ip"].remove('192.169.8.254')
-        ep_file["ip-address-mapping"] = [x
-            for x in ep_file["ip-address-mapping"]
-                if x['mapped-ip'] != '192.169.8.254']
+            # Remove an extra-ip
+            self.manager._write_vrf_file.reset_mock()
+            mapping.update({'extra_ips': ['192.169.8.1', '192.169.8.253']})
+            ep_file["ip"].remove('192.169.8.254')
+            ep_file["ip-address-mapping"] = [x
+                for x in ep_file["ip-address-mapping"]
+                    if x['mapped-ip'] != '192.169.8.254']
 
-        self.manager.declare_endpoint(port, mapping)
-        self.manager._write_endpoint_file.assert_called_with(ep_name, ep_file)
-        self.manager._release_int_fip.assert_called_with(
-            4, port_id, mapping['mac_address'], 'EXT-1', '192.169.8.254')
+            self.manager.declare_endpoint(port, mapping)
+            self.manager._release_int_fip.assert_called_with(
+                4, port_id, mapping['mac_address'], 'EXT-1', '192.169.8.254')
 
-        # Remove SNAT external segment
-        self.manager._write_vrf_file.reset_mock()
-        self.manager._release_int_fip.reset_mock()
-        mapping.update({'ip_mapping': []})
+            # Remove SNAT external segment
+            self.manager._write_vrf_file.reset_mock()
+            self.manager._release_int_fip.reset_mock()
+            mapping.update({'ip_mapping': []})
 
-        ep_file["ip-address-mapping"] = [x
-            for x in ep_file["ip-address-mapping"] if not x.get('next-hop-if')]
-        self.manager.declare_endpoint(port, mapping)
-        self.manager._write_endpoint_file.assert_called_with(ep_name, ep_file)
-        self.manager._release_int_fip.assert_called_with(
-            4, port_id, mapping['mac_address'], 'EXT-1')
+            ep_file["ip-address-mapping"] = [x
+                for x in ep_file["ip-address-mapping"]
+                    if not x.get('next-hop-if')]
+            self.manager.declare_endpoint(port, mapping)
+            self.manager._write_endpoint_file.assert_called_with(
+                ep_name, ep_file)
+            self.manager._release_int_fip.assert_called_with(
+                4, port_id, mapping['mac_address'], 'EXT-1')
 
-        self.manager._write_vrf_file.reset_mock()
-        self.manager.snat_iptables.setup_snat_for_es.reset_mock()
+            self.manager._write_vrf_file.reset_mock()
+            self.manager.snat_iptables.setup_snat_for_es.reset_mock()
 
-        # Bind another port for the same L3P, VRF file is not written
-        port = self._port()
-        self.manager.declare_endpoint(port, mapping)
-        self.assertFalse(self.manager._write_vrf_file.called)
-        self.assertFalse(self.manager.snat_iptables.setup_snat_for_es.called)
-        self.manager._write_vrf_file.reset_mock()
+            # Bind another port for the same L3P, VRF file is not written
+            instance.link.address = 'foo-mac'
+            port = self._port()
+            self.manager.declare_endpoint(port, mapping)
+            self.assertFalse(self.manager._write_vrf_file.called)
+            self.assertFalse(
+                self.manager.snat_iptables.setup_snat_for_es.called)
+            self.manager._write_vrf_file.reset_mock()
 
-        # Bind another port on a different L3P, new VRF file added
-        port = self._port()
-        mapping = self._get_gbp_details(l3_policy_id='newid')
-        self.manager.declare_endpoint(port, mapping)
-        self.manager._write_vrf_file.assert_called_once_with(
-            'newid', {
-                "domain-policy-space": 'apic_tenant',
-                "domain-name": 'name_of_l3p',
-                "internal-subnets": sorted(['192.168.0.0/16',
-                                            '192.169.0.0/16',
-                                            '169.254.0.0/16'])})
-        self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
-            'EXT-1', '200.0.0.10', None, '200.0.0.1/8', None, None,
-            None, None, mtu=9000)
-        self.manager._write_vrf_file.reset_mock()
-        self.manager._write_endpoint_file.reset_mock()
-        self.manager._write_lbiface_file.reset_mock()
-        self.manager.snat_iptables.setup_snat_for_es.reset_mock()
+            # Bind another port on a different L3P, new VRF file added
+            port = self._port()
+            mapping = self._get_gbp_details(l3_policy_id='newid')
+            self.manager.declare_endpoint(port, mapping)
+            self.manager._write_vrf_file.assert_called_once_with(
+                'newid', {
+                    "domain-policy-space": 'apic_tenant',
+                    "domain-name": 'name_of_l3p',
+                    "internal-subnets": sorted(['192.168.0.0/16',
+                                                '192.169.0.0/16',
+                                                '169.254.0.0/16'])})
+            self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
+                'EXT-1', '200.0.0.10', None, '200.0.0.1/8', None, None,
+                None, 'aa:bb:cc:00:11:44', mtu=9000)
+            self.manager._write_vrf_file.reset_mock()
+            self.manager._write_endpoint_file.reset_mock()
+            self.manager._write_lbiface_file.reset_mock()
+            self.manager.snat_iptables.setup_snat_for_es.reset_mock()
 
-        # Bind another port on a same L3P, but subnets changed.
-        # Also change the host SNAT IP
-        port = self._port()
-        mapping = self._get_gbp_details(
-            l3_policy_id='newid', vrf_subnets=['192.170.0.0/16'],
-            host_snat_ips=[{'external_segment_name': 'EXT-1',
-                            'host_snat_ip': '200.0.0.11',
-                            'gateway_ip': '200.0.0.2',
-                            'prefixlen': 8}])
-        snat_ep_file['ip'] = ['200.0.0.11']
-        self.manager.declare_endpoint(port, mapping)
-        self.manager._write_vrf_file.assert_called_once_with(
-            'newid', {
-                "domain-policy-space": 'apic_tenant',
-                "domain-name": 'name_of_l3p',
-                "internal-subnets": sorted(['192.170.0.0/16',
-                                            '169.254.0.0/16'])})
-        self._check_call_list([mock.call('EXT-1', snat_ep_file)],
-            self.manager._write_endpoint_file.call_args_list,
-            False)
-        self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
-            'EXT-1', '200.0.0.11', None, '200.0.0.2/8', None, None,
-            None, 'foo-mac', mtu=9000)
+            # Bind another port on a same L3P, but subnets changed.
+            # Also change the host SNAT IP
+            port = self._port()
+            mapping = self._get_gbp_details(
+                l3_policy_id='newid', vrf_subnets=['192.170.0.0/16'],
+                host_snat_ips=[{'external_segment_name': 'EXT-1',
+                                'host_snat_ip': '200.0.0.11',
+                                'host_snat_mac': 'aa:bb:cc:00:11:44',
+                                'gateway_ip': '200.0.0.2',
+                                'prefixlen': 8}])
+            snat_ep_file['ip'] = ['200.0.0.11']
+            self.manager.declare_endpoint(port, mapping)
+            self.manager._write_vrf_file.assert_called_once_with(
+                'newid', {
+                    "domain-policy-space": 'apic_tenant',
+                    "domain-name": 'name_of_l3p',
+                    "internal-subnets": sorted(['192.170.0.0/16',
+                                                '169.254.0.0/16'])})
+            self._check_call_list([mock.call('EXT-1', snat_ep_file)],
+                self.manager._write_endpoint_file.call_args_list,
+                False)
+            self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
+                'EXT-1', '200.0.0.11', None, '200.0.0.2/8', None, None,
+                None, 'aa:bb:cc:00:11:44', mtu=9000)
 
     def test_port_segmentation_labels(self):
         mapping = self._get_gbp_details(
@@ -636,6 +648,14 @@ class TestEndpointFileManager(base.OpflexTestBase):
                     'virtual-ip': [{'ip': '192.169.0.1', 'mac': 'AA:AA'}],
                     "attestation": mapping['attestation']}),
             # SNAT endpoint
+            mock.call(
+                'EXT-1', {'mac': 'foo-mac', 'interface-name': 'foo-if',
+                          'ip': ['200.0.0.10'],
+                          'policy-space-name': 'nat-epg-tenant',
+                          'attributes': mock.ANY,
+                          'promiscuous-mode': True,
+                          'endpoint-group-name': 'profile_name|nat-epg-name',
+                          'uuid': mock.ANY}),
             mock.call(
                 'EXT-1', {'mac': 'foo-mac', 'interface-name': 'foo-if',
                           'ip': ['200.0.0.10'],
