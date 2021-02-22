@@ -22,6 +22,7 @@ from opflexagent import snat_iptables_manager
 from opflexagent.test import base
 from opflexagent.utils.ep_managers import endpoint_file_manager
 
+from neutron.agent.linux import ip_lib
 from neutron.api.rpc.callbacks import events
 from neutron.conf.agent import dhcp as dhcp_config
 from neutron.objects import trunk as trunk_obj
@@ -55,6 +56,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.addCleanup(self._purge_endpoint_dir)
         self.addCleanup(self.agent.bridge_manager.int_br.reset_mock)
         self.addCleanup(self.agent.bridge_manager.fabric_br.reset_mock)
+
+        ip_lib.IPDevice = mock.Mock()
 
     def _try_port_binding_args(self, net_type='net_type'):
         port = mock.Mock()
@@ -142,30 +145,39 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
     def test_port_unbound_snat_cleanup(self):
         self.agent.int_br = mock.Mock()
+        with mock.patch('neutron.agent.linux.ip_lib.IPDevice') as mock1:
+            instance = mock1.return_value
+            instance.link.address = 'foo-mac'
+            mapping = self._get_gbp_details()
+            self.agent.of_rpc.get_gbp_details.return_value = mapping
+            setup_snat = self.agent.ep_manager.snat_iptables.setup_snat_for_es
+            setup_snat.return_value = (
+                tuple(['foo-if', 'foo-mac']))
+            args_1 = self._try_port_binding_args('opflex')
+            args_1['port'].gbp_details = mapping
+            self.agent.try_port_binding(**args_1)
 
-        mapping = self._get_gbp_details()
-        self.agent.of_rpc.get_gbp_details.return_value = mapping
-        self.agent.ep_manager.snat_iptables.setup_snat_for_es.return_value = (
-            tuple(['foo-if', 'foo-mac']))
-        args_1 = self._try_port_binding_args('opflex')
-        args_1['port'].gbp_details = mapping
-        self.agent.try_port_binding(**args_1)
+            instance.link.address = 'aa:bb:cc:00:11:44'
+            args_2 = self._try_port_binding_args('opflex')
+            args_2['port'].gbp_details = mapping
 
-        args_2 = self._try_port_binding_args('opflex')
-        args_2['port'].gbp_details = mapping
-        self.agent.try_port_binding(**args_2)
-        self.assertEqual(
-            1,
-            self.agent.ep_manager.snat_iptables.setup_snat_for_es.call_count)
+            setup_snat.return_value = (
+                tuple(['foo-if', 'aa:bb:cc:00:11:44']))
+            self.agent.try_port_binding(**args_2)
+            self.assertEqual(
+                1,
+                self.agent.ep_manager.snat_iptables
+                    .setup_snat_for_es.call_count)
 
-        self.agent.port_unbound(args_1['port'].vif_id)
-        self.assertFalse(
-            self.agent.ep_manager.snat_iptables.cleanup_snat_for_es.called)
+            self.agent.port_unbound(args_1['port'].vif_id)
+            self.assertFalse(
+                self.agent.ep_manager.snat_iptables.cleanup_snat_for_es.called)
 
-        self.agent.port_unbound(args_2['port'].vif_id)
-        (self.agent.ep_manager.
-            snat_iptables.cleanup_snat_for_es.assert_called_with('EXT-1'))
-        self.agent.ep_manager._delete_endpoint_file.assert_called_with('EXT-1')
+            self.agent.port_unbound(args_2['port'].vif_id)
+            (self.agent.ep_manager.
+                snat_iptables.cleanup_snat_for_es.assert_called_with('EXT-1'))
+            self.agent.ep_manager._delete_endpoint_file.assert_called_with(
+                'EXT-1')
 
     def test_try_port_binding_no_mapping(self):
         self.agent.int_br = mock.Mock()
