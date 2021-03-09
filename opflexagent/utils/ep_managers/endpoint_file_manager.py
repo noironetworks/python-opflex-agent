@@ -15,6 +15,7 @@ import json
 import os
 
 import netaddr
+from neutron.agent.linux import ip_lib
 from neutron_lib import constants as n_constants
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
@@ -567,6 +568,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             nh = self.ext_seg_next_hop.setdefault(es, ExtSegNextHopInfo(es))
             if nh.from_config:
                 continue  # ignore auto-allocation if manually set
+            nh.next_hop_mac = hsi.get('host_snat_mac')
             ip = hsi.get('host_snat_ip')
             gw = ("%s/%s" % (hsi['gateway_ip'], hsi['prefixlen'])
                 if (hsi.get('gateway_ip') and hsi.get('prefixlen')) else None)
@@ -838,8 +840,13 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         # make sure we received host SNAT IP for the ES.
         if not nh.from_config and (es_name not in host_snat_ip_es):
             return (None, None)
+        mac_addr = nh.next_hop_mac
+        if self.snat_iptables.check_if_exists(es_name):
+            nh.next_hop_iface = self.snat_iptables._get_hash_for_es(es_name)
+            if_dev = ip_lib.IPDevice(nh.next_hop_iface, nh.next_hop_iface)
+            mac_addr = if_dev.link.address
         # create ep file for endpoint and snat tables
-        if not nh.next_hop_iface:
+        if (not nh.next_hop_iface) or (mac_addr != nh.next_hop_mac):
             try:
                 (nh.next_hop_iface, nh.next_hop_mac) = (
                     self.snat_iptables.setup_snat_for_es(es_name,
