@@ -19,4 +19,3 @@ chown:         CommandFilter, chown, root
 rm:            CommandFilter, rm, root
 ovs-vsctl:     CommandFilter, ovs-vsctl, root
 ovs-ofctl:     CommandFilter, ovs-ofctl, root
-brctl:         CommandFilter, brctl, root
