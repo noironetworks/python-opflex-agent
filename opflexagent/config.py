@@ -56,7 +56,7 @@ gbp_opts = [
                help=_("Set the mode of the agent to be used. Options are: "
                       "'opflex' (default), 'dvs', and 'dvs_no_binding'.")),
     cfg.StrOpt('opflex_notify_socket_path',
-               default='/var/run/opflex-agent-notif.sock',
+               default='/var/run/opflex_notify/opflex-agent-notif.sock',
                help=_("Path of the Opflex notification socket.")),
     cfg.IntOpt('nat_mtu_size', default=0,
                help=_("MTU size of the NAT namespace interface.")),
