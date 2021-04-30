@@ -774,7 +774,6 @@ class AsMetadataManager(object):
             "stopwaitsecs=10",
             "stdout_logfile=NONE",
             "stderr_logfile=NONE",
-            "user=neutron",
             "",
             "[program:opflex-ep-watcher]",
             "command=/usr/bin/opflex-ep-watcher " +
@@ -789,7 +788,6 @@ class AsMetadataManager(object):
             "stopwaitsecs=10",
             "stdout_logfile=NONE",
             "stderr_logfile=NONE",
-            "user=neutron",
             "",
             "[program:opflex-state-watcher]",
             "command=/usr/bin/opflex-state-watcher " +
@@ -804,7 +802,6 @@ class AsMetadataManager(object):
             "stopwaitsecs=10",
             "stdout_logfile=NONE",
             "stderr_logfile=NONE",
-            "user=neutron",
             "",
             "[include]",
             "files = %s/*.proxy %s/*.snat" % (MD_DIR, MD_DIR),
