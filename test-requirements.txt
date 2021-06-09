@@ -5,6 +5,7 @@ hacking>=1.1.0,<1.2.0 # Apache-2.0
 
 neutron
 
+cryptography<=3.1
 contextlib2>=0.5.4
 coverage!=4.4,>=4.0 # Apache-2.0
 flake8-import-order==0.12 # LGPLv3
