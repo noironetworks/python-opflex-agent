@@ -1,5 +1,8 @@
 language: python
 
+env:
+  - CRYPTOGRAPHY_DONT_BUILD_RUST=1
+           
 matrix:
   include:
     - python: 3.6
