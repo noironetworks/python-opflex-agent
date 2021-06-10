@@ -13,7 +13,13 @@ matrix:
         - TOX_ENV=py37
 
 before_install:
-  - python -m pip install --upgrade pip
+  - sudo apt-get update
+  - sudo apt-get -y install build-essential
+  - sudo apt-get -y install libssl-dev
+  - sudo apt-get -y install libffi-dev
+  - sudo apt-get -y install python3-dev
+  - sudo apt-get -y install cargo
+    
 
 install:
   - pip install tox
