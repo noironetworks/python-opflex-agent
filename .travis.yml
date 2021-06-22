@@ -1,18 +1,22 @@
 language: generic
 
+before_install:
+  - wget https://www.python.org/ftp/python/3.6.7/Python-3.6.7.tgz
+  - tar -xvf Python-3.6.7.tgz
+  - cd Python-3.6.7
+  - ./configure
+  - make
+  - sudo make install
+  - python --version
+
 matrix:
   include:
     - python: 3.6
-      before_install:
-        - wget https://www.python.org/ftp/python/3.6.7/Python-3.6.7.tgz
-        - tar -xvf Python-3.6.7.tgz
-        - cd Python-3.6.7
-        - ./configure
-        - make
-        - sudo make install
-        - python --version  
       env:
         - TOX_ENV=py36
+    - python: 3.7
+      env:
+        - TOX_ENV=py37
 
 install:
   - pip install tox
