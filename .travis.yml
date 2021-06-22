@@ -7,7 +7,6 @@ before_install:
   - ./configure
   - make
   - sudo make install
-  - python --version
 
 matrix:
   include:
