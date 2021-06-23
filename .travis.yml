@@ -4,7 +4,7 @@ matrix:
   include:
     - python: 3.6
       before_install:
-        - pip333333333333333333333333333333333 install --upgrade pip
+        - pip3 install --upgrade pip
       env:
         - TOX_ENV=py36      
     - python: 3.7
