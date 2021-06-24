@@ -1,14 +1,46 @@
-language: python
+language: generic
 
 matrix:
   include:
+    - python: 3.6
+      before_install:
+        - wget https://www.python.org/ftp/python/3.6.7/Python-3.6.7.tgz
+        - tar -xvf Python-3.6.7.tgz
+        - cd Python-3.6.7
+        - ./configure
+        - make
+        - sudo make install
+      env:
+        - TOX_ENV=py36
     - python: 3.7
+      before_install:
+        - wget https://www.python.org/ftp/python/3.7.9/Python-3.7.9.tgz
+        - tar -xvf Python-3.7.9.tgz
+        - cd Python-3.7.9
+        - ./configure
+        - make
+        - sudo make install
+        - pip install pyflakes
       env:
         - TOX_ENV=pep8
     - python: 3.7
+      before_install:
+         - wget https://www.python.org/ftp/python/3.7.9/Python-3.7.9.tgz
+         - tar -xvf Python-3.7.9.tgz
+         - cd Python-3.7.9
+         - ./configure
+         - make
+         - sudo make install
       env:
         - TOX_ENV=py37
     - python: 3.8
+      before_install:
+         - wget https://www.python.org/ftp/python/3.8.7/Python-3.8.7.tgz
+         - tar -xvf Python-3.8.7.tgz
+         - cd Python-3.8.7
+         - ./configure
+         - make
+         - sudo make install
       env:
         - TOX_ENV=py38
 
