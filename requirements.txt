@@ -4,3 +4,4 @@
 
 os-vif!=1.8.0,>=1.7.0 # Apache-2.0
 pyinotify
+python-setproctitle
