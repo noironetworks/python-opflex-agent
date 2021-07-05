@@ -20,7 +20,7 @@ matrix:
         - ./configure
         - make
         - sudo make install
-        - pip install pyflakes
+        - pip install pyflakes==2.3.1
       env:
         - TOX_ENV=pep8
     - python: 3.7
