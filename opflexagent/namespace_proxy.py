@@ -17,7 +17,6 @@ import json
 import httplib2
 from oslo_config import cfg
 from oslo_log import log as logging
-import setproctitle
 import six
 import six.moves.urllib.parse as urlparse
 import webob
@@ -157,7 +156,6 @@ class ProxyDaemon(daemon.Daemon):
         self.host = host
 
     def run(self):
-        self._parent_proctitle = setproctitle.getproctitle()
         handler = NetworkMetadataProxyHandler(
             self.network_id,
             self.router_id,
