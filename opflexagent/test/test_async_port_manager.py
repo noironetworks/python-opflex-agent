@@ -91,14 +91,15 @@ class TestAsyncPortManager(base.BaseTestCase):
             set(self.manager.pending_requests_by_device_id.keys()))
         self.assertEqual(
             set([x['request_id'] for x in
-                 self.manager.pending_requests_by_device_id.values()]),
+                 list(self.manager.pending_requests_by_device_id.values())]),
             set(self.manager.pending_requests_by_request_id.keys()))
         (self.manager.of_rpc.request_endpoint_details_list.
             assert_called_once_with(
                 self.manager.context, agent_id=self.manager.agent_id,
                 host=self.manager.host,
                 requests=self._sort_requests(
-                    self.manager.pending_requests_by_request_id.values())))
+                    list(self.manager.pending_requests_by_request_id.
+                         values()))))
 
         self.manager.of_rpc.reset_mock()
         # The updates expired
