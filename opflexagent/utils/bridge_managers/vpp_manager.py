@@ -63,7 +63,7 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
 
     def scan_ports(self, registered_ports, updated_ports=None, em=None):
         cur_tag_dict = self.get_vif_port_set()
-        cur_ports = {x for x, y in cur_tag_dict.items()}
+        cur_ports = {x for x, y in list(cur_tag_dict.items())}
         self.int_br_device_count = len(cur_ports)
         port_info = {'current': cur_ports}
         updated_ports = updated_ports or set()
@@ -136,7 +136,7 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
         """
         vapi = VPPApi(LOG, 'gbp-agent')
         vhtag = vapi.get_vhost_tag_dicts()
-        uuid_filtered = {x.split('|')[0]: y for x, y in vhtag.items()}
+        uuid_filtered = {x.split('|')[0]: y for x, y in list(vhtag.items())}
         return uuid_filtered
 
     @staticmethod

@@ -65,7 +65,7 @@ class TestOpflexRpc(base.OpflexTestBase):
         self.callback.gbp_driver.request_endpoint_details = mock.Mock(
             return_value=result)
         self.callback.request_endpoint_details_list(
-            mock.ANY, host='h1', requests=range(3))
+            mock.ANY, host='h1', requests=list(range(3)))
         (self.callback.agent_notifier.opflex_endpoint_update.
             assert_called_once_with(mock.ANY, [result] * 3, host='h1'))
 
@@ -75,7 +75,7 @@ class TestOpflexRpc(base.OpflexTestBase):
         self.callback.gbp_driver.request_endpoint_details = mock.Mock(
             return_value=result)
         self.callback.request_endpoint_details_list(
-            mock.ANY, host='h1', requests=range(3))
+            mock.ANY, host='h1', requests=list(range(3)))
         self.assertFalse(
             self.callback.agent_notifier.opflex_endpoint_update.called)
 
@@ -84,7 +84,7 @@ class TestOpflexRpc(base.OpflexTestBase):
         self.callback.gbp_driver.request_vrf_details = mock.Mock(
             return_value=result)
         self.callback.request_vrf_details_list(
-            mock.ANY, host='h1', requests=range(3))
+            mock.ANY, host='h1', requests=list(range(3)))
         (self.callback.agent_notifier.opflex_vrf_update.
             assert_called_once_with(mock.ANY, [result] * 3, host='h1'))
 
@@ -94,6 +94,6 @@ class TestOpflexRpc(base.OpflexTestBase):
         self.callback.gbp_driver.request_vrf_details = mock.Mock(
             return_value=result)
         self.callback.request_vrf_details_list(
-            mock.ANY, host='h1', requests=range(3))
+            mock.ANY, host='h1', requests=list(range(3)))
         self.assertFalse(
             self.callback.agent_notifier.opflex_vrf_update.called)
