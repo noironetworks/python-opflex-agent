@@ -38,7 +38,7 @@ class RequestMap(object):
         return self._pending_requests_by_request_id.get(request_id)
 
     def get_requests(self):
-        return self._pending_requests_by_request_id.values()
+        return list(self._pending_requests_by_request_id.values())
 
     def update_request(self, request):
         # Add or replace
@@ -89,7 +89,7 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
         response_by_device_id_copy = self.response_by_device_id
         self.response_by_device_id = {}
         try:
-            for details in response_by_device_id_copy.values():
+            for details in list(response_by_device_id_copy.values()):
                 # Context switch might happen here
                 if not self.gbp_agent.treat_devices_added_or_updated(details):
                     skipped.append(details['device'])

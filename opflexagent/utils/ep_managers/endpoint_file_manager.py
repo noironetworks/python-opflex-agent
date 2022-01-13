@@ -182,7 +182,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 if port.network_type == n_constants.TYPE_VLAN else True)
             mapping_copy['promiscuous_mode'] = False
             # Map to file based on the AAP with a MAC address
-            for mac, aaps in mac_aap_map.items():
+            for mac, aaps in list(mac_aap_map.items()):
                 # Get extra details for this mac (if any)
                 extra_details = mapping.get('extra_details', {}).get(mac,
                                                                      {})
@@ -653,7 +653,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             return (val and '/' in val[0]) and val[0] or None
 
         self.ext_seg_next_hop = {}
-        for es_name, es_info in es_cfg.items():
+        for es_name, es_info in list(es_cfg.items()):
             nh = ExtSegNextHopInfo(es_name)
             nh.from_config = True
             for key, value in es_info:
@@ -732,7 +732,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         self._associate_port_with_es(port_id, port_mac, new_es)
         self._dissociate_port_from_es(port_id, port_mac, old_es - new_es)
 
-        for ip_ver in es_using_int_fip.keys():
+        for ip_ver in list(es_using_int_fip.keys()):
             fip_alloc = self._get_int_fips(ip_ver, port_id, port_mac)
             for es in list(fip_alloc.keys()):
                 if es not in es_using_int_fip[ip_ver]:
@@ -751,7 +751,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
     def _get_es_for_port(self, port_id, port_mac):
         """ Return ESs for which there is a internal FIP allocated """
         es = set(self._get_int_fips(4, port_id, port_mac).keys())
-        es.update(self._get_int_fips(6, port_id, port_mac).keys())
+        es.update(list(self._get_int_fips(6, port_id, port_mac).keys()))
         return es
 
     def _alloc_int_fip(self, ip_ver, port_id, port_mac, es, ip):
@@ -773,22 +773,22 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 (port_id, port_mac), {}).get(es, {}).pop(ip, None)
             fips = (fips and [fips] or [])
         elif es and port_mac:
-            fips = self.int_fip_alloc[ip_ver].get(
-                (port_id, port_mac), {}).pop(es, {}).values()
+            fips = list(self.int_fip_alloc[ip_ver].get(
+                (port_id, port_mac), {}).pop(es, {}).values())
         else:
             if port_mac:
-                fip_map_list = self.int_fip_alloc[ip_ver].pop(
-                    (port_id, port_mac), {}).values()
+                fip_map_list = list(self.int_fip_alloc[ip_ver].pop(
+                    (port_id, port_mac), {}).values())
             else:
                 fip_map_list = []
                 for id_mac in list(self.int_fip_alloc[ip_ver].keys()):
                     if id_mac[0] == port_id:
                         fip_map_list.extend(
-                            self.int_fip_alloc[ip_ver].pop(
-                                id_mac, {}).values())
+                            list(self.int_fip_alloc[ip_ver].pop(
+                                id_mac, {}).values()))
             fips = []
             for x in fip_map_list:
-                fips.extend(x.values())
+                fips.extend(list(x.values()))
         for float_ip in fips:
             self.int_fip_pool[ip_ver].add(float_ip)
         LOG.debug("Released internal v%(version)d FIP(s) %(fip)s "
@@ -804,7 +804,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
     def _dissociate_port_from_es(self, port_id, port_mac=None, ess=None):
         if ess is None:
-            es_list = self.es_port_dict.keys()
+            es_list = list(self.es_port_dict.keys())
         else:
             es_list = ess
         for es in list(es_list):
