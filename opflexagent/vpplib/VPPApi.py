@@ -167,7 +167,7 @@ class VPPApi(object):
         for idx, details in enumerate(reply):
             # noinspection PyProtectedMember
             data = details._asdict()
-            for i in data.items():
+            for i in list(data.items()):
                 key = i[0]
                 value = i[1]
                 if type(value) is str:
@@ -195,7 +195,7 @@ class VPPApi(object):
 
         # noinspection PyProtectedMember
         data = reply._asdict()
-        for i in data.items():
+        for i in list(data.items()):
             key = i[0]
             value = i[1]
             if type(value) is str:
@@ -237,7 +237,7 @@ class VPPApi(object):
         for idx, details in enumerate(reply):
             # noinspection PyProtectedMember
             data = details._asdict()
-            for i in data.items():
+            for i in list(data.items()):
                 key = i[0]
                 value = i[1]
                 if type(value) is str:
@@ -263,7 +263,7 @@ class VPPApi(object):
         for idx, details in enumerate(reply):
             # noinspection PyProtectedMember
             data = details._asdict()
-            for i in data.items():
+            for i in list(data.items()):
                 key = i[0]
                 value = i[1]
                 if type(value) is str:
@@ -307,7 +307,7 @@ class VPPApi(object):
         vints = json.loads(vhost_data)
 
         # Get the interface associated with the socket
-        vint = filter(lambda x: x['sock_filename'] == socket_filename, vints)
+        vint = [x for x in vints if x['sock_filename'] == socket_filename]
 
         # Check and make sure an interface is associated with the socket
         if len(vint) == 0:
@@ -362,7 +362,7 @@ class VPPApi(object):
         ints = json.loads(mac_data)
 
         # Get the interface associated with the socket
-        virt_ints = filter(lambda x: 'Virtual' in x['interface_name'], ints)
+        virt_ints = [x for x in ints if 'Virtual' in x['interface_name']]
         mac_set = set()
         for virt_int in virt_ints:
             mac_set.add(virt_int['l2_address'])
@@ -491,7 +491,7 @@ class VPPApi(object):
             ints = json.loads(rep)
 
             # Get the interface associated with the socket
-            vints = filter(lambda x: 'Virtual' in x['interface_name'], ints)
+            vints = [x for x in ints if 'Virtual' in x['interface_name']]
             port_name = ''
             for vint in vints:
                 if vint['l2_address'] == mac:

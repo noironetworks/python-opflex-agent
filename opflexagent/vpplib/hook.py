@@ -181,8 +181,8 @@ class StepHook(PollHook):
             self.skip_count += 1
             return True
         else:
-            print("%d API/CLI calls skipped in specified stack "
-                  "frame" % self.skip_count)
+            print(("%d API/CLI calls skipped in specified stack "
+                  "frame" % self.skip_count))
             self.skip_count = 0
             self.skip_stack = None
             self.skip_num = None
@@ -194,7 +194,8 @@ class StepHook(PollHook):
         counter = 0
         stack = traceback.extract_stack()
         for e in stack:
-            print('%02d.\t%s\t%s:%d\t[%s]' % (counter, e[2], e[0], e[1], e[3]))
+            print(('%02d.\t%s\t%s:%d\t[%s]' %
+                   (counter, e[2], e[0], e[1], e[3])))
             counter += 1
         print(single_line_delim)
         print("You can enter a number of stack frame chosen from above")
@@ -222,10 +223,10 @@ class StepHook(PollHook):
     def before_cli(self, cli):
         """ Wait for ENTER before executing CLI """
         if self.skip():
-            print("Skip pause before executing CLI: %s" % cli)
+            print(("Skip pause before executing CLI: %s" % cli))
         else:
             print(double_line_delim)
-            print("Test paused before executing CLI: %s" % cli)
+            print(("Test paused before executing CLI: %s" % cli))
             print(single_line_delim)
             self.user_input()
         super(StepHook, self).before_cli(cli)
@@ -233,12 +234,12 @@ class StepHook(PollHook):
     def before_api(self, api_name, api_args):
         """ Wait for ENTER before executing API """
         if self.skip():
-            print("Skip pause before executing API: %s (%s)"
-                  % (api_name, api_args))
+            print(("Skip pause before executing API: %s (%s)"
+                  % (api_name, api_args)))
         else:
             print(double_line_delim)
-            print("Test paused before executing API: %s (%s)"
-                  % (api_name, api_args))
+            print(("Test paused before executing API: %s (%s)"
+                  % (api_name, api_args)))
             print(single_line_delim)
             self.user_input()
         super(StepHook, self).before_api(api_name, api_args)

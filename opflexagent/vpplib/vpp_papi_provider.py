@@ -64,7 +64,7 @@ class VppPapiProvider(object):
     @property hook: hook object providing before and after api/cli hooks
     """
 
-    _zero, _negative = range(2)
+    _zero, _negative = list(range(2))
 
     def __init__(self, name, shm_prefix=None, read_timeout=3):
         self.LOG = logging.getLogger(__name__)

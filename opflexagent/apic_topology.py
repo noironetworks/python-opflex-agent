@@ -157,7 +157,7 @@ class ApicTopologyAgent(manager.Manager):
                     curr_peers.pop(interface)
 
             # Any interface still in curr_peers need to be deleted
-            for peer in curr_peers.values():
+            for peer in list(curr_peers.values()):
                 LOG.info('reporting peer removal: %s', peer)
                 self.service_agent.update_link(
                     context, peer[0], peer[1], None, 0, 0, 0, 0, '')
