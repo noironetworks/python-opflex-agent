@@ -601,11 +601,11 @@ def create_agent_config_map(conf):
     es_info = {}
     parsed_files = _parse_files(cfg.CONF.config_file)
     for parsed_file in parsed_files:
-        for parsed_item in parsed_file.keys():
+        for parsed_item in list(parsed_file.keys()):
             if parsed_item.startswith('opflex_external_segment:'):
                 es_name = parsed_item.split(':', 1)[1]
                 if es_name:
-                    es_info[es_name] = parsed_file[parsed_item].items()
+                    es_info[es_name] = list(parsed_file[parsed_item].items())
     agent_config['external_segment'] = es_info
     try:
         agent_config['dhcp_domain'] = conf.dhcp_domain
