@@ -62,7 +62,7 @@ class OpflexTypeDriver(helpers.BaseTypeDriver):
             msg = _("physical_network required for opflex provider network")
             raise exc.InvalidInput(error_message=msg)
 
-        for key, value in segment.items():
+        for key, value in list(segment.items()):
             if value and key not in [api.NETWORK_TYPE,
                                      api.PHYSICAL_NETWORK,
                                      api.MTU]:
