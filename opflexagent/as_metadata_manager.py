@@ -764,7 +764,7 @@ class AsMetadataManager(object):
             "strip_ansi = false",
             "",
         ])
-        if not self.disable_proxy:
+if not self.disable_proxy:
             config_str += "\n".join([
                 "[program:metadata-agent]",
                 "command=/usr/bin/neutron-metadata-agent " +
