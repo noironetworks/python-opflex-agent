@@ -85,6 +85,8 @@ gbp_opts = [
     cfg.BoolOpt('disable_security_group_for_nested_mode', default=False,
                 help=("Disable the security group configuration for ports "
                       "created under nested mode networks.")),
+    cfg.BoolOpt('disable_metadata_proxy', default=False,
+                help=("Disable the metadata proxy on Controller nodes.")),
 ]
 
 vpp_opts = [
