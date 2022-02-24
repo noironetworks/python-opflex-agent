@@ -399,6 +399,7 @@ class StateWatcher(FileWatcher):
         self.mgr = AsMetadataManager(LOG, root_helper)
         self.svcfile = "%s/%s" % (MD_DIR, STATE_FILENAME_SVC)
         self.svc_ovsport_mac = self.mgr.get_asport_mac()[:17]
+        self.disable_proxy = cfg.CONF.OPFLEX.disable_metadata_proxy
 
         stfiledir = MD_DIR
         stextensions = STATE_FILE_EXTENSION
@@ -489,17 +490,18 @@ class StateWatcher(FileWatcher):
         asfilename = "%s/%s" % (AS_MAPPING_DIR, asfilename)
         write_jsonfile(asfilename, asvc)
 
-        proxyfilename = PROXY_FILE_NAME_FORMAT % asvc["uuid"]
-        proxyfilename = "%s/%s" % (MD_DIR, proxyfilename)
-        proxystr = self.proxyconfig(alloc)
-        try:
-            with open(proxyfilename, "w") as f:
-                f.write(proxystr)
-            pidfile = PID_FILE_NAME_FORMAT % asvc["uuid"]
-            self.mgr.sh("rm -f %s" % pidfile)
-        except Exception as e:
-            LOG.warn("EPwatcher: Exception in writing proxy file: %s",
-                     str(e))
+        if not self.disable_proxy:
+            proxyfilename = PROXY_FILE_NAME_FORMAT % asvc["uuid"]
+            proxyfilename = "%s/%s" % (MD_DIR, proxyfilename)
+            proxystr = self.proxyconfig(alloc)
+            try:
+                with open(proxyfilename, "w") as f:
+                    f.write(proxystr)
+                pidfile = PID_FILE_NAME_FORMAT % asvc["uuid"]
+                self.mgr.sh("rm -f %s" % pidfile)
+            except Exception as e:
+                LOG.warn("EPwatcher: Exception in writing proxy file: %s",
+                         str(e))
 
     def proxyconfig(self, alloc):
         duuid = alloc["uuid"]
@@ -581,6 +583,7 @@ class AsMetadataManager(object):
         self.bridge_manager = opflexagent_utils.get_bridge_manager(
                               cfg.CONF.OPFLEX)
         self.initialized = False
+        self.disable_proxy = cfg.CONF.OPFLEX.disable_metadata_proxy
 
     def init_all(self):
         self.init_host()
@@ -760,21 +763,26 @@ class AsMetadataManager(object):
             "nocleanup = false",
             "strip_ansi = false",
             "",
-            "[program:metadata-agent]",
-            "command=/usr/bin/neutron-metadata-agent " +
-            conf('/usr/share/neutron/neutron-dist.conf',
-                 '/etc/neutron/neutron.conf',
-                 '/etc/neutron/metadata_agent.ini',
-                 '/etc/neutron/conf.d/neutron-metadata-agent') +
-            "--log-file /var/log/neutron/metadata-agent.log",
-            "exitcodes=0,2",
-            "stopasgroup=true",
-            "startsecs=10",
-            "startretries=3",
-            "stopwaitsecs=10",
-            "stdout_logfile=NONE",
-            "stderr_logfile=NONE",
-            "",
+        ])
+        if not self.disable_proxy:
+            config_str = "\n".join([
+                "[program:metadata-agent]",
+                "command=/usr/bin/neutron-metadata-agent " +
+                conf('/usr/share/neutron/neutron-dist.conf',
+                     '/etc/neutron/neutron.conf',
+                     '/etc/neutron/metadata_agent.ini',
+                     '/etc/neutron/conf.d/neutron-metadata-agent') +
+                "--log-file /var/log/neutron/metadata-agent.log",
+                "exitcodes=0,2",
+                "stopasgroup=true",
+                "startsecs=10",
+                "startretries=3",
+                "stopwaitsecs=10",
+                "stdout_logfile=NONE",
+                "stderr_logfile=NONE",
+                "",
+            ])
+        config_str = "\n".join([
             "[program:opflex-ep-watcher]",
             "command=/usr/bin/opflex-ep-watcher " +
             conf('/usr/share/neutron/neutron-dist.conf',
