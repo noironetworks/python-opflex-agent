@@ -106,6 +106,10 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.deleted_ports = set()
         # Stores VRF update notifications
         self.updated_vrf = set()
+        # Stores the port IDs whose binding has been deactivated
+        self.deactivated_bindings = set()
+        # Stores the port IDs whose binding has been activated
+        self.activated_bindings = set()
         self.setup_rpc()
         self.local_ip = self.bridge_manager.get_local_ip()
         self.polling_interval = agent_conf.polling_interval
@@ -156,12 +160,42 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         except Exception:
             LOG.exception("Failed reporting state!")
 
+    def binding_deactivate(self, context, **kwargs):
+        if kwargs.get('host') != self.host:
+            return
+        port_id = kwargs.get('port_id')
+        self.deactivated_bindings.add(port_id)
+
+    def binding_activate(self, context, **kwargs):
+        if kwargs.get('host') != self.host:
+            return
+        port_id = kwargs.get('port_id')
+        self.activated_bindings.add(port_id)
+
+    def process_deactivated_bindings(self, port_info):
+        # don't try to deactivate bindings for removed ports since they are
+        # already gone
+        if 'removed' in port_info:
+            self.deactivated_bindings -= port_info['removed']
+        while self.deactivated_bindings:
+            self.deactivated_bindings.pop()
+            
+    def process_activated_bindings(self, port_info, activated_bindings_copy):
+        # Compute which ports for activated bindings are still present...
+        activated_bindings_copy &= port_info['current']
+        # ...and treat them as just added
+        if port_info.get('added'):
+            port_info['added'] |= activated_bindings_copy
+        else:
+            port_info['added'] = activated_bindings_copy
+
     def setup_rpc(self):
         self.agent_id = 'opflex-agent-%s' % cfg.CONF.host
         self.context = context.get_admin_context_without_session()
         # Set GBP rpc API
         self.of_rpc = rpc.GBPServerRpcApi(rpc.TOPIC_OPFLEX)
         self.plugin_rpc = ovs.OVSPluginApi(topics.PLUGIN)
+        self.plugin_rpc.register_legacy_notification_callbacks(self)
         self.sg_plugin_rpc = sg_rpc.SecurityGroupServerRpcApi(topics.PLUGIN)
         self.sg_agent = agent_sg_rpc.SecurityGroupAgentRpc(
             self.context, self.sg_plugin_rpc, defer_refresh_firewall=True)
@@ -183,6 +217,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 self.updated_ports or
                 self.deleted_ports or
                 self.updated_vrf or
+                self.deactivated_bindings or
+                self.activated_bindings or
                 self.sg_agent.firewall_refresh_needed())
 
     def _info_has_changes(self, port_info):
@@ -491,6 +527,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # between these two statements, this will be thread-safe
         updated_ports_copy = self.updated_ports
         deleted_ports_copy = self.deleted_ports
+        activated_bindings_copy = self.activated_bindings
+        self.activated_bindings = set()
         updated_vrf_copy = self.updated_vrf
         self.updated_vrf = set()
         self.deleted_ports = set()
@@ -523,6 +561,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                           port_info)
                 # If treat devices fails - must resync with plugin
                 sync = self.process_network_ports(port_info, ovs_restarted)
+                self.process_deactivated_bindings(port_info)
+                self.process_activated_bindings(port_info,
+                                                activated_bindings_copy)
                 LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
                           "ports processed. Elapsed:%(elapsed).3f",
                           {'iter_num': self.iter_num,
