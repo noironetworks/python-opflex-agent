@@ -225,14 +225,14 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
     def test_binding_deactivate(self):
         self.agent.binding_deactivate('unused_context', port_id='id',
-                                          host='host1')
+                                      host='host1')
         self.assertEqual(set(['id']), self.agent.deactivated_bindings)
         self.agent.process_deactivated_bindings(port_info={})
         self.assertEqual(set(), self.agent.deactivated_bindings)
-    
+
     def test_binding_deactivate_removed_port(self):
         self.agent.binding_deactivate('unused_context', port_id='id',
-                                        host='host1')
+                                      host='host1')
         self.assertEqual(set(['id']), self.agent.deactivated_bindings)
         self.agent.process_deactivated_bindings(
             port_info={'removed': {'id', }})
