@@ -179,7 +179,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             self.deactivated_bindings -= port_info['removed']
         while self.deactivated_bindings:
             self.deactivated_bindings.pop()
-            
+
     def process_activated_bindings(self, port_info, activated_bindings_copy):
         # Compute which ports for activated bindings are still present...
         activated_bindings_copy &= port_info['current']
