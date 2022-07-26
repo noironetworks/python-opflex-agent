@@ -26,6 +26,7 @@ import netaddr
 import pyinotify
 from six.moves import queue as Queue
 
+from neutron.agent.common import ip_lib
 from neutron.common import config as common_config
 from neutron.common import utils
 from neutron.conf.agent import common as config
@@ -667,25 +668,28 @@ class AsMetadataManager(object):
         time.sleep(30)
 
     def add_default_route(self, nexthop):
-        self.sh("ip netns exec %s ip route add default via %s" %
-                (SVC_NS, nexthop))
+        ip_lib.IPDevice(None, SVC_NS).route.add_gateway(
+            nexthop, metric=None, table="default")
 
     def has_ip(self, ipaddr):
-        outp = self.sh("ip netns exec %s ip addr show dev %s" %
-                (SVC_NS, SVC_NS_PORT))
-        return 'inet %s' % (ipaddr, ) in outp
+        ipDevice = ip_lib.IPWrapper(SVC_NS).get_device_by_ip(ipaddr)
+        if ipDevice is None:
+            return False
+        if ipDevice.name == SVC_NS_PORT:
+            return True
+        return False
 
     def add_ip(self, ipaddr):
         if self.has_ip(ipaddr):
             return
-        self.sh("ip netns exec %s ip addr add %s/%s dev %s" %
-                (SVC_NS, ipaddr, SVC_IP_CIDR, SVC_NS_PORT))
+        ip_lib.IPDevice(SVC_NS_PORT, SVC_NS).addr.add("%s/%s" %
+        (ipaddr, SVC_IP_CIDR))
 
     def del_ip(self, ipaddr):
         if not self.has_ip(ipaddr):
             return
-        self.sh("ip netns exec %s ip addr del %s/%s dev %s" %
-                (SVC_NS, ipaddr, SVC_IP_CIDR, SVC_NS_PORT))
+        ip_lib.IPDevice(SVC_NS_PORT, SVC_NS).addr.delete("%s/%s" %
+        (ipaddr, SVC_IP_CIDR))
 
     def get_asport_mac(self):
         return self.sh(
@@ -703,20 +707,17 @@ class AsMetadataManager(object):
         self.sh("chown %s %s" % (MD_DIR_OWNER, MD_DIR))
 
         # Create namespace, if needed
-        ns = self.sh("ip netns | grep %s ; true" % SVC_NS)
-        if not ns:
-            self.sh("ip netns add %s" % SVC_NS)
+        ip_lib.IPWrapper().ensure_namespace(SVC_NS)
 
         # Create ports, if needed
         port = self.sh("ip link show %s 2>&1 | grep qdisc ; true" %
                        SVC_OVS_PORT)
         if not port:
-            self.sh("ip link add %s type veth peer name %s" %
-                    (SVC_NS_PORT, SVC_OVS_PORT))
-            self.sh("ip link set dev %s up" % SVC_OVS_PORT)
-            self.sh("ip link set %s netns %s" % (SVC_NS_PORT, SVC_NS))
-            self.sh("ip netns exec %s ip link set dev %s up" %
-                    (SVC_NS, SVC_NS_PORT))
+            ip_lib.IPWrapper().add_veth(SVC_NS_PORT, SVC_OVS_PORT)
+            ip_lib.IPDevice(SVC_OVS_PORT, None).link.set_up()
+            ip_lib.IPDevice(SVC_NS_PORT, SVC_NS).link.set_netns(
+                SVC_NS)
+            ip_lib.IPDevice(SVC_NS_PORT, SVC_NS).link.set_up()
             self.add_ip(SVC_IP_DEFAULT)
             self.add_default_route(SVC_NEXTHOP)
             self.sh("ethtool --offload %s tx off" % SVC_OVS_PORT)
