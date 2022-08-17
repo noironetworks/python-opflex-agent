@@ -27,6 +27,7 @@ import pyinotify
 from six.moves import queue as Queue
 
 from neutron.agent.common import ip_lib
+from neutron.agent.common import utils as agent_utils
 from neutron.common import config as common_config
 from neutron.common import utils
 from neutron.conf.agent import common as config
@@ -654,17 +655,22 @@ class AsMetadataManager(object):
 
     def start_supervisor(self):
         self.stop_supervisor()
-        self.sh("supervisord -c %s" % self.md_filename)
+        agent_utils.execute(["supervisord", "-c", self.md_filename],
+            run_as_root=True, privsep_exec=True)
 
     def update_supervisor(self):
-        self.sh("supervisorctl -c %s reread" % self.md_filename)
-        self.sh("supervisorctl -c %s update" % self.md_filename)
+        agent_utils.execute(["supervisorctl", "-c", self.md_filename,
+            "reread"], run_as_root=True, privsep_exec=True)
+        agent_utils.execute(["supervisorctl", "-c", self.md_filename,
+            "update"], run_as_root=True, privsep_exec=True)
 
     def reload_supervisor(self):
-        self.sh("supervisorctl -c %s reload" % self.md_filename)
+        agent_utils.execute(["supervisorctl", "-c", self.md_filename,
+            "reload"], run_as_root=True, privsep_exec=True)
 
     def stop_supervisor(self):
-        self.sh("supervisorctl -c %s shutdown" % self.md_filename)
+        agent_utils.execute(["supervisorctl", "-c", self.md_filename,
+            "shutdown"], run_as_root=True, privsep_exec=True)
         time.sleep(30)
 
     def add_default_route(self, nexthop):
@@ -692,27 +698,32 @@ class AsMetadataManager(object):
         (ipaddr, SVC_IP_CIDR))
 
     def get_asport_mac(self):
-        return self.sh(
-            "ip netns exec %s ip link show %s | "
-            "gawk -e '/link\/ether/ {print $2}'" %
-            (SVC_NS, SVC_NS_PORT))
+        return agent_utils.execute(["ip", "netns", "exec", SVC_NS,
+            "ip", "link", "show", SVC_NS_PORT,
+            "|", "gawk", "-e", "'/link\/ether/ {print $2}'"],
+            check_exit_code=False, log_fail_as_error=True)
 
     def init_host(self):
         # Create required directories
-        self.sh("mkdir -p %s" % PID_DIR)
-        self.sh("rm -f %s/*.pid" % PID_DIR)
-        self.sh("chown %s %s" % (MD_DIR_OWNER, PID_DIR))
-        self.sh("chown %s %s/.." % (MD_DIR_OWNER, PID_DIR))
-        self.sh("mkdir -p %s" % MD_DIR)
-        self.sh("chown %s %s" % (MD_DIR_OWNER, MD_DIR))
+        agent_utils.execute(["mkdir", "-p", PID_DIR], run_as_root=True,
+            privsep_exec=True)
+        agent_utils.execute(["rm", "-f", "%s/*.pid" % PID_DIR],
+            run_as_root=True, privsep_exec=True)
+        agent_utils.execute(["chown", MD_DIR_OWNER, PID_DIR],
+            run_as_root=True, privsep_exec=True)
+        agent_utils.execute(["chown", MD_DIR_OWNER, "%s/.." % PID_DIR],
+            run_as_root=True, privsep_exec=True)
+        agent_utils.execute(["mkdir", "-p", MD_DIR],
+            run_as_root=True, privsep_exec=True)
+        agent_utils.execute(["chown", MD_DIR_OWNER, MD_DIR],
+            run_as_root=True, privsep_exec=True)
 
         # Create namespace, if needed
         ip_lib.IPWrapper().ensure_namespace(SVC_NS)
 
         # Create ports, if needed
-        port = self.sh("ip link show %s 2>&1 | grep qdisc ; true" %
-                       SVC_OVS_PORT)
-        if not port:
+        port_exists = ip_lib.IPDevice(SVC_OVS_PORT, None).exists()
+        if port_exists is False:
             ip_lib.IPWrapper().add_veth(SVC_NS_PORT, SVC_OVS_PORT)
             ip_lib.IPDevice(SVC_OVS_PORT, None).link.set_up()
             ip_lib.IPDevice(SVC_NS_PORT, SVC_NS).link.set_netns(
@@ -720,9 +731,12 @@ class AsMetadataManager(object):
             ip_lib.IPDevice(SVC_NS_PORT, SVC_NS).link.set_up()
             self.add_ip(SVC_IP_DEFAULT)
             self.add_default_route(SVC_NEXTHOP)
-            self.sh("ethtool --offload %s tx off" % SVC_OVS_PORT)
-            self.sh("ip netns exec %s ethtool --offload %s tx off" %
-                    (SVC_NS, SVC_NS_PORT))
+            agent_utils.execute(["ethtool", "--offload", SVC_OVS_PORT,
+                "tx", "off"],
+                run_as_root=True, privsep_exec=True)
+            agent_utils.execute(["ip", "netns", "exec", SVC_NS, "ethtool",
+                "--offload", SVC_NS_PORT, "tx", "off"],
+                run_as_root=True, privsep_exec=True)
         self.bridge_manager.plug_metadata_port(self.sh, SVC_OVS_PORT)
 
     def init_supervisor(self):
