@@ -105,6 +105,12 @@ class TestAsMetadataManager(base.BaseTestCase):
                 as_metadata_manager.SVC_NS_PORT,
                 as_metadata_manager.SVC_NS)
 
+    def test_get_asport_mac(self):
+        result = self.mgr.get_asport_mac()
+        print("AaA " + result + " , " + str(type(result)) + " AaA")
+
+    @mock.patch('neutron.privileged.agent.linux.utils.execute_process',
+        return_value=(None, None, None))
     @mock.patch('neutron.privileged.agent.linux.utils.path_exists',
         return_value=True)
     @mock.patch('neutron.privileged.agent.linux.ip_lib.create_interface')
@@ -118,7 +124,7 @@ class TestAsMetadataManager(base.BaseTestCase):
     def test_init_host(self, p_get_ip_addresses_patch, p_add_ip_route_patch,
             p_add_ip_addr_route, p_interface_exists_path,
             p_set_link_attribute_patch, p_create_interface_patch,
-            p_path_exists_patch):
+            p_path_exists_patch, p_execute_process_patch):
         self.mgr.init_host()
         p_create_interface_patch.assert_called_once_with(
             as_metadata_manager.SVC_NS_PORT, None,
