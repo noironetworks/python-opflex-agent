@@ -106,7 +106,7 @@ class TestAsMetadataManager(base.BaseTestCase):
                 as_metadata_manager.SVC_NS)
 
     def test_get_asport_mac(self):
-        result = self.mgr.get_asport_mac()
+        self.mgr.get_asport_mac()
 
     @mock.patch('neutron.privileged.agent.linux.utils.execute_process',
         return_value=(None, None, None))

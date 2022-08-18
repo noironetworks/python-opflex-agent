@@ -723,7 +723,7 @@ class AsMetadataManager(object):
 
         # Create ports, if needed
         port_exists = ip_lib.IPDevice(SVC_OVS_PORT, None).exists()
-        if port_exists == False:
+        if port_exists is False:
             ip_lib.IPWrapper().add_veth(SVC_NS_PORT, SVC_OVS_PORT)
             ip_lib.IPDevice(SVC_OVS_PORT, None).link.set_up()
             ip_lib.IPDevice(SVC_NS_PORT, SVC_NS).link.set_netns(
