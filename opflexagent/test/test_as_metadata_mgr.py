@@ -107,7 +107,6 @@ class TestAsMetadataManager(base.BaseTestCase):
 
     def test_get_asport_mac(self):
         result = self.mgr.get_asport_mac()
-        print("AaA " + result + " , " + str(type(result)) + " AaA")
 
     @mock.patch('neutron.privileged.agent.linux.utils.execute_process',
         return_value=(None, None, None))
@@ -116,7 +115,7 @@ class TestAsMetadataManager(base.BaseTestCase):
     @mock.patch('neutron.privileged.agent.linux.ip_lib.create_interface')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.set_link_attribute')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.interface_exists',
-        return_value=True)
+        side_effect=[False, True])
     @mock.patch('neutron.privileged.agent.linux.ip_lib.add_ip_address')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.add_ip_route')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.get_ip_addresses',
