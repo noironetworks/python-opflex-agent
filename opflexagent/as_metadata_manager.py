@@ -17,7 +17,6 @@ import multiprocessing
 import os
 import os.path
 import signal
-import subprocess
 import sys
 import time
 import uuid
@@ -33,10 +32,8 @@ from neutron.common import utils
 from neutron.conf.agent import common as config
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import (  # noqa
     config as ovs_config)
-from neutron_lib.utils import helpers
 from oslo_config import cfg
 from oslo_log import log as logging
-from oslo_utils import encodeutils
 
 from opflexagent._i18n import _
 from opflexagent import config as oscfg  # noqa
@@ -500,7 +497,8 @@ class StateWatcher(FileWatcher):
                 with open(proxyfilename, "w") as f:
                     f.write(proxystr)
                 pidfile = PID_FILE_NAME_FORMAT % asvc["uuid"]
-                self.mgr.sh("rm -f %s" % pidfile)
+                agent_utils.execute(["rm", "-f", pidfile],
+                    run_as_root=True, privsep_exec=True)
             except Exception as e:
                 LOG.warn("EPwatcher: Exception in writing proxy file: %s",
                          str(e))
@@ -544,7 +542,8 @@ class SnatConnTrackHandler(object):
             with open(snatfilename, "w") as f:
                 f.write(conn_track_str)
             pidfile = PID_FILE_NAME_FORMAT % netns
-            self.mgr.sh("rm -f %s" % pidfile)
+            agent_utils.execute(["rm", "-f", pidfile],
+                    run_as_root=True, privsep_exec=True)
             self.mgr.update_supervisor()
         except Exception as e:
             LOG.warn("ConnTrack: Exception in writing snat file: %s",
@@ -614,24 +613,6 @@ class AsMetadataManager(object):
                 LOG.error("%(name)s: in shuttingdown anycast metadata "
                           "service: %(exc)s",
                           {'name': self.name, 'exc': str(e)})
-
-    def sh(self, cmd, as_root=True):
-        if as_root and self.root_helper:
-            cmd = "%s %s" % (self.root_helper, cmd)
-        LOG.debug("%(name)s: Running command: %(cmd)s",
-                  {'name': self.name, 'cmd': cmd})
-        ret = ''
-        try:
-            sanitized_cmd = encodeutils.to_utf8(cmd)
-            data = subprocess.check_output(
-                sanitized_cmd, stderr=subprocess.STDOUT, shell=True)
-            ret = helpers.safe_decode_utf8(data)
-        except Exception as e:
-            LOG.error("In running command: %(cmd)s: %(exc)s",
-                      {'cmd': cmd, 'exc': str(e)})
-        LOG.debug("%(name)s: Command output: %(ret)s",
-                  {'name': self.name, 'ret': ret})
-        return ret
 
     def write_file(self, name, data):
         LOG.debug("%(name)s: Writing file: name=%(file)s, data=%(data)s",
@@ -705,8 +686,8 @@ class AsMetadataManager(object):
 
     def init_host(self):
         # Create required directories
-        agent_utils.execute(["mkdir", "-p", PID_DIR], run_as_root=True,
-            privsep_exec=True)
+        agent_utils.execute(["mkdir", "-p", PID_DIR], 
+            run_as_root=True, privsep_exec=True)
         agent_utils.execute(["rm", "-f", "%s/*.pid" % PID_DIR],
             run_as_root=True, privsep_exec=True)
         agent_utils.execute(["chown", MD_DIR_OWNER, PID_DIR],
@@ -737,7 +718,8 @@ class AsMetadataManager(object):
             agent_utils.execute(["ip", "netns", "exec", SVC_NS, "ethtool",
                 "--offload", SVC_NS_PORT, "tx", "off"],
                 run_as_root=True, privsep_exec=True)
-        self.bridge_manager.plug_metadata_port(self.sh, SVC_OVS_PORT)
+        self.bridge_manager.plug_metadata_port(
+            agent_utils.execute, SVC_OVS_PORT)
 
     def init_supervisor(self):
         def conf(*fnames):
