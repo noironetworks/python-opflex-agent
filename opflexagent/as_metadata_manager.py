@@ -686,7 +686,7 @@ class AsMetadataManager(object):
 
     def init_host(self):
         # Create required directories
-        agent_utils.execute(["mkdir", "-p", PID_DIR], 
+        agent_utils.execute(["mkdir", "-p", PID_DIR],
             run_as_root=True, privsep_exec=True)
         agent_utils.execute(["rm", "-f", "%s/*.pid" % PID_DIR],
             run_as_root=True, privsep_exec=True)
