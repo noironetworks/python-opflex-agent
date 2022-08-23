@@ -160,8 +160,10 @@ class VppManager(bridge_manager_base.BridgeManagerBase,
         return removed_eps
 
     def plug_metadata_port(self, dst_shell, port):
-        dst_shell("vppctl create host-interface name %s" % port)
-        dst_shell("vppctl set interface state %s up" % port)
+        dst_shell(["vppctl", "create", "host-interface", "name", port],
+            run_as_root=True, privsep_exec=True)
+        dst_shell(["vppctl", "set", "interface", "state", port, "up"],
+            run_as_root=True, privsep_exec=True)
 
     # The following methods are called with host-interfaces for SNAT
     # This feature is currently not implemented by VPP
