@@ -105,20 +105,25 @@ class TestAsMetadataManager(base.BaseTestCase):
                 as_metadata_manager.SVC_NS_PORT,
                 as_metadata_manager.SVC_NS)
 
+    def test_get_asport_mac(self):
+        self.mgr.get_asport_mac()
+
     @mock.patch('neutron.privileged.agent.linux.utils.path_exists',
         return_value=True)
     @mock.patch('neutron.privileged.agent.linux.ip_lib.create_interface')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.set_link_attribute')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.interface_exists',
-        return_value=True)
+        side_effect=[False, True])
     @mock.patch('neutron.privileged.agent.linux.ip_lib.add_ip_address')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.add_ip_route')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.get_ip_addresses',
         return_value=[])
-    def test_init_host(self, p_get_ip_addresses_patch, p_add_ip_route_patch,
-            p_add_ip_addr_route, p_interface_exists_path,
-            p_set_link_attribute_patch, p_create_interface_patch,
-            p_path_exists_patch):
+    @mock.patch('neutron.agent.common.utils.execute',
+        return_value=('', ''))
+    def test_init_host(self, execute_patch, p_get_ip_addresses_patch,
+            p_add_ip_route_patch, p_add_ip_addr_route,
+            p_interface_exists_path, p_set_link_attribute_patch,
+            p_create_interface_patch, p_path_exists_patch):
         self.mgr.init_host()
         p_create_interface_patch.assert_called_once_with(
             as_metadata_manager.SVC_NS_PORT, None,
