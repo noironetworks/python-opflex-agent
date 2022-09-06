@@ -20,3 +20,4 @@ rm:            CommandFilter, rm, root
 ovs-vsctl:     CommandFilter, ovs-vsctl, root
 ovs-ofctl:     CommandFilter, ovs-ofctl, root
 brctl:         CommandFilter, brctl, root
+opflex_agent:  CommandFilter, opflex_agent, root
