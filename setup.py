@@ -16,7 +16,7 @@ import setuptools
 
 setuptools.setup(
     name="neutron-opflex-agent",
-    version="15.1.0",
+    version="15.2.0",
     packages=setuptools.find_packages(exclude=["*.tests", "*.tests.*",
                                                "tests.*", "tests"]),
     author="Cisco Systems, Inc.",
