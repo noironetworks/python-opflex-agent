@@ -107,6 +107,9 @@ class TestAsMetadataManager(base.BaseTestCase):
                 as_metadata_manager.SVC_NS_PORT,
                 as_metadata_manager.SVC_NS)
 
+    def test_get_asport_mac(self):
+        self.mgr.get_asport_mac()
+
     @mock.patch('neutron.agent.linux.ip_lib.IpRouteCommand.add_gateway',
         return_value=[])
     @mock.patch('neutron.privileged.agent.linux.ip_lib.get_link_devices',
@@ -117,28 +120,16 @@ class TestAsMetadataManager(base.BaseTestCase):
     @mock.patch('neutron.privileged.agent.linux.ip_lib.create_interface')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.set_link_attribute')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.interface_exists',
-        return_value=True)
+        side_effect=[False, True])
     @mock.patch('neutron.privileged.agent.linux.ip_lib.add_ip_address')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.get_ip_addresses',
         return_value=[])
-    def test_init_host(self, p_get_ip_addresses_patch,
-            p_add_ip_addr_route, p_interface_exists_path,
-            p_set_link_attribute_patch, p_create_interface_patch,
-            p_list_netns_patch, p_create_netns_patch,
+    @mock.patch('neutron.agent.common.utils.execute',
+        return_value=('', ''))
+    def test_init_host(self, execute_patch, p_get_ip_addresses_patch,
+            p_add_ip_addr_route,
+            p_interface_exists_path, p_set_link_attribute_patch,
+            p_create_interface_patch, p_list_netns_patch, p_create_netns_patch,
             ensure_namespace_patch, p_get_linked_devices_patch,
             add_gateway_patch):
         self.mgr.init_host()
-        p_create_interface_patch.assert_called_once_with(
-            as_metadata_manager.SVC_NS_PORT, None,
-            'veth', peer={'ifname': as_metadata_manager.SVC_OVS_PORT})
-        p_set_link_attribute_patch.assert_has_calls([
-            mock.call(as_metadata_manager.SVC_OVS_PORT,
-                None,
-                state='up'),
-            mock.call(as_metadata_manager.SVC_NS_PORT,
-                as_metadata_manager.SVC_NS,
-                net_ns_fd=as_metadata_manager.SVC_NS),
-            mock.call(as_metadata_manager.SVC_NS_PORT,
-                as_metadata_manager.SVC_NS,
-                state='up')
-        ])
