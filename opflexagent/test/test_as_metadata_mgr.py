@@ -104,6 +104,9 @@ class TestAsMetadataManager(base.BaseTestCase):
                 as_metadata_manager.SVC_NS_PORT,
                 as_metadata_manager.SVC_NS)
 
+    def test_get_asport_mac(self):
+        self.mgr.get_asport_mac()
+
     @mock.patch('neutron.agent.linux.ip_lib.IpRouteCommand.add_gateway',
         return_value=[])
     @mock.patch('neutron.agent.linux.ip_lib.IPWrapper.ensure_namespace')
@@ -116,9 +119,12 @@ class TestAsMetadataManager(base.BaseTestCase):
     @mock.patch('neutron.privileged.agent.linux.ip_lib.add_ip_address')
     @mock.patch('neutron.agent.linux.ip_lib.IPWrapper.get_device_by_ip',
         return_value=None)
-    def test_init_host(self, get_device_by_ip_patch,
-            p_add_ip_addr_route, p_interface_exists_path,
-            p_set_link_attribute_patch, p_create_interface_patch,
-            p_list_netns_patch, p_create_netns_patch,
-            ensure_namespace_patch, add_gateway_patch):
+    @mock.patch('neutron.agent.common.utils.execute',
+        return_value=('', ''))
+    def test_init_host(self, execute_patch,
+            get_device_by_ip_patch, p_add_ip_addr_route,
+            p_interface_exists_path, p_set_link_attribute_patch,
+            p_create_interface_patch, p_list_netns_patch,
+            p_create_netns_patch, ensure_namespace_patch,
+            add_gateway_patch):
         self.mgr.init_host()
