@@ -115,7 +115,7 @@ class TestAsMetadataManager(base.BaseTestCase):
     @mock.patch('neutron.privileged.agent.linux.ip_lib.create_interface')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.set_link_attribute')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.interface_exists',
-        return_value=True)
+        return_value=False)
     @mock.patch('neutron.privileged.agent.linux.ip_lib.add_ip_address')
     @mock.patch('neutron.agent.linux.ip_lib.IPWrapper.get_device_by_ip',
         return_value=None)
@@ -128,3 +128,11 @@ class TestAsMetadataManager(base.BaseTestCase):
             p_create_netns_patch, ensure_namespace_patch,
             add_gateway_patch):
         self.mgr.init_host()
+        p_set_link_attribute_patch.assert_has_calls([
+            mock.call(as_metadata_manager.SVC_OVS_PORT,
+                None,
+                state='up'),
+            mock.call(as_metadata_manager.SVC_NS_PORT,
+                as_metadata_manager.SVC_NS,
+                state='up')
+        ])
