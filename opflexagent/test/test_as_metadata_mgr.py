@@ -133,7 +133,7 @@ class TestAsMetadataManager(base.BaseTestCase):
                 None,
                 state='up'),
             mock.call(as_metadata_manager.SVC_NS_PORT,
-                as_metadata_manager.SVC_NS,
+                None,
                 net_ns_fd=as_metadata_manager.SVC_NS),
             mock.call(as_metadata_manager.SVC_NS_PORT,
                 as_metadata_manager.SVC_NS,
