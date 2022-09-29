@@ -17,6 +17,7 @@ import sys
 
 import mock
 
+from neutron.agent.common import ip_lib
 from neutron.tests import base
 
 from opflexagent import as_metadata_manager
@@ -108,7 +109,7 @@ class TestAsMetadataManager(base.BaseTestCase):
     def test_get_asport_mac(self):
         self.mgr.get_asport_mac()
 
-    @mock.patch('neutron.agent.linux.ip_lib.IPWrapper.ensure_namespace')
+    @mock.patch('neutron.agent.linux.ip_lib.IPWrapper.add_device_to_namespace')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.create_netns')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.list_netns')
     @mock.patch('neutron.privileged.agent.linux.ip_lib.create_interface')
@@ -125,5 +126,24 @@ class TestAsMetadataManager(base.BaseTestCase):
             p_add_ip_route_patch, p_add_ip_addr_route,
             p_interface_exists_path, p_set_link_attribute_patch,
             p_create_interface_patch, p_list_netns_patch, p_create_netns_patch,
-            ensure_namespace_patch):
+            p_add_device_to_namespace_patch):
         self.mgr.init_host()
+        p_create_interface_patch.assert_called_once_with(
+            as_metadata_manager.SVC_NS_PORT, None,
+            'veth', peer={'ifname': as_metadata_manager.SVC_OVS_PORT})
+        p_add_device_to_namespace_patch.assert_has_calls([
+            mock.call(ip_lib.IPDevice(as_metadata_manager.SVC_NS_PORT))])
+        p_set_link_attribute_patch.assert_has_calls([
+            mock.call('lo',
+                as_metadata_manager.SVC_NS,
+                state='up'),
+            mock.call(as_metadata_manager.SVC_OVS_PORT,
+                None,
+                state='up'),
+            mock.call('lo',
+                as_metadata_manager.SVC_NS,
+                state='up'),
+            mock.call(as_metadata_manager.SVC_NS_PORT,
+                as_metadata_manager.SVC_NS,
+                state='up')
+        ])
