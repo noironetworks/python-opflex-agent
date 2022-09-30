@@ -684,6 +684,37 @@ class AsMetadataManager(object):
             "|", "gawk", "-e", "'/link\/ether/ {print $2}'"],
             check_exit_code=False, log_fail_as_error=True)
 
+    def _add_device_to_namespace(self, ip_wrapper, device, namespace):
+        namespace_obj = ip_wrapper.ensure_namespace(namespace)
+        for i in range(9):
+            try:
+                namespace_obj.add_device_to_namespace(device)
+                break
+            except ip_lib.NetworkInterfaceNotFound:
+                # NOTE(slaweq): if the exception was NetworkInterfaceNotFound
+                # then lets try again, otherwise lets simply raise it as this
+                # is some different issue than retry tries to workaround
+                LOG.warning("Failed to set interface %s into namespace %s. "
+                            "Interface not found, attempt: %s, retrying.",
+                            device, namespace, i + 1)
+                # NOTE(slaweq) In such case it's required to reset device's
+                # namespace as it was already set to the "namespace"
+                # and after retry neutron will look for it in that namespace
+                # which is wrong
+                device.namespace = None
+                time.sleep(1)
+            except utils.WaitTimeout:
+                # NOTE(slaweq): if the exception was WaitTimeout then it means
+                # that probably device wasn't found in the desired namespace
+                # for 5 seconds, so lets try again too
+                LOG.warning("Failed to set interface %s into namespace %s. "
+                            "Interface not found in namespace, attempt: %s, "
+                            "retrying.", device, namespace, i + 1)
+                time.sleep(1)
+        else:
+            # didn't break, we give it one last shot without catching
+            namespace_obj.add_device_to_namespace(device)
+
     def init_host(self):
         # Create required directories
         agent_utils.execute(["mkdir", "-p", PID_DIR],
@@ -705,10 +736,10 @@ class AsMetadataManager(object):
         # Create ports, if needed
         port_exists = ip_lib.IPDevice(SVC_OVS_PORT, None).exists()
         if port_exists is False:
-            ip_lib.IPWrapper().add_veth(SVC_NS_PORT, SVC_OVS_PORT)
+            ip = ip_lib.IPWrapper()
+            ns_dev, root_dev = ip.add_veth(SVC_NS_PORT, SVC_OVS_PORT)
             ip_lib.IPDevice(SVC_OVS_PORT, None).link.set_up()
-            ip_lib.IPDevice(SVC_NS_PORT, SVC_NS).link.set_netns(
-                SVC_NS)
+            self._add_device_to_namespace(ip, ns_dev, SVC_NS)
             ip_lib.IPDevice(SVC_NS_PORT, SVC_NS).link.set_up()
             self.add_ip(SVC_IP_DEFAULT)
             self.add_default_route(SVC_NEXTHOP)
