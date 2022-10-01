@@ -133,3 +133,14 @@ class TestAsMetadataManager(base.BaseTestCase):
             ensure_namespace_patch, p_get_linked_devices_patch,
             add_gateway_patch):
         self.mgr.init_host()
+        p_create_interface_patch.assert_called_once_with(
+            as_metadata_manager.SVC_NS_PORT, None,
+            'veth', peer={'ifname': as_metadata_manager.SVC_OVS_PORT})
+        p_set_link_attribute_patch.assert_has_calls([
+            mock.call(as_metadata_manager.SVC_OVS_PORT,
+                None,
+                state='up'),
+            mock.call(as_metadata_manager.SVC_NS_PORT,
+                as_metadata_manager.SVC_NS,
+                state='up')
+        ])
