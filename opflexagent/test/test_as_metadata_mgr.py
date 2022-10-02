@@ -131,3 +131,8 @@ class TestAsMetadataManager(base.BaseTestCase):
             p_list_netns_patch, p_create_netns_patch,
             ensure_namespace_patch, add_gateway_patch):
         self.mgr.init_host()
+        execute_patch.assert_has_calls([
+            mock.call(['ip', 'link', 'add', 'of-svc-nsport', 'type',
+                       'veth', 'peer', 'name', 'of-svc-ovsport'],
+                      log_fail_as_error=True, run_as_root=True),
+        ])
