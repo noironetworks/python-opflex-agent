@@ -635,7 +635,12 @@ class AsMetadataManager(object):
         rm_files(MD_DIR, '.conf')
 
     def start_supervisor(self):
-        self.stop_supervisor()
+        try:
+            self.stop_supervisor()
+        except Exception as e:
+            LOG.error("%(name)s: in shuttingdown anycast metadata "
+                      "service: %(exc)s",
+                      {'name': self.name, 'exc': str(e)})
         agent_utils.execute(["supervisord", "-c", self.md_filename],
             run_as_root=True, privsep_exec=True)
 
@@ -679,10 +684,10 @@ class AsMetadataManager(object):
         (ipaddr, SVC_IP_CIDR))
 
     def get_asport_mac(self):
-        return agent_utils.execute(["ip", "netns", "exec", SVC_NS,
-            "ip", "link", "show", SVC_NS_PORT,
-            "|", "gawk", "-e", "'/link\/ether/ {print $2}'"],
-            check_exit_code=False, log_fail_as_error=True)
+        iface_list = agent_utils.execute(["ip", "netns", "exec", SVC_NS,
+            "ip", "link", "show", SVC_NS_PORT], check_exit_code=False,
+            log_fail_as_error=True, run_as_root=True).split()
+        return iface_list[iface_list.index('link/ether') + 1]
 
     def _add_device_to_namespace(self, ip_wrapper, device, namespace):
         namespace_obj = ip_wrapper.ensure_namespace(namespace)
