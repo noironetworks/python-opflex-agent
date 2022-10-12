@@ -105,7 +105,15 @@ class TestAsMetadataManager(base.BaseTestCase):
                 as_metadata_manager.SVC_NS)
 
     def test_get_asport_mac(self):
-        self.mgr.get_asport_mac()
+        iface_str = ('29: of-svc-nsport@if28: '
+                     '<BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc '
+                     'noqueue state UP mode DEFAULT group default qlen 1000\n'
+                     'link/ether 76:b4:fc:32:21:37 '
+                     'brd ff:ff:ff:ff:ff:ff link-netnsid 0\n')
+        with mock.patch('neutron.agent.common.utils.execute',
+                        return_value=iface_str):
+            self.assertEqual(self.mgr.get_asport_mac(),
+                             '76:b4:fc:32:21:37')
 
     @mock.patch('neutron.agent.linux.ip_lib.IpRouteCommand.add_gateway',
         return_value=[])
