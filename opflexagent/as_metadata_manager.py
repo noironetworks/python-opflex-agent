@@ -684,10 +684,14 @@ class AsMetadataManager(object):
         (ipaddr, SVC_IP_CIDR))
 
     def get_asport_mac(self):
-        iface_list = agent_utils.execute(["ip", "netns", "exec", SVC_NS,
+        iface_str = agent_utils.execute(["ip", "netns", "exec", SVC_NS,
             "ip", "link", "show", SVC_NS_PORT], check_exit_code=False,
-            log_fail_as_error=True, run_as_root=True).split()
-        return iface_list[iface_list.index('link/ether') + 1]
+            log_fail_as_error=True, run_as_root=True)
+        if not iface_str:
+            return ''
+        else:
+            iface_list = iface_str.split()
+            return iface_list[iface_list.index('link/ether') + 1]
 
     def _add_device_to_namespace(self, ip_wrapper, device, namespace):
         namespace_obj = ip_wrapper.ensure_namespace(namespace)
