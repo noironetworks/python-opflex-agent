@@ -175,9 +175,8 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
         return removed_eps
 
     def plug_metadata_port(self, dst_shell, port):
-        dst_shell(["ovs-vsctl", "add-port",
-            cfg.CONF.OPFLEX.fabric_bridge, port],
-            run_as_root=True, privsep_exec=True)
+        dst_shell("ovs-vsctl add-port %s %s" % (
+                  cfg.CONF.OPFLEX.fabric_bridge, port))
 
     def delete_port(self, port):
         self.fabric_br.delete_port(port)
