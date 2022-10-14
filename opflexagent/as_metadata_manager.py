@@ -17,6 +17,7 @@ import multiprocessing
 import os
 import os.path
 import signal
+import subprocess
 import sys
 import time
 import uuid
@@ -25,15 +26,15 @@ import netaddr
 import pyinotify
 from six.moves import queue as Queue
 
-from neutron.agent.common import ip_lib
-from neutron.agent.common import utils as agent_utils
 from neutron.common import config as common_config
 from neutron.common import utils
 from neutron.conf.agent import common as config
 from neutron.plugins.ml2.drivers.openvswitch.agent.common import (  # noqa
     config as ovs_config)
+from neutron_lib.utils import helpers
 from oslo_config import cfg
 from oslo_log import log as logging
+from oslo_utils import encodeutils
 
 from opflexagent._i18n import _
 from opflexagent import config as oscfg  # noqa
@@ -497,8 +498,7 @@ class StateWatcher(FileWatcher):
                 with open(proxyfilename, "w") as f:
                     f.write(proxystr)
                 pidfile = PID_FILE_NAME_FORMAT % asvc["uuid"]
-                agent_utils.execute(["rm", "-f", pidfile],
-                    run_as_root=True, privsep_exec=True)
+                self.mgr.sh("rm -f %s" % pidfile)
             except Exception as e:
                 LOG.warn("EPwatcher: Exception in writing proxy file: %s",
                          str(e))
@@ -542,8 +542,7 @@ class SnatConnTrackHandler(object):
             with open(snatfilename, "w") as f:
                 f.write(conn_track_str)
             pidfile = PID_FILE_NAME_FORMAT % netns
-            agent_utils.execute(["rm", "-f", pidfile],
-                    run_as_root=True, privsep_exec=True)
+            self.mgr.sh("rm -f %s" % pidfile)
             self.mgr.update_supervisor()
         except Exception as e:
             LOG.warn("ConnTrack: Exception in writing snat file: %s",
@@ -614,6 +613,24 @@ class AsMetadataManager(object):
                           "service: %(exc)s",
                           {'name': self.name, 'exc': str(e)})
 
+    def sh(self, cmd, as_root=True):
+        if as_root and self.root_helper:
+            cmd = "%s %s" % (self.root_helper, cmd)
+        LOG.debug("%(name)s: Running command: %(cmd)s",
+                  {'name': self.name, 'cmd': cmd})
+        ret = ''
+        try:
+            sanitized_cmd = encodeutils.to_utf8(cmd)
+            data = subprocess.check_output(
+                sanitized_cmd, stderr=subprocess.STDOUT, shell=True)
+            ret = helpers.safe_decode_utf8(data)
+        except Exception as e:
+            LOG.error("In running command: %(cmd)s: %(exc)s",
+                      {'cmd': cmd, 'exc': str(e)})
+        LOG.debug("%(name)s: Command output: %(ret)s",
+                  {'name': self.name, 'ret': ret})
+        return ret
+
     def write_file(self, name, data):
         LOG.debug("%(name)s: Writing file: name=%(file)s, data=%(data)s",
                   {'name': self.name, 'file': name, 'data': data})
@@ -635,131 +652,77 @@ class AsMetadataManager(object):
         rm_files(MD_DIR, '.conf')
 
     def start_supervisor(self):
-        try:
-            self.stop_supervisor()
-        except Exception as e:
-            LOG.error("%(name)s: in shuttingdown anycast metadata "
-                      "service: %(exc)s",
-                      {'name': self.name, 'exc': str(e)})
-        agent_utils.execute(["supervisord", "-c", self.md_filename],
-            run_as_root=True, privsep_exec=True)
+        self.stop_supervisor()
+        self.sh("supervisord -c %s" % self.md_filename)
 
     def update_supervisor(self):
-        agent_utils.execute(["supervisorctl", "-c", self.md_filename,
-            "reread"], run_as_root=True, privsep_exec=True)
-        agent_utils.execute(["supervisorctl", "-c", self.md_filename,
-            "update"], run_as_root=True, privsep_exec=True)
+        self.sh("supervisorctl -c %s reread" % self.md_filename)
+        self.sh("supervisorctl -c %s update" % self.md_filename)
 
     def reload_supervisor(self):
-        agent_utils.execute(["supervisorctl", "-c", self.md_filename,
-            "reload"], run_as_root=True, privsep_exec=True)
+        self.sh("supervisorctl -c %s reload" % self.md_filename)
 
     def stop_supervisor(self):
-        agent_utils.execute(["supervisorctl", "-c", self.md_filename,
-            "shutdown"], run_as_root=True, privsep_exec=True)
+        self.sh("supervisorctl -c %s shutdown" % self.md_filename)
         time.sleep(30)
 
     def add_default_route(self, nexthop):
-        ip_lib.IPDevice(None, SVC_NS).route.add_gateway(
-            nexthop, metric=None, table="default")
+        self.sh("ip netns exec %s ip route add default via %s" %
+                (SVC_NS, nexthop))
 
     def has_ip(self, ipaddr):
-        ipDevice = ip_lib.IPWrapper(SVC_NS).get_device_by_ip(ipaddr)
-        if ipDevice is None:
-            return False
-        if ipDevice.name == SVC_NS_PORT:
-            return True
-        return False
+        outp = self.sh("ip netns exec %s ip addr show dev %s" %
+                (SVC_NS, SVC_NS_PORT))
+        return 'inet %s' % (ipaddr, ) in outp
 
     def add_ip(self, ipaddr):
         if self.has_ip(ipaddr):
             return
-        ip_lib.IPDevice(SVC_NS_PORT, SVC_NS).addr.add("%s/%s" %
-        (ipaddr, SVC_IP_CIDR))
+        self.sh("ip netns exec %s ip addr add %s/%s dev %s" %
+                (SVC_NS, ipaddr, SVC_IP_CIDR, SVC_NS_PORT))
 
     def del_ip(self, ipaddr):
         if not self.has_ip(ipaddr):
             return
-        ip_lib.IPDevice(SVC_NS_PORT, SVC_NS).addr.delete("%s/%s" %
-        (ipaddr, SVC_IP_CIDR))
+        self.sh("ip netns exec %s ip addr del %s/%s dev %s" %
+                (SVC_NS, ipaddr, SVC_IP_CIDR, SVC_NS_PORT))
 
     def get_asport_mac(self):
-        iface_str = agent_utils.execute(["ip", "netns", "exec", SVC_NS,
-            "ip", "link", "show", SVC_NS_PORT], check_exit_code=False,
-            log_fail_as_error=True, run_as_root=True)
-        if not iface_str:
-            return ''
-        else:
-            iface_list = iface_str.split()
-            return iface_list[iface_list.index('link/ether') + 1]
-
-    def _add_device_to_namespace(self, ip_wrapper, device, namespace):
-        namespace_obj = ip_wrapper.ensure_namespace(namespace)
-        for i in range(9):
-            try:
-                namespace_obj.add_device_to_namespace(device)
-                break
-            except ip_lib.NetworkInterfaceNotFound:
-                # NOTE(slaweq): if the exception was NetworkInterfaceNotFound
-                # then lets try again, otherwise lets simply raise it as this
-                # is some different issue than retry tries to workaround
-                LOG.warning("Failed to set interface %s into namespace %s. "
-                            "Interface not found, attempt: %s, retrying.",
-                            device, namespace, i + 1)
-                # NOTE(slaweq) In such case it's required to reset device's
-                # namespace as it was already set to the "namespace"
-                # and after retry neutron will look for it in that namespace
-                # which is wrong
-                device.namespace = None
-                time.sleep(1)
-            except utils.WaitTimeout:
-                # NOTE(slaweq): if the exception was WaitTimeout then it means
-                # that probably device wasn't found in the desired namespace
-                # for 5 seconds, so lets try again too
-                LOG.warning("Failed to set interface %s into namespace %s. "
-                            "Interface not found in namespace, attempt: %s, "
-                            "retrying.", device, namespace, i + 1)
-                time.sleep(1)
-        else:
-            # didn't break, we give it one last shot without catching
-            namespace_obj.add_device_to_namespace(device)
+        return self.sh(
+            "ip netns exec %s ip link show %s | "
+            "gawk -e '/link\/ether/ {print $2}'" %
+            (SVC_NS, SVC_NS_PORT))
 
     def init_host(self):
         # Create required directories
-        agent_utils.execute(["mkdir", "-p", PID_DIR],
-            run_as_root=True, privsep_exec=True)
-        agent_utils.execute(["rm", "-f", "%s/*.pid" % PID_DIR],
-            run_as_root=True, privsep_exec=True)
-        agent_utils.execute(["chown", MD_DIR_OWNER, PID_DIR],
-            run_as_root=True, privsep_exec=True)
-        agent_utils.execute(["chown", MD_DIR_OWNER, "%s/.." % PID_DIR],
-            run_as_root=True, privsep_exec=True)
-        agent_utils.execute(["mkdir", "-p", MD_DIR],
-            run_as_root=True, privsep_exec=True)
-        agent_utils.execute(["chown", MD_DIR_OWNER, MD_DIR],
-            run_as_root=True, privsep_exec=True)
+        self.sh("mkdir -p %s" % PID_DIR)
+        self.sh("rm -f %s/*.pid" % PID_DIR)
+        self.sh("chown %s %s" % (MD_DIR_OWNER, PID_DIR))
+        self.sh("chown %s %s/.." % (MD_DIR_OWNER, PID_DIR))
+        self.sh("mkdir -p %s" % MD_DIR)
+        self.sh("chown %s %s" % (MD_DIR_OWNER, MD_DIR))
 
         # Create namespace, if needed
-        ip_lib.IPWrapper().ensure_namespace(SVC_NS)
+        ns = self.sh("ip netns | grep %s ; true" % SVC_NS)
+        if not ns:
+            self.sh("ip netns add %s" % SVC_NS)
 
         # Create ports, if needed
-        port_exists = ip_lib.IPDevice(SVC_OVS_PORT, None).exists()
-        if port_exists is False:
-            ip = ip_lib.IPWrapper()
-            ns_dev, root_dev = ip.add_veth(SVC_NS_PORT, SVC_OVS_PORT)
-            ip_lib.IPDevice(SVC_OVS_PORT, None).link.set_up()
-            self._add_device_to_namespace(ip, ns_dev, SVC_NS)
-            ip_lib.IPDevice(SVC_NS_PORT, SVC_NS).link.set_up()
+        port = self.sh("ip link show %s 2>&1 | grep qdisc ; true" %
+                       SVC_OVS_PORT)
+        if not port:
+            self.sh("ip link add %s type veth peer name %s" %
+                    (SVC_NS_PORT, SVC_OVS_PORT))
+            self.sh("ip link set dev %s up" % SVC_OVS_PORT)
+            self.sh("ip link set %s netns %s" % (SVC_NS_PORT, SVC_NS))
+            self.sh("ip netns exec %s ip link set dev %s up" %
+                    (SVC_NS, SVC_NS_PORT))
             self.add_ip(SVC_IP_DEFAULT)
             self.add_default_route(SVC_NEXTHOP)
-            agent_utils.execute(["ethtool", "--offload", SVC_OVS_PORT,
-                "tx", "off"],
-                run_as_root=True, privsep_exec=True)
-            agent_utils.execute(["ip", "netns", "exec", SVC_NS, "ethtool",
-                "--offload", SVC_NS_PORT, "tx", "off"],
-                run_as_root=True, privsep_exec=True)
-        self.bridge_manager.plug_metadata_port(
-            agent_utils.execute, SVC_OVS_PORT)
+            self.sh("ethtool --offload %s tx off" % SVC_OVS_PORT)
+            self.sh("ip netns exec %s ethtool --offload %s tx off" %
+                    (SVC_NS, SVC_NS_PORT))
+        self.bridge_manager.plug_metadata_port(self.sh, SVC_OVS_PORT)
 
     def init_supervisor(self):
         def conf(*fnames):
