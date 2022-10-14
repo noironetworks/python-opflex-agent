@@ -17,7 +17,6 @@ import sys
 
 import mock
 
-from neutron.agent.common import ip_lib
 from neutron.tests import base
 
 from opflexagent import as_metadata_manager
@@ -63,95 +62,3 @@ class TestEpWatcher(base.BaseTestCase):
                     write_list.append(write_data)
             write_string = ''.join(write_list)
             self.assertEqual(write_string, JSON_FILE_DATA)
-
-
-class TestAsMetadataManager(base.BaseTestCase):
-
-    def setUp(self):
-        super(TestAsMetadataManager, self).setUp()
-        self.mgr = as_metadata_manager.AsMetadataManager(
-            as_metadata_manager.LOG, None)
-
-    def test_add_default_route(self):
-        with mock.patch('neutron.agent.linux.ip_lib.add_ip_route') as add_mock:
-            self.mgr.add_default_route('1.2.3.4')
-            add_mock.assert_called_once_with('of-svc', None, device=None,
-                via='1.2.3.4', table='default', metric=None, scope='global')
-
-    @mock.patch('neutron.privileged.agent.linux.ip_lib.get_ip_addresses',
-        return_value=[])
-    def test_has_ip(self, p_get_ip_addresses_mock):
-        result = self.mgr.has_ip('1.2.3.4')
-        self.assertEqual(result, False)
-
-    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.has_ip',
-    return_value=False)
-    def test_add_ip(self, has_ip_mock):
-        mock_path = 'neutron.agent.linux.ip_lib.add_ip_address'
-        with mock.patch(mock_path) as add_ip_addr_mock:
-            self.mgr.add_ip('1.2.3.4')
-            add_ip_addr_mock.assert_called_once_with('1.2.3.4/%s' %
-                (as_metadata_manager.SVC_IP_CIDR),
-                as_metadata_manager.SVC_NS_PORT,
-                as_metadata_manager.SVC_NS, 'global', True)
-
-    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.has_ip',
-    return_value=True)
-    def test_del_ip(self, has_ip_mock):
-        mock_path = 'neutron.agent.linux.ip_lib.delete_ip_address'
-        with mock.patch(mock_path) as check_out:
-            self.mgr.del_ip('1.2.3.4')
-            check_out.assert_called_once_with('1.2.3.4/%s' %
-                (as_metadata_manager.SVC_IP_CIDR),
-                as_metadata_manager.SVC_NS_PORT,
-                as_metadata_manager.SVC_NS)
-
-    def test_get_asport_mac(self):
-        iface_str = ('29: of-svc-nsport@if28: '
-                     '<BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc '
-                     'noqueue state UP mode DEFAULT group default qlen 1000\n'
-                     'link/ether 76:b4:fc:32:21:37 '
-                     'brd ff:ff:ff:ff:ff:ff link-netnsid 0\n')
-        with mock.patch('neutron.agent.common.utils.execute',
-                        return_value=iface_str):
-            self.assertEqual(self.mgr.get_asport_mac(),
-                             '76:b4:fc:32:21:37')
-
-    @mock.patch('neutron.agent.linux.ip_lib.IPWrapper.add_device_to_namespace')
-    @mock.patch('neutron.privileged.agent.linux.ip_lib.create_netns')
-    @mock.patch('neutron.privileged.agent.linux.ip_lib.list_netns')
-    @mock.patch('neutron.privileged.agent.linux.ip_lib.create_interface')
-    @mock.patch('neutron.privileged.agent.linux.ip_lib.set_link_attribute')
-    @mock.patch('neutron.privileged.agent.linux.ip_lib.interface_exists',
-        side_effect=[False, True])
-    @mock.patch('neutron.privileged.agent.linux.ip_lib.add_ip_address')
-    @mock.patch('neutron.privileged.agent.linux.ip_lib.add_ip_route')
-    @mock.patch('neutron.privileged.agent.linux.ip_lib.get_ip_addresses',
-        return_value=[])
-    @mock.patch('neutron.agent.common.utils.execute',
-        return_value=('', ''))
-    def test_init_host(self, execute_patch, p_get_ip_addresses_patch,
-            p_add_ip_route_patch, p_add_ip_addr_route,
-            p_interface_exists_path, p_set_link_attribute_patch,
-            p_create_interface_patch, p_list_netns_patch, p_create_netns_patch,
-            p_add_device_to_namespace_patch):
-        self.mgr.init_host()
-        p_create_interface_patch.assert_called_once_with(
-            as_metadata_manager.SVC_NS_PORT, None,
-            'veth', peer={'ifname': as_metadata_manager.SVC_OVS_PORT})
-        p_add_device_to_namespace_patch.assert_has_calls([
-            mock.call(ip_lib.IPDevice(as_metadata_manager.SVC_NS_PORT))])
-        p_set_link_attribute_patch.assert_has_calls([
-            mock.call('lo',
-                as_metadata_manager.SVC_NS,
-                state='up'),
-            mock.call(as_metadata_manager.SVC_OVS_PORT,
-                None,
-                state='up'),
-            mock.call('lo',
-                as_metadata_manager.SVC_NS,
-                state='up'),
-            mock.call(as_metadata_manager.SVC_NS_PORT,
-                as_metadata_manager.SVC_NS,
-                state='up')
-        ])
