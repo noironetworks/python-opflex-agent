@@ -20,8 +20,8 @@ sys.modules["pyinotify"] = mock.Mock()  # noqa
 from opflexagent.utils.bridge_managers import ovs_manager
 
 from neutron.conf.agent import dhcp as dhcp_config
-from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from neutron.tests import base
+from neutron_lib.plugins.ml2 import ovs_constants as constants
 from oslo_config import cfg
 from oslo_utils import uuidutils
 

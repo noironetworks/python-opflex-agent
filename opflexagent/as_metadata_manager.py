@@ -171,7 +171,7 @@ class FileProcessor(object):
 
                     try:
                         event = self.eventq.get_nowait()
-                    except Queue.Empty as e:
+                    except Queue.Empty:
                         event = None
                 if files:
                     # process the batch
