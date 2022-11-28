@@ -494,7 +494,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             set([subports[0].port_id, subports[1].port_id]))
 
     def _test_port_bound_to_host(self, net_type, svi=False):
-        if net_type is 'vlan':
+        if net_type == 'vlan':
             vlan_info = {}
             vlan_info['device'] = 'some_device'
             if svi:
@@ -503,7 +503,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             mapping = self._get_gbp_details(**vlan_info)
         else:
             mapping = self._get_gbp_details(device='some_device')
-        seg_id = 1234 if net_type is 'vlan' else ''
+        seg_id = 1234 if net_type == 'vlan' else ''
         port_details = {'device': 'some_device',
                         'admin_state_up': True,
                         'port_id': mapping['port_id'],
@@ -532,7 +532,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
         self.assertEqual(port_details['network_type'],
             epargs[0][0][0].network_type)
-        if net_type is 'vlan':
+        if net_type == 'vlan':
             self.assertEqual(port_details['segmentation_id'],
                 epargs[0][0][0].segmentation_id)
             if svi:

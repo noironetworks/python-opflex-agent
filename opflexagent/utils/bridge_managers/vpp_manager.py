@@ -13,8 +13,8 @@
 import os
 
 from neutron.agent.linux import ip_lib
-from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from neutron_lib import constants as lib_constants
+from neutron_lib.plugins.ml2 import ovs_constants as constants
 from oslo_log import log as logging
 
 from opflexagent import constants as ofcst

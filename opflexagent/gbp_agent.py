@@ -31,11 +31,11 @@ from neutron.conf.agent import common as config
 from neutron.conf.agent import dhcp as dhcp_config
 from neutron.plugins.ml2.drivers.openvswitch.agent import (
     ovs_neutron_agent as ovs)
-from neutron.plugins.ml2.drivers.openvswitch.agent.common import constants
 from neutron_lib.agent import topics
 from neutron_lib import constants as n_constants
 from neutron_lib import context
 from neutron_lib import exceptions
+from neutron_lib.plugins.ml2 import ovs_constants as constants
 from opflexagent._i18n import _
 from opflexagent import as_metadata_manager
 from opflexagent import constants as ofcst

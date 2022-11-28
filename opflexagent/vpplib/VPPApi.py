@@ -101,7 +101,7 @@ class VPPApi(object):
 
         rstr = ''
         for i in bytearray(istr):
-            if i is 0:
+            if i == 0:
                 return rstr
             rstr += chr(i)
         return rstr
@@ -150,7 +150,7 @@ class VPPApi(object):
 
         rstr = ''
         for i in bytearray(istr):
-            if i is 0:
+            if i == 0:
                 return rstr
             rstr += chr(i)
 
