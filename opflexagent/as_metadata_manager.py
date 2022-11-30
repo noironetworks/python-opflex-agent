@@ -431,7 +431,7 @@ class StateWatcher(FileWatcher):
                 else:
                     if not self.as_equal(asvc, curr_alloc[domain_uuid]):
                         updated = True
-                        self.as_write(curr_alloc[domain_uuid])
+                        self.as_write(curr_alloc[domain_uuid], filename, asvc)
                     del curr_alloc[domain_uuid]
 
         for domain_uuid in curr_alloc:
@@ -440,6 +440,10 @@ class StateWatcher(FileWatcher):
 
         if updated:
             self.mgr.update_supervisor()
+
+    def as_write(self, alloc, filename, asvc):
+        self.as_del(filename, asvc)
+        self.as_create(alloc)
 
     def as_equal(self, asvc, alloc):
         for idx in ["uuid", "domain-name", "domain-policy-space"]:
@@ -451,7 +455,7 @@ class StateWatcher(FileWatcher):
 
     def as_del(self, filename, asvc):
         try:
-            self.mgr.del_ip(asvc["service-mapping"]["next-hop-ip"])
+            self.mgr.del_ip(asvc["service-mapping"][0]["next-hop-ip"])
         except Exception as e:
             LOG.warn("EPwatcher: Exception in deleting IP: %s",
                      str(e))
