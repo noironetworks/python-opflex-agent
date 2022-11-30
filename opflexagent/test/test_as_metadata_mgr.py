@@ -98,6 +98,7 @@ nochange_fileB = {
     ]
 }
 
+
 class TestEpWatcher(base.BaseTestCase):
 
     def setUp(self):
