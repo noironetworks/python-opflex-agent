@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import copy
 import sys
 
 import mock
@@ -31,6 +32,71 @@ if sys.version_info.major == 2:
     MOCK_MODULE = '__builtin__.open'
 else:
     MOCK_MODULE = 'builtins.open'
+
+curr_alloc_json = {
+    "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9": {
+        "domain-name": "sauto_k8s-bm-1_l3out-1_vrf",
+        "domain-policy-space": "common",
+        "next-hop-ip": "169.254.240.3",
+        "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"
+    },
+    "99e788f5-f579-83d2-6b9f-3051a21f63ab": {
+        "domain-name": "k8s-bm-1_UnroutedVRF",
+        "domain-policy-space": "common",
+        "next-hop-ip": "169.254.240.4",
+        "uuid": "99e788f5-f579-83d2-6b9f-3051a21f63ab"
+    }
+}
+onefile_curr_alloc_json = {
+    "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9": {
+        "domain-name": "sauto_k8s-bm-1_l3out-1_vrf",
+        "domain-policy-space": "common",
+        "next-hop-ip": "169.254.240.3",
+        "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"
+    }
+}
+nochange_fileA = {
+    "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9",
+    "interface-name": "of-svc-ovsport",
+    "service-mac": "02:6a:66:eb:26:6a",
+    "domain-policy-space": "common",
+    "domain-name": "sauto_k8s-bm-1_l3out-1_vrf",
+    "service-mapping": [
+        {
+            "service-ip": "169.254.169.254",
+            "gateway-ip": "169.254.1.1",
+            "next-hop-ip": "169.254.240.3"
+        }
+    ]
+}
+change_fileA = {
+    "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9",
+    "interface-name": "of-svc-ovsport",
+    "service-mac": "02:6a:66:eb:26:6a",
+    "domain-policy-space": "other",
+    "domain-name": "wrong_domain_name",
+    "service-mapping": [
+        {
+            "service-ip": "169.254.169.254",
+            "gateway-ip": "169.254.1.1",
+            "next-hop-ip": "169.254.240.3"
+        }
+    ]
+}
+nochange_fileB = {
+    "uuid": "99e788f5-f579-83d2-6b9f-3051a21f63ab",
+    "interface-name": "of-svc-ovsport",
+    "service-mac": "02:6a:66:eb:26:6a",
+    "domain-policy-space": "common",
+    "domain-name": "k8s-bm-1_UnroutedVRF",
+    "service-mapping": [
+        {
+            "service-ip": "169.254.169.254",
+            "gateway-ip": "169.254.1.1",
+            "next-hop-ip": "169.254.240.4"
+        }
+    ]
+}
 
 
 class TestEpWatcher(base.BaseTestCase):
@@ -62,3 +128,124 @@ class TestEpWatcher(base.BaseTestCase):
                     write_list.append(write_data)
             write_string = ''.join(write_list)
             self.assertEqual(write_string, JSON_FILE_DATA)
+
+
+class TestStateWatcher(base.BaseTestCase):
+
+    def setUp(self):
+        super(TestStateWatcher, self).setUp()
+
+    @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
+    @mock.patch('os.remove')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager'
+                '.update_supervisor')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.del_ip')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.add_ip')
+    @mock.patch('opflexagent.as_metadata_manager.FileProcessor.run')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager'
+                '.get_asport_mac',
+                return_value="ff-ff-ff-ff-ff-ff")
+    @mock.patch('opflexagent.as_metadata_manager.read_jsonfile',
+                side_effect=[copy.deepcopy(curr_alloc_json),
+                             copy.deepcopy(nochange_fileA),
+                             copy.deepcopy(nochange_fileB)])
+    @mock.patch('os.listdir',
+                return_value=["44f67ef0-1fd8-7a7e-2bfb-e650cee859a9.as",
+                              "99e788f5-f579-83d2-6b9f-3051a21f63ab.as"])
+    def test_process_no_change(self, listdir_patch, read_jsonfile_patch,
+                               asport_mac_patch, fileprocessor_run_patch,
+                               add_ip_patch, del_ip_patch, update_sv_patch,
+                               os_remove_patch, write_jsonfile_patch):
+        watcher = as_metadata_manager.StateWatcher()
+        watcher.disable_proxy = True
+        watcher.process("test")
+        self.assertFalse(write_jsonfile_patch.called)
+        self.assertEqual(read_jsonfile_patch.call_count, 3)
+        self.assertFalse(add_ip_patch.called)
+        self.assertFalse(del_ip_patch.called)
+        self.assertFalse(os_remove_patch.called)
+
+    @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
+    @mock.patch('os.remove')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager'
+                '.update_supervisor')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.del_ip')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.add_ip')
+    @mock.patch('opflexagent.as_metadata_manager.FileProcessor.run')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager'
+                '.get_asport_mac',
+                return_value="ff-ff-ff-ff-ff-ff")
+    @mock.patch('opflexagent.as_metadata_manager.read_jsonfile',
+                side_effect=[copy.deepcopy(curr_alloc_json),
+                             copy.deepcopy(change_fileA),
+                             copy.deepcopy(nochange_fileB)])
+    @mock.patch('os.listdir',
+                return_value=["44f67ef0-1fd8-7a7e-2bfb-e650cee859a9.as",
+                              "99e788f5-f579-83d2-6b9f-3051a21f63ab.as"])
+    def test_process_outdated_file(self, listdir_patch, read_jsonfile_patch,
+                               asport_mac_patch, fileprocessor_run_patch,
+                               add_ip_patch, del_ip_patch, update_sv_patch,
+                               os_remove_patch, write_jsonfile_patch):
+        watcher = as_metadata_manager.StateWatcher()
+        watcher.disable_proxy = True
+        watcher.process("test")
+        self.assertEqual(write_jsonfile_patch.call_count, 1)
+        self.assertEqual(read_jsonfile_patch.call_count, 3)
+        self.assertEqual(os_remove_patch.call_count, 2)
+        self.assertEqual(add_ip_patch.call_count, 1)
+
+    @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
+    @mock.patch('os.remove')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager'
+                '.update_supervisor')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.del_ip')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.add_ip')
+    @mock.patch('opflexagent.as_metadata_manager.FileProcessor.run')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager'
+                '.get_asport_mac',
+                return_value="ff-ff-ff-ff-ff-ff")
+    @mock.patch('opflexagent.as_metadata_manager.read_jsonfile',
+                side_effect=[copy.deepcopy(curr_alloc_json),
+                             copy.deepcopy(nochange_fileA),
+                             copy.deepcopy(nochange_fileB)])
+    @mock.patch('os.listdir',
+                return_value=["44f67ef0-1fd8-7a7e-2bfb-e650cee859a9.as"])
+    def test_process_create_file(self, listdir_patch, read_jsonfile_patch,
+                               asport_mac_patch, fileprocessor_run_patch,
+                               add_ip_patch, del_ip_patch, update_sv_patch,
+                               os_remove_patch, write_jsonfile_patch):
+        watcher = as_metadata_manager.StateWatcher()
+        watcher.disable_proxy = True
+        watcher.process("test")
+        self.assertEqual(write_jsonfile_patch.call_count, 1)
+        self.assertEqual(read_jsonfile_patch.call_count, 2)
+        self.assertEqual(add_ip_patch.call_count, 1)
+        self.assertFalse(os_remove_patch.called)
+        self.assertFalse(del_ip_patch.called)
+
+    @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
+    @mock.patch('os.remove')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager'
+                '.update_supervisor')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.del_ip')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.add_ip')
+    @mock.patch('opflexagent.as_metadata_manager.FileProcessor.run')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager'
+                '.get_asport_mac',
+                return_value="ff-ff-ff-ff-ff-ff")
+    @mock.patch('opflexagent.as_metadata_manager.read_jsonfile',
+                side_effect=[copy.deepcopy(onefile_curr_alloc_json),
+                             copy.deepcopy(nochange_fileA),
+                             copy.deepcopy(nochange_fileB)])
+    @mock.patch('os.listdir',
+                return_value=["44f67ef0-1fd8-7a7e-2bfb-e650cee859a9.as",
+                              "99e788f5-f579-83d2-6b9f-3051a21f63ab.as"])
+    def test_process_delete_file(self, listdir_patch, read_jsonfile_patch,
+                               asport_mac_patch, fileprocessor_run_patch,
+                               add_ip_patch, del_ip_patch, update_sv_patch,
+                               os_remove_patch, write_jsonfile_patch):
+        watcher = as_metadata_manager.StateWatcher()
+        watcher.disable_proxy = True
+        watcher.process("test")
+        self.assertEqual(os_remove_patch.call_count, 2)
+        self.assertEqual(read_jsonfile_patch.call_count, 3)
