@@ -210,16 +210,10 @@ class FileWatcher(object):
         self.watchdir = watchdir
         self.extensions = extensions.split(',')
         self.eventq = multiprocessing.Queue()
+        self.auto_restart_fileprocessor = True
 
-        fp = FileProcessor(
-            self.watchdir,
-            self.extensions,
-            self.eventq,
-            functools.partial(self.process))
-        fprun = functools.partial(fp.run)
-        self.processor = multiprocessing.Process(target=fprun)
+        self.start_file_processor()
         LOG.debug("FileWatcher: %s: starting", self.name)
-        self.processor.start()
 
     def action(self, event):
         # event.maskname, event.filename
@@ -233,6 +227,7 @@ class FileWatcher(object):
                   {'name': self.name, 'files': files})
 
     def terminate(self, signum, frame):
+        self.auto_restart_fileprocessor = False
         self.eventq.put(EOQ)
         if signum is not None:
             sys.exit(0)
@@ -240,6 +235,7 @@ class FileWatcher(object):
     def run(self):
         signal.signal(signal.SIGINT, self.terminate)
         signal.signal(signal.SIGTERM, self.terminate)
+        signal.signal(signal.SIGCHLD, self.restart_file_processor)
 
         wm = pyinotify.WatchManager()
         handler = EventHandler(watcher=self, extensions=self.extensions)
@@ -253,8 +249,25 @@ class FileWatcher(object):
             self.terminate(None, None)
 
         LOG.debug("FileWatcher: %s: processor returned", self.name)
-        self.processor.join()
         return True
+
+    def restart_file_processor(self, signum, frame):
+        if (self.processor.is_alive() or
+            self.auto_restart_fileprocessor is False):
+            return
+        self.processor.join()
+        self.start_file_processor()
+        LOG.debug("FileWatcher: %s: restarting", self.name)
+
+    def start_file_processor(self):
+        fp = FileProcessor(
+            self.watchdir,
+            self.extensions,
+            self.eventq,
+            functools.partial(self.process))
+        fprun = functools.partial(fp.run)
+        self.processor = multiprocessing.Process(target=fprun)
+        self.processor.start()
 
 
 class TmpWatcher(FileWatcher):
