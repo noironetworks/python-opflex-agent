@@ -656,9 +656,11 @@ class AsMetadataManager(object):
 
     def clean_files(self):
         def rm_files(dirname, extension):
+            ignorelist = ['anycast_services.state']
             try:
                 for filename in os.listdir(dirname):
-                    if filename.endswith('.' + extension):
+                    if (filename.endswith('.' + extension) and
+                        filename not in ignorelist):
                         os.remove("%s/%s" % (dirname, filename))
             except Exception:
                 # Yes, one of those few cases, when a pass is OK!
