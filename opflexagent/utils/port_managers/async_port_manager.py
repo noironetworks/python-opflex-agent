@@ -170,7 +170,7 @@ class AsyncPortManager(base.PortManagerBase, rpc.OpenstackRpcMixin):
                     continue
                 self.response_by_device_id[detail['device']] = detail
             else:
-                LOG.warning("Endpoint update for port %s is malformed "
+                LOG.warn("Endpoint update for port %s is malformed "
                          "(request_id missing)", detail.get('device'))
             LOG.debug("Got response for port %(port_id)s in "
                       "%(secs)s seconds",

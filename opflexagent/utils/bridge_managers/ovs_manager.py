@@ -64,11 +64,11 @@ class OvsManager(bridge_manager_base.BridgeManagerBase,
         # Check for the canary flow
         canary_flow = self.int_br.dump_flows_for_table(constants.CANARY_TABLE)
         if canary_flow == '':
-            LOG.warning("OVS is restarted. OVSNeutronAgent will reset "
+            LOG.warn("OVS is restarted. OVSNeutronAgent will reset "
                      "bridges and recover ports.")
             return constants.OVS_RESTARTED
         elif canary_flow is None:
-            LOG.warning("OVS is dead. OVSNeutronAgent will keep running "
+            LOG.warn("OVS is dead. OVSNeutronAgent will keep running "
                      "and checking OVS status periodically.")
             return constants.OVS_DEAD
         else:

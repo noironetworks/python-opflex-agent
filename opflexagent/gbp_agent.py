@@ -200,8 +200,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         port.network_type = network_type
         if not port.gbp_details:
             # Mapping is empty, this port left the Opflex policy space.
-            LOG.warning("Mapping for port %s is None, undeclaring the"
-                    "Endpoint", port.vif_id)
+            LOG.warn("Mapping for port %s is None, undeclaring the Endpoint",
+                     port.vif_id)
             self.port_unbound(port.vif_id)
         elif network_type == ofcst.TYPE_OPFLEX:
             if ((self.opflex_networks is None) or
@@ -381,7 +381,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 LOG.info("Configuration for device %s completed.",
                          device)
             else:
-                LOG.warning("Device %s not defined on plugin", device)
+                LOG.warn("Device %s not defined on plugin", device)
                 if port and port.ofport != -1:
                     self.port_unbound(port.vif_id)
                     return False
@@ -401,7 +401,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # for being treated. If that does not happen, it is a potential
         # error condition of which operators should be aware
         if not vif_port.ofport:
-            LOG.warning("VIF port: %s has no ofport configured, "
+            LOG.warn("VIF port: %s has no ofport configured, "
                      "and might not be able to transmit", vif_port.vif_id)
         if vif_port:
             if admin_state_up:
