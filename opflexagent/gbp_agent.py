@@ -390,8 +390,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                     if 'No such device' in e.message:
                         # No need to rerise, port could be bound somehow else
                         ctx.reraise = False
-                        LOG.warn("Device %s not found while disabling mac "
-                                 "learning", br_name)
+                        LOG.warning("Device %s not found while disabling "
+                                 "mac learning", br_name)
 
     def treat_devices_added_or_updated(self, details):
         """Process added or updated devices
