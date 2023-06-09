@@ -4,7 +4,7 @@
 BUILD_DIR=${BUILD_DIR:-`pwd`/rpmbuild}
 mkdir -p $BUILD_DIR/BUILD $BUILD_DIR/SOURCES $BUILD_DIR/SPECS $BUILD_DIR/RPMS $BUILD_DIR/SRPMS
 RELEASE=${RELEASE:-1}
-VERSION=`python2 setup.py --version`
+VERSION=`python3 setup.py --version`
 SPEC_FILE=neutron-opflex-agent.spec
 sed -e "s/@VERSION@/$VERSION/" -e "s/@RELEASE@/$RELEASE/" rpm/$SPEC_FILE.in > $BUILD_DIR/SPECS/$SPEC_FILE
 python3 setup.py sdist --dist-dir $BUILD_DIR/SOURCES
