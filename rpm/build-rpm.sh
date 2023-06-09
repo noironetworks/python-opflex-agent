@@ -7,7 +7,7 @@ RELEASE=${RELEASE:-1}
 VERSION=`python2 setup.py --version`
 SPEC_FILE=neutron-opflex-agent.spec
 sed -e "s/@VERSION@/$VERSION/" -e "s/@RELEASE@/$RELEASE/" rpm/$SPEC_FILE.in > $BUILD_DIR/SPECS/$SPEC_FILE
-python2 setup.py sdist --dist-dir $BUILD_DIR/SOURCES
+python3 setup.py sdist --dist-dir $BUILD_DIR/SOURCES
 rpmbuild --clean -ba --define "_topdir $BUILD_DIR" $BUILD_DIR/SPECS/$SPEC_FILE
 
 # Save the python2 packages
