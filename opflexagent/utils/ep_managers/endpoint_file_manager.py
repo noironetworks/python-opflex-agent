@@ -98,6 +98,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         self._registered_endpoints = set()
         self._stale_endpoints = set()
         self.vif_int_dict = {}
+        self.old_snat_fips = {}
         self._setup_ep_directory()
         self.host = host
         self.nat_mtu_size = config['nat_mtu_size']
@@ -267,6 +268,13 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                                 access_int = ep_opts['access-interface']
                                 self.vif_int_dict.update({f.split('_')[0]:
                                     access_int})
+                                for ip_map in ep_opts['ip-address-mapping']:
+                                    snat_key = (ep_opts['mac'] +
+                                                ip_map['mapped-ip'])
+                                    fip = ip_map['floating-ip']
+                                    self.old_snat_fips[snat_key] = fip
+                                    ip_ver = netaddr.IPAddress(fip).version
+                                    self.int_fip_pool[ip_ver].remove(fip)
                             except Exception as e:
                                 # KeyError should only happen for UT
                                 # EP File would be deleted if parsing fails
@@ -716,8 +724,18 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 if ip in fip_fixed_ips.get(epg, []):
                     continue
                 ip_ver = netaddr.IPAddress(ip).version
-                fip = (fip_alloc_es[ip_ver].get(ip) or
-                       self._alloc_int_fip(ip_ver, port_id, port_mac, es, ip))
+                fip = None
+                saved_snat_fip_key = (gbp_details.get("mac_address", "") +
+                                      str(ip))
+                if saved_snat_fip_key in self.old_snat_fips:
+                    saved_fip = self.old_snat_fips[saved_snat_fip_key]
+                    fip = self._set_int_fip(ip_ver, port_id, port_mac, es, ip,
+                                            saved_fip)
+                    self.old_snat_fips.pop(saved_snat_fip_key)
+                else:
+                    fip = (fip_alloc_es[ip_ver].get(ip) or
+                           self._alloc_int_fip(ip_ver, port_id, port_mac, es,
+                                               ip))
                 es_using_int_fip[ip_ver].add(es)
                 ip_map = {'uuid': uuidutils.generate_uuid(),
                           'mapped-ip': ip,
@@ -760,6 +778,17 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         self.int_fip_alloc[ip_ver].setdefault(
             (port_id, port_mac), {}).setdefault(es, {})[ip] = fip
         LOG.debug("Allocated internal v%(version)d FIP %(fip)s to "
+                  "port %(port)s, %(mac)s, fixed IP %(ip)s "
+                  "in external segment %(es)s",
+                  {'fip': fip, 'port': port_id, 'mac': port_mac,
+                   'es': es, 'ip': ip, 'version': ip_ver})
+        return fip
+
+    def _set_int_fip(self, ip_ver, port_id, port_mac, es, ip, fip):
+        self.int_fip_pool[ip_ver].remove(fip)
+        self.int_fip_alloc[ip_ver].setdefault(
+            (port_id, port_mac), {}).setdefault(es, {})[ip] = fip
+        LOG.debug("Set internal v%(version)d FIP %(fip)s to "
                   "port %(port)s, %(mac)s, fixed IP %(ip)s "
                   "in external segment %(es)s",
                   {'fip': fip, 'port': port_id, 'mac': port_mac,
