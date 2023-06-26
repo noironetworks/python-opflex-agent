@@ -692,7 +692,7 @@ class AsMetadataManager(object):
     def has_ip(self, ipaddr):
         outp = self.sh("ip netns exec %s ip addr show dev %s" %
                 (SVC_NS, SVC_NS_PORT))
-        return 'inet %s' % (ipaddr, ) in outp
+        return 'net %s/' % (ipaddr, ) in outp
 
     def add_ip(self, ipaddr):
         if self.has_ip(ipaddr):
