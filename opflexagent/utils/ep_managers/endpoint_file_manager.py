@@ -268,7 +268,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                                 access_int = ep_opts['access-interface']
                                 self.vif_int_dict.update({f.split('_')[0]:
                                     access_int})
-                                for ip_map in ep_opts['ip-address-mapping']:
+                                for ip_map in ep_opts.get(
+                                        'ip-address-mapping', []):
                                     snat_key = (ep_opts['mac'] +
                                                 ip_map['mapped-ip'])
                                     fip = ip_map['floating-ip']
