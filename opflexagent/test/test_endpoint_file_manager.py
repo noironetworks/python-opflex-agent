@@ -798,7 +798,17 @@ class TestEndpointFileManager(base.OpflexTestBase):
 
     def test_existing_snat_endpoints(self):
         # Init directory
-        self.manager._write_file('uuid1_AA', {}, self.manager.epg_mapping_file)
+        self.manager._write_file('uuid1_AA', {
+            "access-interface": "tapb79d3176-8d",
+            "mac": "fa:16:3e:47:31:bc",
+            "ip-address-mapping": [{
+                "uuid": "374c00fc-3589-4433-89d1-d9c74493b4d6",
+                "mapped-ip": "40.40.40.246",
+                "floating-ip": "169.254.0.1",
+                "policy-space-name": "common",
+                "endpoint-group-name": "ostack-bm-2_OpenStack|EXT-fab2041_2"
+            }]
+        }, self.manager.epg_mapping_file)
         self.manager._write_file('EXT-1', {}, self.manager.epg_mapping_file)
         self.manager._write_file('EXT-2', {}, self.manager.epg_mapping_file)
         self.manager._write_file('EXT-3', {}, self.manager.epg_mapping_file)
@@ -812,6 +822,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
             manager = self._initialize_agent()
             self.assertEqual(set(['uuid1']),
                              manager.get_registered_endpoints())
+            self.assertIsNone(manager.old_snat_fips.get(
+                                 'fa:16:3e:47:31:bc40.40.40.246'))
             self.assertEqual(set(['EXT-1.ep', 'EXT-3.ep']),
                              manager.get_stale_endpoints())
             manager.snat_iptables.cleanup_snat_all.assert_called_once_with(
