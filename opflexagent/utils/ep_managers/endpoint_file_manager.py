@@ -270,6 +270,12 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                                     access_int})
                                 for ip_map in ep_opts.get(
                                         'ip-address-mapping', []):
+                                    # Don't save non-SNAT mappings
+                                    if ('next-hop-if' not in list(
+                                            ip_map.keys()) or not
+                                            ip_map['floating-ip'].startswith(
+                                                '169.254')):
+                                        continue
                                     snat_key = (ep_opts['mac'] +
                                                 ip_map['mapped-ip'])
                                     fip = ip_map['floating-ip']
