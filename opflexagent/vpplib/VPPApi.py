@@ -101,7 +101,7 @@ class VPPApi(object):
 
         rstr = ''
         for i in bytearray(istr):
-            if i is 0:
+            if i == 0:
                 return rstr
             rstr += chr(i)
         return rstr
@@ -150,7 +150,7 @@ class VPPApi(object):
 
         rstr = ''
         for i in bytearray(istr):
-            if i is 0:
+            if i == 0:
                 return rstr
             rstr += chr(i)
 
@@ -170,7 +170,7 @@ class VPPApi(object):
             for i in list(data.items()):
                 key = i[0]
                 value = i[1]
-                if type(value) is str:
+                if isinstance(value, str):
                     value = self._fix_string(value)
                     data[key] = value
             datalist.append(data)
@@ -198,7 +198,7 @@ class VPPApi(object):
         for i in list(data.items()):
             key = i[0]
             value = i[1]
-            if type(value) is str:
+            if isinstance(value, str):
                 value = self._fix_string(value)
                 data[key] = value
 
@@ -220,7 +220,7 @@ class VPPApi(object):
         :returns: The reply data in json
         """
 
-        if type(reply) is list:
+        if isinstance(reply, list):
             return self._handle_replylist(reply)
         else:
             return self._handle_replytuple(reply)
@@ -240,7 +240,7 @@ class VPPApi(object):
             for i in list(data.items()):
                 key = i[0]
                 value = i[1]
-                if type(value) is str:
+                if isinstance(value, str):
                     value = self._fix_string(value)
                     data[key] = value
             datalist.append(data)
@@ -266,7 +266,7 @@ class VPPApi(object):
             for i in list(data.items()):
                 key = i[0]
                 value = i[1]
-                if type(value) is str:
+                if isinstance(value, str):
                     if key == 'l2_address':
                         value = binascii.hexlify(value)
                         cnt = 0
