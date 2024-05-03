@@ -14,8 +14,11 @@
 #    under the License.
 
 import json
+import os
+import shutil
 import socket
 import struct
+import sys
 
 from unittest import mock
 
@@ -32,6 +35,19 @@ class TestOpflexNotify(base.BaseTestCase):
         # Configure the Cisco APIC mechanism driver
         cfg.CONF.set_override('opflex_notify_socket_path',
                               '/the/path', 'OPFLEX')
+        python_version_short = f"py{sys.version_info.major}" \
+                               f"{sys.version_info.minor}"
+        python_version_long = f"python{sys.version_info.major}." \
+                              f"{sys.version_info.minor}"
+        self.policy_d_path = os.path.join('.tox',
+                python_version_short, 'lib', python_version_long,
+                'site-packages', 'neutron', 'tests', 'etc', 'policy.d')
+
+        os.makedirs(self.policy_d_path, exist_ok=True)
+
+    def tearDown(self):
+        super(TestOpflexNotify, self).tearDown()
+        shutil.rmtree(self.policy_d_path, ignore_errors=True)
 
     def test_notify_socket(self):
         """Verify message encoding and decoding is done properly."""
