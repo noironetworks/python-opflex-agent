@@ -17,8 +17,9 @@ import multiprocessing
 import os
 import os.path
 import signal
-import subprocess
+import subprocess  # nosec
 import sys
+import tempfile
 import time
 import uuid
 
@@ -273,7 +274,7 @@ class FileWatcher(object):
 class TmpWatcher(FileWatcher):
     """Class for integration testing"""
     def __init__(self):
-        filedir = "/tmp"
+        filedir = tempfile.gettempdir()
         extensions = EP_FILE_EXTENSION
         super(TmpWatcher, self).__init__(
             filedir, extensions, name="ep-watcher")
@@ -327,7 +328,7 @@ class EpWatcher(FileWatcher):
 
     def gen_domain_uuid(self, tenant, name):
         fqname = '%s|%s' % (tenant, name)
-        fqhash = hashlib.md5(fqname.encode('utf-8')).hexdigest()
+        fqhash = hashlib.md5(fqname.encode('utf-8')).hexdigest()  # nosec
         fquuid = str(uuid.UUID(fqhash))
         return fquuid
 
@@ -639,7 +640,7 @@ class AsMetadataManager(object):
         try:
             sanitized_cmd = encodeutils.to_utf8(cmd)
             data = subprocess.check_output(
-                sanitized_cmd, stderr=subprocess.STDOUT, shell=True)
+                sanitized_cmd, stderr=subprocess.STDOUT, shell=True)  # nosec
             ret = helpers.safe_decode_utf8(data)
         except Exception as e:
             LOG.error("In running command: %(cmd)s: %(exc)s",
@@ -662,9 +663,9 @@ class AsMetadataManager(object):
                     if (filename.endswith('.' + extension) and
                         filename not in ignorelist):
                         os.remove("%s/%s" % (dirname, filename))
-            except Exception:
-                # Yes, one of those few cases, when a pass is OK!
-                pass
+            except Exception as e:
+                LOG.info("Exception occurred while removing files."
+                         " error: %s", str(e))
         rm_files(AS_MAPPING_DIR, AS_FILE_EXTENSION)
         rm_files(MD_DIR, STATE_FILE_EXTENSION)
         rm_files(MD_DIR, PROXY_FILE_EXTENSION)

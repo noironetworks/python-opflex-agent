@@ -18,6 +18,8 @@ import time
 
 from hook import Hook
 
+LOG = logging.getLogger(__name__)
+
 # Parse the VPP api json files once and store the object globally
 vpp_jsonfiles = []
 
@@ -30,8 +32,9 @@ try:
     no_vpp_papi = os.getenv("NO_VPP_PAPI")
     if no_vpp_papi == "1":
         do_import = False
-except Exception:
-    pass
+except Exception as e:
+    LOG.info("Exception occurred while reading env var \'NO_VPP_PAPI\'."
+            " error: %s", str(e))
 
 if do_import:
     from vpp_papi import VPP
