@@ -12,7 +12,7 @@
 #    under the License.
 
 import signal
-import subprocess
+import subprocess  # nosec
 import sys
 import time
 
@@ -55,10 +55,11 @@ class SnatConntrackLogger(object):
             # returned Popen has file object for stdout
             self.p1 = subprocess.Popen(
                 conntrack_cmd, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, close_fds=True, shell=True)
+                stderr=subprocess.STDOUT, close_fds=True, shell=True)  # nosec
             # Logger uses stdout member from conntrack process for its stdin
             self.p2 = subprocess.Popen(
-                logger_cmd, stdin=self.p1.stdout, close_fds=True, shell=True)
+                logger_cmd, stdin=self.p1.stdout,
+                close_fds=True, shell=True)  # nosec
         except Exception as e:
             LOG.error("In running commands: %(cmds)s: %(exc)s",
                       {'cmds': conntrack_cmd + logger_cmd, 'exc': str(e)})
@@ -68,8 +69,9 @@ class SnatConntrackLogger(object):
             LOG.debug("conn_track: proc: %s", proc.returncode)
             try:
                 proc.terminate()
-            except Exception:
-                pass
+            except Exception as e:
+                LOG.info("Exception occurred while killing child processes."
+                         " error: %s", str(e))
 
     def terminate(self, signum, frame):
         self._kill_child_procs()
