@@ -146,7 +146,7 @@ class NetworkMetadataProxyHandler(object):
 class ProxyDaemon(daemon.Daemon):
     def __init__(self, pidfile, port, network_id=None, router_id=None,
                  domain_id=None,
-                 user=None, group=None, host="0.0.0.0"):
+                 user=None, group=None, host="0.0.0.0"):  # nosec
         uuid = domain_id or network_id or router_id
         super(ProxyDaemon, self).__init__(pidfile, uuid=uuid, user=user,
                                           group=group)
@@ -188,7 +188,7 @@ def main():
                     default=False,
                     help=_('Run as daemon.')),
         cfg.StrOpt('metadata_host',
-                   default="0.0.0.0",
+                   default="0.0.0.0",  # nosec
                    help=_("IP address to listen for metadata server "
                           "requests.")),
         cfg.IntOpt('metadata_port',
