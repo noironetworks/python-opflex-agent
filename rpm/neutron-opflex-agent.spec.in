@@ -11,12 +11,12 @@ License:	ASL 2.0
 URL:		https://github.com/noironetworks/python-opflex-agent
 Source:		%{srcname}-%{version}.tar.gz
 BuildArch:	noarch
-BuildRequires:	python2-devel
-BuildRequires:	python2-pbr
-BuildRequires:	python2-setuptools
+BuildRequires:	python3-devel
+BuildRequires:	python3-pbr
+BuildRequires:	python3-setuptools
 Requires:	gawk
 Requires:	openstack-neutron
-Requires:   python-inotify
+Requires:   python3-inotify
 Requires:   supervisor
 Requires(post): systemd-units
 Requires(preun): systemd-units
@@ -30,10 +30,10 @@ Neutron agent that provides edge policy enforcement
 rm -f requirements.txt
 
 %build
-%{__python2} setup.py build
+%{__python3} setup.py build
 
 %install
-%{__python2} setup.py install -O1 --install-data / --skip-build --root %{buildroot}
+%{__python3} setup.py install -O1 --install-data / --skip-build --root %{buildroot}
 install -p -D -m 600 etc/gbp-opflex.filters \
     %{buildroot}%{_sysconfdir}/neutron/rootwrap.d/gbp-opflex.filters
 install -p -D -m 600 etc/cisco-apic.filters \
@@ -44,7 +44,7 @@ install -p -D -m 0644 rpm/%{host_agent} \
     %{buildroot}/%{_unitdir}/%{host_agent}
 
 # Remove unused files
-rm -rf %{buildroot}%{python2_sitelib}/opflexagent/test
+rm -rf %{buildroot}%{python3_sitelib}/opflexagent/test
 
 %pre
 getent group opflexep >/dev/null || groupadd -r opflexep
@@ -90,8 +90,8 @@ usermod -a -G opflexep neutron
 
 %files
 %doc README.rst
-%{python2_sitelib}/opflexagent
-%{python2_sitelib}/neutron_opflex_agent-%%{version}*.egg-info
+%{python3_sitelib}/opflexagent
+%{python3_sitelib}/neutron_opflex_agent-%%{version}*.egg-info
 %{_bindir}/%{srcname}
 %{_bindir}/opflex-ep-watcher
 %{_bindir}/opflex-state-watcher
