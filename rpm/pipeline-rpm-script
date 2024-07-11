@@ -1,0 +1,17 @@
+pipeline {
+    agent any
+    agent {
+        label 'noiro-build-101.cisco.com'
+    }
+    stages {
+        stage('Main Script') {
+            steps {
+                script {
+                    sh """
+                        BUILD_DIR=$WORKSPACE/rpmbuild RELEASE=$BUILD_NUMBER ./rpm/build-rpm.sh
+                    """
+                }
+            }
+        }
+    }
+}
