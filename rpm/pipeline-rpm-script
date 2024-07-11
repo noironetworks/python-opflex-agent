@@ -1,5 +1,7 @@
 pipeline {
-    agent any
+    agent {
+        label 'noiro-build-101.cisco.com'
+    }
     stages {
         stage('Main Script') {
             steps {
