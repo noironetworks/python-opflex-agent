@@ -12,7 +12,6 @@ matrix:
       env:
         - TOX_ENV=py39
 
-
 install:
   - pip install tox
 
