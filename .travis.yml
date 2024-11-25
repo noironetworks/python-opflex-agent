@@ -1,4 +1,5 @@
 language: python
+dist: trusty
 
 matrix:
   include:
@@ -11,6 +12,15 @@ matrix:
     - python: 3.9
       env:
         - TOX_ENV=py39
+    - python: 3.10
+      env:
+        - TOX_ENV=py310
+    - python: 3.11
+      env:
+        - TOX_ENV=py311
+    - python: 3.12
+      env:
+         - TOX_ENV=py312
 
 
 install:
