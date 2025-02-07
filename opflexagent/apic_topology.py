@@ -277,6 +277,7 @@ class ApicTopologyAgent(manager.Manager):
 
 
 def launch(binary, manager, topic=None):
+    common_cfg.register_common_config_options()
     cfg.CONF(project='neutron')
     config.register_root_helper(cfg.CONF)
     common_cfg.init(sys.argv[1:])
