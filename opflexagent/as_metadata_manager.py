@@ -839,6 +839,7 @@ class AsMetadataManager(object):
 
 
 def init_env():
+    common_config.register_common_config_options()
     config.register_root_helper(cfg.CONF)
     # importing ovs_config got OVS registered
     cfg.CONF.register_opts(gbp_opts, "OPFLEX")
