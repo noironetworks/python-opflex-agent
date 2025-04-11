@@ -3,18 +3,15 @@ dist: jammy
 
 matrix:
   include:
-    - python: 3.8
+    - python: 3.10
       env:
         - TOX_ENV=pep8
-    - python: 3.8
-      env:
-        - TOX_ENV=py38
-    - python: 3.9
-      env:
-        - TOX_ENV=py39
     - python: 3.10
       env:
         - TOX_ENV=py310
+    - python: 3.11
+      env:
+        - TOX_ENV=py311
     - python: 3.12
       env:
         - TOX_ENV=py312
