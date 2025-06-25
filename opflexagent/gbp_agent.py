@@ -662,7 +662,6 @@ def create_agent_config_map(conf):
 
 
 def main():
-    common_config.register_common_config_options()
     cfg.CONF.register_opts(ip_lib.OPTS)
     dhcp_config.register_agent_dhcp_opts(cfg.CONF)
     config.register_root_helper(cfg.CONF)
