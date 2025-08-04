@@ -17,10 +17,12 @@ import os
 import netaddr
 from neutron.agent.linux import ip_lib
 from neutron_lib import constants as n_constants
+from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
 from oslo_utils import uuidutils
 
+from opflexagent import as_metadata_manager
 from opflexagent import constants as ofcst
 from opflexagent import snat_iptables_manager
 from opflexagent.utils.ep_managers import endpoint_manager_base
@@ -240,6 +242,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         The EP directory gets created if needed, and all the stale EP files
         removed
         """
+        snat_conn_track_handler = (as_metadata_manager.SnatConnTrackHandler())
+        snat_conn_track_handler.cleanup_all_conn_track()
         created = False
         snat_excl = []
         dirs = set([os.path.dirname(f) for f in self.file_formats])
@@ -257,6 +261,19 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                         # exclusion from clean-up; also don't register the EP
                         # file, otherwise it will be treated as a removed port
                         snat_excl.append(filename)
+                        if cfg.CONF.OPFLEX.enable_snat_conn_track:
+                            with open(os.path.join(directory, f)) as fp:
+                                try:
+                                    snat_opts = json.load(fp)
+                                    interface_name = (
+                                        snat_opts['interface-name'])
+                                    snat_conn_track_handler. \
+                                        conn_track_create(interface_name)
+                                except Exception as e:
+                                    LOG.exception("Error while parsing"
+                                                  " snat ep "
+                                        "file %(file)s: %(ex)s",
+                                        {'file': f, 'ex': e})
                     # REVISIT: A more reliable mechanism is needed for
                     # determining if this EP file should be considered
                     # as stale or not.
