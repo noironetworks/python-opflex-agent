@@ -575,6 +575,15 @@ class SnatConnTrackHandler(object):
         except Exception as e:
             LOG.warning("ConnTrack: Exception in deleting file: %s", str(e))
 
+    def cleanup_all_conn_track(self):
+        if not os.path.exists(MD_DIR):
+            return
+        for f in os.listdir(MD_DIR):
+            if not f.endswith('.' + SNAT_FILE_EXTENSION):
+                continue
+            filename = f[:-len(SNAT_FILE_EXTENSION) - 1]
+            self.conn_track_del(filename)
+
     def conn_track_config(self, netns):
         snatstr = "\n".join([
             "[program:opflex-conn-track-%s]" % netns,
