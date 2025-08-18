@@ -135,8 +135,8 @@ class GBPServerRpcApi(object):
                                       host=None):
         # Requests is a list of tuples with the device_id as first element,
         # and the request ID as second element
-        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
-        cctxt.call(context, 'request_endpoint_details_list',
+        cctxt = self.client.prepare(version=self.GBP_RPC_VERSION, fanout=False)
+        cctxt.cast(context, 'request_endpoint_details_list',
                    agent_id=agent_id, requests=requests, host=host)
 
     @log.log_method_call
