@@ -10,12 +10,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import sys
 from unittest import mock
+
+from oslo_config import cfg
 
 from opflexagent import gbp_agent
 from opflexagent.test import base
-
-from oslo_config import cfg
 
 
 class TestGBPOpflexAgentTypes(base.OpflexTestBase):
@@ -51,17 +52,14 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
         metadata_mgr.stop()
 
     def test_dvs_agent_mode(self):
+        sys.argv = mock.MagicMock()
         mock_dvs_instance = mock.MagicMock()
         import_mock = mock.patch('importlib.import_module',
                                  return_value=mock_dvs_instance)
         import_patch = import_mock.start()
         cfg.CONF.set_override('agent_mode', 'dvs', 'OPFLEX')
 
-        resources = [
-            mock.patch('os.path.basename'),
-            mock.patch('sys.argv')]
-
-        with base.nested_context_manager(*resources):
+        with base.nested_context_manager():
             gbp_agent.main()
             self.assertEqual(1, import_patch.call_count)
             self.assertEqual(
@@ -69,17 +67,14 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
         import_mock.stop()
 
     def test_dvs_agent_no_binding_mode(self):
+        sys.argv = mock.MagicMock()
         mock_dvs_instance = mock.MagicMock()
         import_mock = mock.patch('importlib.import_module',
                                  return_value=mock_dvs_instance)
         import_patch = import_mock.start()
         cfg.CONF.set_override('agent_mode', 'dvs_no_binding', 'OPFLEX')
 
-        resources = [
-            mock.patch('os.path.basename'),
-            mock.patch('sys.argv')]
-
-        with base.nested_context_manager(*resources):
+        with base.nested_context_manager():
             gbp_agent.main()
             self.assertEqual(1, import_patch.call_count)
             self.assertEqual(
@@ -89,7 +84,6 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
     def test_dvs_agent_mode_no_package(self):
         import_mock = mock.patch('importlib.import_module',
                                  side_effect=ValueError)
-        import_patch = import_mock.start()
         cfg.CONF.set_override('agent_mode', 'dvs', 'OPFLEX')
 
         resources = [
@@ -99,9 +93,10 @@ class TestGBPOpflexAgentTypes(base.OpflexTestBase):
 
         with base.nested_context_manager(*resources):
             with mock.patch('sys.exit') as sys_patch:
+                import_patch = import_mock.start()
                 try:
                     gbp_agent.main()
                 except AttributeError:
                     self.assertEqual(1, sys_patch.call_count)
                 self.assertEqual(1, import_patch.call_count)
-        import_mock.stop()
+                import_mock.stop()
