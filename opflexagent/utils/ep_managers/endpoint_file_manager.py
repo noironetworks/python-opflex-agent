@@ -880,7 +880,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 self.snat_iptables.cleanup_snat_for_es(es)
                 LOG.debug("Removed SNAT iptables for %s", es)
             except Exception as e:
-                LOG.warn("Failed to remove SNAT iptables for "
+                LOG.warning("Failed to remove SNAT iptables for "
                          "%(es)s: %(ex)s",
                          {'es': es, 'ex': e})
 

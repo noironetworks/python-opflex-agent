@@ -94,7 +94,7 @@ def read_jsonfile(name):
         with open(name, "r") as f:
             retval = json.load(f)
     except Exception as e:
-        LOG.warn("Exception in reading file: %s", str(e))
+        LOG.warning("Exception in reading file: %s", str(e))
     return retval
 
 
@@ -103,7 +103,7 @@ def write_jsonfile(name, data):
         with open(name, "w") as f:
             json.dump(data, f)
     except Exception as e:
-        LOG.warn("Exception in writing file: %s", str(e))
+        LOG.warning("Exception in writing file: %s", str(e))
 
 
 class AddressPool(object):
@@ -180,7 +180,7 @@ class FileProcessor(object):
         except KeyboardInterrupt:
             pass
         except Exception as e:
-            LOG.warn("FileProcessor: Exception: %s", str(e))
+            LOG.warning("FileProcessor: Exception: %s", str(e))
         return
 
 
@@ -471,7 +471,7 @@ class StateWatcher(FileWatcher):
         try:
             self.mgr.del_ip(asvc["service-mapping"][0]["next-hop-ip"])
         except Exception as e:
-            LOG.warn("EPwatcher: Exception in deleting IP: %s",
+            LOG.warning("EPwatcher: Exception in deleting IP: %s",
                      str(e))
 
         proxyfilename = PROXY_FILE_NAME_FORMAT % asvc["uuid"]
@@ -480,7 +480,7 @@ class StateWatcher(FileWatcher):
             os.remove(filename)
             os.remove(proxyfilename)
         except Exception as e:
-            LOG.warn("EPwatcher: Exception in deleting file: %s", str(e))
+            LOG.warning("EPwatcher: Exception in deleting file: %s", str(e))
 
     def as_create(self, alloc):
         asvc = {
@@ -501,7 +501,7 @@ class StateWatcher(FileWatcher):
         try:
             self.mgr.add_ip(alloc["next-hop-ip"])
         except Exception as e:
-            LOG.warn("EPwatcher: Exception in adding IP: %s",
+            LOG.warning("EPwatcher: Exception in adding IP: %s",
                      str(e))
 
         asfilename = AS_FILE_NAME_FORMAT % asvc["uuid"]
@@ -518,7 +518,7 @@ class StateWatcher(FileWatcher):
                 pidfile = PID_FILE_NAME_FORMAT % asvc["uuid"]
                 self.mgr.sh("rm -f %s" % pidfile)
             except Exception as e:
-                LOG.warn("EPwatcher: Exception in writing proxy file: %s",
+                LOG.warning("EPwatcher: Exception in writing proxy file: %s",
                          str(e))
 
     def proxyconfig(self, alloc):
@@ -563,7 +563,7 @@ class SnatConnTrackHandler(object):
             self.mgr.sh("rm -f %s" % pidfile)
             self.mgr.update_supervisor()
         except Exception as e:
-            LOG.warn("ConnTrack: Exception in writing snat file: %s",
+            LOG.warning("ConnTrack: Exception in writing snat file: %s",
                      str(e))
 
     def conn_track_del(self, netns):
@@ -573,7 +573,7 @@ class SnatConnTrackHandler(object):
             os.remove(snatfilename)
             self.mgr.update_supervisor()
         except Exception as e:
-            LOG.warn("ConnTrack: Exception in deleting file: %s", str(e))
+            LOG.warning("ConnTrack: Exception in deleting file: %s", str(e))
 
     def cleanup_all_conn_track(self):
         if not os.path.exists(MD_DIR):
