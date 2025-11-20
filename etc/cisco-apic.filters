@@ -17,4 +17,4 @@ ip_exec: IpNetnsExecFilter, ip, root
 ovsdb-client: CommandFilter, ovsdb-client, root
 
 # nft filters
-nft: CommandFilter, iptables-nft, root
+nft: CommandFilter, nft, root
