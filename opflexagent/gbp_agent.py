@@ -37,7 +37,7 @@ from neutron_lib import context
 from neutron_lib import exceptions
 from neutron_lib.plugins.ml2 import ovs_constants as constants
 from opflexagent._i18n import _
-from opflexagent import as_metadata_manager
+from opflexagent import as_metadata_manager, dns_manager
 from opflexagent import constants as ofcst
 from opflexagent import opflex_notify
 from opflexagent import rpc
@@ -680,6 +680,8 @@ def main():
         agent = main_opflex()
     if not agent:
         sys.exit(1)
+
+    dnsManager = dns_manager.DnsManager(LOG)
 
     LOG.info("Agent initialized successfully, now running... ")
     agent.daemon_loop()
