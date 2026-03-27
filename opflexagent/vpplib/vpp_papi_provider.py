@@ -76,7 +76,6 @@ class VppPapiProvider(object):
         self.shm_prefix = shm_prefix
         self._expect_api_retval = self._zero
         self._expect_stack = []
-        global vpp_jsonfiles
 
         if not vpp_jsonfiles:
             install_dir = os.getenv('VPP_API_DIR',
