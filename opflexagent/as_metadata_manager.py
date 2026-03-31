@@ -38,6 +38,7 @@ from oslo_log import log as logging
 from oslo_utils import encodeutils
 
 from opflexagent._i18n import _
+from opflexagent import constants as ofcst
 from opflexagent import config as oscfg  # noqa
 from opflexagent.utils import utils as opflexagent_utils
 
@@ -71,6 +72,10 @@ SVC_IP_BASE = 0xA9FEF003
 SVC_IP_SIZE = 1000
 SVC_IP_CIDR = 16
 SVC_NEXTHOP = "169.254.1.1"
+SVC_V6_IP_DEFAULT = "fe80::a9fe:102"
+SVC_V6_IP_BASE = int(netaddr.IPAddress("fe80::a9fe:f003"))
+SVC_V6_IP_CIDR = 64
+SVC_V6_NEXTHOP = "fe80::a9fe:101"
 SVC_NS = "of-svc"
 SVC_NS_PORT = "of-svc-nsport"
 SVC_OVS_PORT = "of-svc-ovsport"
@@ -337,9 +342,13 @@ class EpWatcher(FileWatcher):
 
         curr_svc = read_jsonfile(self.svcfile)
         ip_pool = AddressPool(SVC_IP_BASE, SVC_IP_SIZE)
+        ip6_pool = AddressPool(SVC_V6_IP_BASE, SVC_IP_SIZE)
         for domain_uuid in curr_svc:
             thisip = netaddr.IPAddress(curr_svc[domain_uuid]['next-hop-ip'])
             ip_pool.reserve(int(thisip))
+            thisip6 = curr_svc[domain_uuid].get('next-hop-ipv6')
+            if thisip6:
+                ip6_pool.reserve(int(netaddr.IPAddress(thisip6)))
 
         new_svc = {}
         new_nets = {}
@@ -376,13 +385,20 @@ class EpWatcher(FileWatcher):
                         as_uuid = domain_uuid
                         as_addr = netaddr.IPAddress(ip_pool.get_addr())
                         as_addr = str(as_addr)
+                        as_addr_v6 = netaddr.IPAddress(ip6_pool.get_addr())
+                        as_addr_v6 = str(as_addr_v6)
                         new_svc[domain_uuid] = {
                             'domain-name': domain_name,
                             'domain-policy-space': domain_tenant,
                             'next-hop-ip': as_addr,
+                            'next-hop-ipv6': as_addr_v6,
                             'uuid': as_uuid,
                         }
                     else:
+                        if 'next-hop-ipv6' not in curr_svc[domain_uuid]:
+                            updated = True
+                            curr_svc[domain_uuid]['next-hop-ipv6'] = str(
+                                netaddr.IPAddress(ip6_pool.get_addr()))
                         new_svc[domain_uuid] = curr_svc[domain_uuid]
                         del curr_svc[domain_uuid]
 
@@ -463,16 +479,23 @@ class StateWatcher(FileWatcher):
         for idx in ["uuid", "domain-name", "domain-policy-space"]:
             if asvc[idx] != alloc[idx]:
                 return False
-        if asvc["service-mapping"][0]["next-hop-ip"] != alloc["next-hop-ip"]:
-            return False
-        return True
+        service_map = {
+            svc["service-ip"]: svc["next-hop-ip"]
+            for svc in asvc.get("service-mapping", [])
+        }
+        return (
+            service_map.get(ofcst.METADATA_DEFAULT_IP) ==
+            alloc["next-hop-ip"] and
+            service_map.get(ofcst.METADATA_DEFAULT_IPV6) ==
+            alloc.get("next-hop-ipv6"))
 
     def as_del(self, filename, asvc):
-        try:
-            self.mgr.del_ip(asvc["service-mapping"][0]["next-hop-ip"])
-        except Exception as e:
-            LOG.warning("EPwatcher: Exception in deleting IP: %s",
-                     str(e))
+        for svc in asvc.get("service-mapping", []):
+            try:
+                self.mgr.del_ip(svc["next-hop-ip"])
+            except Exception as e:
+                LOG.warning("EPwatcher: Exception in deleting IP: %s",
+                         str(e))
 
         proxyfilename = PROXY_FILE_NAME_FORMAT % asvc["uuid"]
         proxyfilename = "%s/%s" % (MD_DIR, proxyfilename)
@@ -491,18 +514,24 @@ class StateWatcher(FileWatcher):
             "domain-name": alloc["domain-name"],
             "service-mapping": [
                 {
-                    "service-ip": "169.254.169.254",
-                    "gateway-ip": "169.254.1.1",
+                    "service-ip": ofcst.METADATA_DEFAULT_IP,
+                    "gateway-ip": SVC_NEXTHOP,
                     "next-hop-ip": alloc["next-hop-ip"],
+                },
+                {
+                    "service-ip": ofcst.METADATA_DEFAULT_IPV6,
+                    "gateway-ip": SVC_V6_NEXTHOP,
+                    "next-hop-ip": alloc["next-hop-ipv6"],
                 },
             ],
         }
 
-        try:
-            self.mgr.add_ip(alloc["next-hop-ip"])
-        except Exception as e:
-            LOG.warning("EPwatcher: Exception in adding IP: %s",
-                     str(e))
+        for addr in [alloc["next-hop-ip"], alloc["next-hop-ipv6"]]:
+            try:
+                self.mgr.add_ip(addr)
+            except Exception as e:
+                LOG.warning("EPwatcher: Exception in adding IP: %s",
+                         str(e))
 
         asfilename = AS_FILE_NAME_FORMAT % asvc["uuid"]
         asfilename = "%s/%s" % (AS_MAPPING_DIR, asfilename)
@@ -516,33 +545,37 @@ class StateWatcher(FileWatcher):
                 with open(proxyfilename, "w") as f:
                     f.write(proxystr)
                 pidfile = PID_FILE_NAME_FORMAT % asvc["uuid"]
-                self.mgr.sh("rm -f %s" % pidfile)
+                self.mgr.sh("rm -f %s %s-v4.pid %s-v6.pid" % (
+                    pidfile, pidfile[:-4], pidfile[:-4]))
             except Exception as e:
                 LOG.warning("EPwatcher: Exception in writing proxy file: %s",
                          str(e))
 
     def proxyconfig(self, alloc):
         duuid = alloc["uuid"]
-        ipaddr = alloc["next-hop-ip"]
-        proxystr = "\n".join([
-            "[program:opflex-ns-proxy-%s]" % duuid,
-            "command=ip netns exec of-svc "
-            "/usr/bin/opflex-ns-proxy "
-            "--metadata_proxy_socket=/var/lib/neutron/metadata_proxy "
-            "--state_path=/var/lib/neutron "
-            "--pid_file=/var/lib/neutron/external/pids/%s.pid "
-            "--domain_id=%s --metadata_host %s --metadata_port=80 "
-            "--log-dir=/var/log/neutron --log-file=opflex-ns-proxy-%s.log" % (
-                duuid, duuid, ipaddr, duuid[:8]),
-            "exitcodes=0,2",
-            "stopasgroup=true",
-            "startsecs=10",
-            "startretries=3",
-            "stopwaitsecs=10",
-            "stdout_logfile=NONE",
-            "stderr_logfile=NONE",
-        ])
-        return proxystr
+        proxy_configs = []
+        for family, ipaddr in [("v4", alloc["next-hop-ip"]),
+                               ("v6", alloc["next-hop-ipv6"])]:
+            proxy_configs.append("\n".join([
+                "[program:opflex-ns-proxy-%s-%s]" % (duuid, family),
+                "command=ip netns exec of-svc "
+                "/usr/bin/opflex-ns-proxy "
+                "--metadata_proxy_socket=/var/lib/neutron/metadata_proxy "
+                "--state_path=/var/lib/neutron "
+                "--pid_file=/var/lib/neutron/external/pids/%s-%s.pid "
+                "--domain_id=%s --metadata_host %s --metadata_port=80 "
+                "--log-dir=/var/log/neutron "
+                "--log-file=opflex-ns-proxy-%s-%s.log" % (
+                    duuid, family, duuid, ipaddr, duuid[:8], family),
+                "exitcodes=0,2",
+                "stopasgroup=true",
+                "startsecs=10",
+                "startretries=3",
+                "stopwaitsecs=10",
+                "stdout_logfile=NONE",
+                "stderr_logfile=NONE",
+            ]))
+        return "\n".join(proxy_configs)
 
 
 class SnatConnTrackHandler(object):
@@ -695,26 +728,43 @@ class AsMetadataManager(object):
         self.sh("supervisorctl -c %s shutdown" % self.md_filename)
         time.sleep(30)
 
-    def add_default_route(self, nexthop):
-        self.sh("ip netns exec %s ip route add default via %s" %
-                (SVC_NS, nexthop))
+    def add_default_route(self, nexthop, ip_version=4):
+        if ip_version == 6:
+            self.sh("ip netns exec %s ip -6 route add default via %s "
+                    "dev %s" % (SVC_NS, nexthop, SVC_NS_PORT))
+        else:
+            self.sh("ip netns exec %s ip route add default via %s" %
+                    (SVC_NS, nexthop))
 
     def has_ip(self, ipaddr):
-        outp = self.sh("ip netns exec %s ip addr show dev %s" %
-                (SVC_NS, SVC_NS_PORT))
+        ip_version = netaddr.IPAddress(ipaddr).version
+        cmd = "ip netns exec %s ip addr show dev %s"
+        if ip_version == 6:
+            cmd = "ip netns exec %s ip -6 addr show dev %s"
+        outp = self.sh(cmd % (SVC_NS, SVC_NS_PORT))
         return 'net %s/' % (ipaddr, ) in outp
 
     def add_ip(self, ipaddr):
         if self.has_ip(ipaddr):
             return
-        self.sh("ip netns exec %s ip addr add %s/%s dev %s" %
-                (SVC_NS, ipaddr, SVC_IP_CIDR, SVC_NS_PORT))
+        ip_version = netaddr.IPAddress(ipaddr).version
+        if ip_version == 6:
+            self.sh("ip netns exec %s ip -6 addr add %s/%s dev %s" %
+                    (SVC_NS, ipaddr, SVC_V6_IP_CIDR, SVC_NS_PORT))
+        else:
+            self.sh("ip netns exec %s ip addr add %s/%s dev %s" %
+                    (SVC_NS, ipaddr, SVC_IP_CIDR, SVC_NS_PORT))
 
     def del_ip(self, ipaddr):
         if not self.has_ip(ipaddr):
             return
-        self.sh("ip netns exec %s ip addr del %s/%s dev %s" %
-                (SVC_NS, ipaddr, SVC_IP_CIDR, SVC_NS_PORT))
+        ip_version = netaddr.IPAddress(ipaddr).version
+        if ip_version == 6:
+            self.sh("ip netns exec %s ip -6 addr del %s/%s dev %s" %
+                    (SVC_NS, ipaddr, SVC_V6_IP_CIDR, SVC_NS_PORT))
+        else:
+            self.sh("ip netns exec %s ip addr del %s/%s dev %s" %
+                    (SVC_NS, ipaddr, SVC_IP_CIDR, SVC_NS_PORT))
 
     def get_asport_mac(self):
         return self.sh(
@@ -747,7 +797,9 @@ class AsMetadataManager(object):
             self.sh("ip netns exec %s ip link set dev %s up" %
                     (SVC_NS, SVC_NS_PORT))
             self.add_ip(SVC_IP_DEFAULT)
+            self.add_ip(SVC_V6_IP_DEFAULT)
             self.add_default_route(SVC_NEXTHOP)
+            self.add_default_route(SVC_V6_NEXTHOP, ip_version=6)
             self.sh("ethtool --offload %s tx off" % SVC_OVS_PORT)
             self.sh("ip netns exec %s ethtool --offload %s tx off" %
                     (SVC_NS, SVC_NS_PORT))

@@ -38,12 +38,14 @@ curr_alloc_json = {
         "domain-name": "sauto_k8s-bm-1_l3out-1_vrf",
         "domain-policy-space": "common",
         "next-hop-ip": "169.254.240.3",
+        "next-hop-ipv6": "fe80::a9fe:f003",
         "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"
     },
     "99e788f5-f579-83d2-6b9f-3051a21f63ab": {
         "domain-name": "k8s-bm-1_UnroutedVRF",
         "domain-policy-space": "common",
         "next-hop-ip": "169.254.240.4",
+        "next-hop-ipv6": "fe80::a9fe:f004",
         "uuid": "99e788f5-f579-83d2-6b9f-3051a21f63ab"
     }
 }
@@ -52,6 +54,7 @@ onefile_curr_alloc_json = {
         "domain-name": "sauto_k8s-bm-1_l3out-1_vrf",
         "domain-policy-space": "common",
         "next-hop-ip": "169.254.240.3",
+        "next-hop-ipv6": "fe80::a9fe:f003",
         "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"
     }
 }
@@ -66,6 +69,11 @@ nochange_fileA = {
             "service-ip": "169.254.169.254",
             "gateway-ip": "169.254.1.1",
             "next-hop-ip": "169.254.240.3"
+        },
+        {
+            "service-ip": "fe80::a9fe:a9fe",
+            "gateway-ip": "fe80::a9fe:101",
+            "next-hop-ip": "fe80::a9fe:f003"
         }
     ]
 }
@@ -80,6 +88,11 @@ change_fileA = {
             "service-ip": "169.254.169.254",
             "gateway-ip": "169.254.1.1",
             "next-hop-ip": "169.254.240.3"
+        },
+        {
+            "service-ip": "fe80::a9fe:a9fe",
+            "gateway-ip": "fe80::a9fe:101",
+            "next-hop-ip": "fe80::a9fe:f003"
         }
     ]
 }
@@ -94,6 +107,11 @@ nochange_fileB = {
             "service-ip": "169.254.169.254",
             "gateway-ip": "169.254.1.1",
             "next-hop-ip": "169.254.240.4"
+        },
+        {
+            "service-ip": "fe80::a9fe:a9fe",
+            "gateway-ip": "fe80::a9fe:101",
+            "next-hop-ip": "fe80::a9fe:f004"
         }
     ]
 }
@@ -192,7 +210,7 @@ class TestStateWatcher(base.BaseTestCase):
         self.assertEqual(write_jsonfile_patch.call_count, 1)
         self.assertEqual(read_jsonfile_patch.call_count, 3)
         self.assertEqual(os_remove_patch.call_count, 2)
-        self.assertEqual(add_ip_patch.call_count, 1)
+        self.assertEqual(add_ip_patch.call_count, 2)
 
     @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
     @mock.patch('os.remove')
@@ -219,7 +237,7 @@ class TestStateWatcher(base.BaseTestCase):
         watcher.process("test")
         self.assertEqual(write_jsonfile_patch.call_count, 1)
         self.assertEqual(read_jsonfile_patch.call_count, 2)
-        self.assertEqual(add_ip_patch.call_count, 1)
+        self.assertEqual(add_ip_patch.call_count, 2)
         self.assertFalse(os_remove_patch.called)
         self.assertFalse(del_ip_patch.called)
 
@@ -249,3 +267,18 @@ class TestStateWatcher(base.BaseTestCase):
         watcher.process("test")
         self.assertEqual(os_remove_patch.call_count, 2)
         self.assertEqual(read_jsonfile_patch.call_count, 3)
+        self.assertEqual(del_ip_patch.call_count, 2)
+
+    def test_proxyconfig_dual_stack(self):
+        watcher = as_metadata_manager.StateWatcher.__new__(
+            as_metadata_manager.StateWatcher)
+        proxy = watcher.proxyconfig(curr_alloc_json[
+            "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"])
+        self.assertIn(
+            "opflex-ns-proxy-44f67ef0-1fd8-7a7e-2bfb-e650cee859a9-v4", proxy)
+        self.assertIn(
+            "opflex-ns-proxy-44f67ef0-1fd8-7a7e-2bfb-e650cee859a9-v6", proxy)
+        self.assertIn("--metadata_host 169.254.240.3 --metadata_port=80",
+                      proxy)
+        self.assertIn("--metadata_host fe80::a9fe:f003 --metadata_port=80",
+                      proxy)
