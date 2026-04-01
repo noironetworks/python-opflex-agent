@@ -165,7 +165,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
                     "domain-name": 'name_of_l3p',
                     "internal-subnets": sorted(['192.168.0.0/16',
                                                 '192.169.0.0/16',
-                                                '169.254.0.0/16'])})
+                                                '169.254.0.0/16',
+                                                'fe80::a9fe:a9fe/128'])})
 
             # Send same port info again
             self.manager._write_vrf_file.reset_mock()
@@ -225,7 +226,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
                     "domain-name": 'name_of_l3p',
                     "internal-subnets": sorted(['192.168.0.0/16',
                                                 '192.169.0.0/16',
-                                                '169.254.0.0/16'])})
+                                                '169.254.0.0/16',
+                                                'fe80::a9fe:a9fe/128'])})
             self.manager.snat_iptables.setup_snat_for_es.assert_called_with(
                 'EXT-1', '200.0.0.10', None, '200.0.0.1/8', None, None,
                 None, 'aa:bb:cc:00:11:44', mtu=9000)
@@ -251,7 +253,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
                     "domain-policy-space": 'apic_tenant',
                     "domain-name": 'name_of_l3p',
                     "internal-subnets": sorted(['192.170.0.0/16',
-                                                '169.254.0.0/16'])})
+                                                '169.254.0.0/16',
+                                                'fe80::a9fe:a9fe/128'])})
             self._check_call_list([mock.call('EXT-1', snat_ep_file)],
                 self.manager._write_endpoint_file.call_args_list,
                 False)
@@ -711,7 +714,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
                 "domain-name": 'name_of_l3p',
                 "internal-subnets": sorted(['192.168.0.0/16',
                                             '192.169.0.0/16',
-                                            '169.254.0.0/16'])})
+                                            '169.254.0.0/16',
+                                            'fe80::a9fe:a9fe/128'])})
 
     def test_port_bound_no_mapping(self):
         port = self._port()
@@ -890,6 +894,10 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.assertTrue('dhcp4' in ep_file)
         self.assertEqual(ep_file['dhcp4']['interface-mtu'], 1800)
         self.assertEqual(ep_file['dhcp4']['lease-time'], 100)
+        self.assertEqual(ep_file['dhcp4']['static-routes'], [{
+            'dest': '169.254.169.254',
+            'dest-prefix': 32,
+            'next-hop': '192.168.0.2'}])
         self.assertEqual(ep_file['security-group'],
                          [{'policy-space': 'common',
                            'name': 'gbp_default'}])
@@ -1023,7 +1031,8 @@ class TestEndpointFileManager(base.OpflexTestBase):
                 "domain-name": 'name_of_l3p',
                 "internal-subnets": sorted(['192.168.0.0/16',
                                             '192.169.0.0/16',
-                                            '169.254.0.0/16'])})
+                                            '169.254.0.0/16',
+                                            'fe80::a9fe:a9fe/128'])})
         self.assertEqual('l3p_id_1', self.manager.vif_to_vrf[port_1.vif_id])
         self.assertEqual('l3p_id', self.manager.vif_to_vrf[port_2.vif_id])
         self.assertEqual(set([port_1.vif_id]),
@@ -1070,9 +1079,15 @@ class TestEndpointFileManager(base.OpflexTestBase):
                                                   'ip_version': 6,
                                                   'dns_nameservers': [V6_DNS],
                                                   'cidr': '2001:db8::/64',
+                                                  'dhcp_server_ports': {
+                                                      'fa:16:3e:a7:a3:aa': [
+                                                          'fe80::a9fe:1'
+                                                      ]
+                                                  },
                                                   'host_routes': []}],
                                         dhcp_lease_time=100)
         port = self._port()
+        port.fixed_ips = [{'subnet_id': 'id1', 'ip_address': '2001:db8::2'}]
         self.manager._release_int_fip = mock.Mock()
         self.manager.declare_endpoint(port, mapping)
         # no MTU set whatsoever
@@ -1085,6 +1100,41 @@ class TestEndpointFileManager(base.OpflexTestBase):
         self.assertTrue('dhcp6' in ep_file)
         self.assertEqual(ep_file['dhcp6']['interface-mtu'], 1800)
         self.assertEqual(ep_file['dhcp6']['dns-servers'], [V6_DNS])
+        self.assertEqual(ep_file['dhcp6']['static-routes'], [{
+            'dest': 'fe80::a9fe:a9fe',
+            'dest-prefix': 128,
+            'next-hop': 'fe80::a9fe:1'}])
+
+    def test_v6_metadata_route_without_dns(self):
+        mapping = self._get_gbp_details(enable_dhcp_optimization=True,
+                                        interface_mtu=1800,
+                                        subnets=[{'id': 'id1',
+                                                  'enable_dhcp': True,
+                                                  'ip_version': 6,
+                                                  'dns_nameservers': [],
+                                                  'cidr': '2001:db8::/64',
+                                                  'dhcp_server_ports': {
+                                                      'fa:16:3e:a7:a3:aa': [
+                                                          'fe80::a9fe:1'
+                                                      ]
+                                                  },
+                                                  'host_routes': []}],
+                                        dhcp_lease_time=100)
+        port = self._port()
+        port.fixed_ips = [{'subnet_id': 'id1', 'ip_address': '2001:db8::2'}]
+        self.manager._release_int_fip = mock.Mock()
+        self.manager.declare_endpoint(port, mapping)
+        ep_file = None
+        for arg in self.manager._write_endpoint_file.call_args_list:
+            if port.vif_id in arg[0][0]:
+                self.assertIsNone(ep_file)
+                ep_file = arg[0][1]
+        self.assertIsNotNone(ep_file)
+        self.assertTrue('dhcp6' in ep_file)
+        self.assertEqual(ep_file['dhcp6']['static-routes'], [{
+            'dest': 'fe80::a9fe:a9fe',
+            'dest-prefix': 128,
+            'next-hop': 'fe80::a9fe:1'}])
 
     def test_port_trunk_details(self):
         mapping = self._get_gbp_details()
