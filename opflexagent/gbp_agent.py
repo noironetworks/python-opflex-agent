@@ -17,8 +17,8 @@ import time
 
 # We need to ensure that the monkey-patch gets applied
 # before other packages that use eventlet get imported
-from neutron.common import eventlet_utils  # noqa
-eventlet_utils.monkey_patch()  # noqa
+import eventlet
+eventlet.monkey_patch()
 
 from neutron.agent.common import ip_lib
 from neutron.agent.common import polling
