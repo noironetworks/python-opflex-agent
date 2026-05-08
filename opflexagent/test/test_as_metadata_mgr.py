@@ -58,6 +58,15 @@ onefile_curr_alloc_json = {
         "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"
     }
 }
+legacy_curr_alloc_json = {
+    "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9": {
+        "domain-name": "sauto_k8s-bm-1_l3out-1_vrf",
+        "domain-policy-space": "common",
+        "next-hop-ip": "169.254.240.3",
+        "next-hop-ipv6": "fe80::a9fe:f003",
+        "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"
+    }
+}
 nochange_fileA = {
     "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9",
     "interface-name": "of-svc-ovsport",
@@ -280,5 +289,13 @@ class TestStateWatcher(base.BaseTestCase):
             "opflex-ns-proxy-44f67ef0-1fd8-7a7e-2bfb-e650cee859a9-v6", proxy)
         self.assertIn("--metadata_host 169.254.240.3 --metadata_port=80",
                       proxy)
+        self.assertIn("--metadata_host fd00::a9fe:f003 --metadata_port=80",
+                      proxy)
+
+    def test_proxyconfig_legacy_link_local_next_hop(self):
+        watcher = as_metadata_manager.StateWatcher.__new__(
+            as_metadata_manager.StateWatcher)
+        proxy = watcher.proxyconfig(legacy_curr_alloc_json[
+            "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"])
         self.assertIn("--metadata_host fd00::a9fe:f003 --metadata_port=80",
                       proxy)

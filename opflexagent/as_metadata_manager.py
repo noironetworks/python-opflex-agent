@@ -111,6 +111,21 @@ def write_jsonfile(name, data):
         LOG.warning("Exception in writing file: %s", str(e))
 
 
+def normalize_ipv6_next_hop(ipaddr):
+    if not ipaddr:
+        return ipaddr
+    addr = netaddr.IPAddress(ipaddr)
+    if not addr.is_link_local():
+        return ipaddr
+    words = addr.words
+    words[0] = 0xfd00
+    words[1] = 0
+    words[2] = 0
+    words[3] = 0
+    return str(netaddr.IPAddress(sum(word << (16 * (7 - idx))
+                                      for idx, word in enumerate(words))))
+
+
 class AddressPool(object):
     def __init__(self, base, size):
         self.base = base
@@ -348,7 +363,7 @@ class EpWatcher(FileWatcher):
             ip_pool.reserve(int(thisip))
             thisip6 = curr_svc[domain_uuid].get('next-hop-ipv6')
             if thisip6:
-                thisip6 = netaddr.IPAddress(thisip6)
+                thisip6 = netaddr.IPAddress(normalize_ipv6_next_hop(thisip6))
                 if not thisip6.is_link_local():
                     ip6_pool.reserve(int(thisip6))
 
@@ -398,11 +413,14 @@ class EpWatcher(FileWatcher):
                         }
                     else:
                         thisip6 = curr_svc[domain_uuid].get('next-hop-ipv6')
-                        if (not thisip6 or
-                                netaddr.IPAddress(thisip6).is_link_local()):
+                        thisip6 = normalize_ipv6_next_hop(thisip6)
+                        if not thisip6:
                             updated = True
-                            curr_svc[domain_uuid]['next-hop-ipv6'] = str(
-                                netaddr.IPAddress(ip6_pool.get_addr()))
+                            thisip6 = str(netaddr.IPAddress(ip6_pool.get_addr()))
+                        elif thisip6 != curr_svc[domain_uuid].get(
+                                'next-hop-ipv6'):
+                            updated = True
+                        curr_svc[domain_uuid]['next-hop-ipv6'] = thisip6
                         new_svc[domain_uuid] = curr_svc[domain_uuid]
                         del curr_svc[domain_uuid]
 
@@ -484,14 +502,18 @@ class StateWatcher(FileWatcher):
             if asvc[idx] != alloc[idx]:
                 return False
         service_map = {
-            svc["service-ip"]: svc["next-hop-ip"]
+            svc["service-ip"]: (
+                normalize_ipv6_next_hop(svc["next-hop-ip"])
+                if svc["service-ip"] == ofcst.METADATA_DEFAULT_IPV6
+                else svc["next-hop-ip"])
             for svc in asvc.get("service-mapping", [])
         }
+        alloc_ipv6 = normalize_ipv6_next_hop(alloc.get("next-hop-ipv6"))
         return (
             service_map.get(ofcst.METADATA_DEFAULT_IP) ==
             alloc["next-hop-ip"] and
             service_map.get(ofcst.METADATA_DEFAULT_IPV6) ==
-            alloc.get("next-hop-ipv6"))
+            alloc_ipv6)
 
     def as_del(self, filename, asvc):
         for svc in asvc.get("service-mapping", []):
@@ -510,6 +532,8 @@ class StateWatcher(FileWatcher):
             LOG.warning("EPwatcher: Exception in deleting file: %s", str(e))
 
     def as_create(self, alloc):
+        alloc_ipv6 = normalize_ipv6_next_hop(alloc["next-hop-ipv6"])
+        alloc["next-hop-ipv6"] = alloc_ipv6
         asvc = {
             "uuid": alloc["uuid"],
             "interface-name": SVC_OVS_PORT,
@@ -525,12 +549,12 @@ class StateWatcher(FileWatcher):
                 {
                     "service-ip": ofcst.METADATA_DEFAULT_IPV6,
                     "gateway-ip": SVC_V6_NEXTHOP,
-                    "next-hop-ip": alloc["next-hop-ipv6"],
+                    "next-hop-ip": alloc_ipv6,
                 },
             ],
         }
 
-        for addr in [alloc["next-hop-ip"], alloc["next-hop-ipv6"]]:
+        for addr in [alloc["next-hop-ip"], alloc_ipv6]:
             try:
                 self.mgr.add_ip(addr)
             except Exception as e:
@@ -559,7 +583,8 @@ class StateWatcher(FileWatcher):
         duuid = alloc["uuid"]
         proxy_configs = []
         for family, ipaddr in [("v4", alloc["next-hop-ip"]),
-                               ("v6", alloc["next-hop-ipv6"])]:
+                               ("v6", normalize_ipv6_next_hop(
+                                   alloc["next-hop-ipv6"]))]:
             proxy_configs.append("\n".join([
                 "[program:opflex-ns-proxy-%s-%s]" % (duuid, family),
                 "command=ip netns exec of-svc "
