@@ -97,7 +97,9 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
                 new=MockFixedIntervalLoopingCall),
             mock.patch('opflexagent.gbp_agent.GBPOpflexAgent.'
-                '_report_state')]
+                '_report_state'),
+            mock.patch('opflexagent.as_metadata_manager.'
+                'SnatConnTrackHandler')]
 
         with base.nested_context_manager(*resources):
             agent = gbp_agent.GBPOpflexAgent(**kwargs)
@@ -219,7 +221,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                 "internal-subnets": sorted(['192.168.0.0/16',
                                             '192.169.0.0/16',
                                             '1.1.1.0/24',
-                                            '169.254.0.0/16'])})
+                                            '169.254.0.0/16',
+                                            'fe80::a9fe:a9fe/128'])})
 
     def test_dead_port(self):
         port = mock.Mock(ofport=1)
@@ -374,7 +377,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                 "domain-name": mapping['vrf_name'],
                 "internal-subnets": sorted(['192.168.0.0/16',
                                             '192.169.0.0/16',
-                                            '169.254.0.0/16'])})
+                                            '169.254.0.0/16',
+                                            'fe80::a9fe:a9fe/128'])})
         self.assertFalse(self.agent.ep_manager._delete_vrf_file.called)
 
         # Now simulate a deletion
