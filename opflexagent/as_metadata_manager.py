@@ -72,10 +72,10 @@ SVC_IP_BASE = 0xA9FEF003
 SVC_IP_SIZE = 1000
 SVC_IP_CIDR = 16
 SVC_NEXTHOP = "169.254.1.1"
-SVC_V6_IP_DEFAULT = "fe80::a9fe:102"
-SVC_V6_IP_BASE = int(netaddr.IPAddress("fe80::a9fe:f003"))
+SVC_V6_IP_DEFAULT = "fd00::a9fe:102"
+SVC_V6_IP_BASE = int(netaddr.IPAddress("fd00::a9fe:f003"))
 SVC_V6_IP_CIDR = 64
-SVC_V6_NEXTHOP = "fe80::a9fe:101"
+SVC_V6_NEXTHOP = "fd00::a9fe:101"
 SVC_NS = "of-svc"
 SVC_NS_PORT = "of-svc-nsport"
 SVC_OVS_PORT = "of-svc-ovsport"
@@ -348,7 +348,9 @@ class EpWatcher(FileWatcher):
             ip_pool.reserve(int(thisip))
             thisip6 = curr_svc[domain_uuid].get('next-hop-ipv6')
             if thisip6:
-                ip6_pool.reserve(int(netaddr.IPAddress(thisip6)))
+                thisip6 = netaddr.IPAddress(thisip6)
+                if not thisip6.is_link_local():
+                    ip6_pool.reserve(int(thisip6))
 
         new_svc = {}
         new_nets = {}
@@ -395,7 +397,9 @@ class EpWatcher(FileWatcher):
                             'uuid': as_uuid,
                         }
                     else:
-                        if 'next-hop-ipv6' not in curr_svc[domain_uuid]:
+                        thisip6 = curr_svc[domain_uuid].get('next-hop-ipv6')
+                        if (not thisip6 or
+                                netaddr.IPAddress(thisip6).is_link_local()):
                             updated = True
                             curr_svc[domain_uuid]['next-hop-ipv6'] = str(
                                 netaddr.IPAddress(ip6_pool.get_addr()))

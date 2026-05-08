@@ -38,14 +38,14 @@ curr_alloc_json = {
         "domain-name": "sauto_k8s-bm-1_l3out-1_vrf",
         "domain-policy-space": "common",
         "next-hop-ip": "169.254.240.3",
-        "next-hop-ipv6": "fe80::a9fe:f003",
+        "next-hop-ipv6": "fd00::a9fe:f003",
         "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"
     },
     "99e788f5-f579-83d2-6b9f-3051a21f63ab": {
         "domain-name": "k8s-bm-1_UnroutedVRF",
         "domain-policy-space": "common",
         "next-hop-ip": "169.254.240.4",
-        "next-hop-ipv6": "fe80::a9fe:f004",
+        "next-hop-ipv6": "fd00::a9fe:f004",
         "uuid": "99e788f5-f579-83d2-6b9f-3051a21f63ab"
     }
 }
@@ -54,7 +54,7 @@ onefile_curr_alloc_json = {
         "domain-name": "sauto_k8s-bm-1_l3out-1_vrf",
         "domain-policy-space": "common",
         "next-hop-ip": "169.254.240.3",
-        "next-hop-ipv6": "fe80::a9fe:f003",
+        "next-hop-ipv6": "fd00::a9fe:f003",
         "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"
     }
 }
@@ -72,8 +72,8 @@ nochange_fileA = {
         },
         {
             "service-ip": "fe80::a9fe:a9fe",
-            "gateway-ip": "fe80::a9fe:101",
-            "next-hop-ip": "fe80::a9fe:f003"
+            "gateway-ip": "fd00::a9fe:101",
+            "next-hop-ip": "fd00::a9fe:f003"
         }
     ]
 }
@@ -91,8 +91,8 @@ change_fileA = {
         },
         {
             "service-ip": "fe80::a9fe:a9fe",
-            "gateway-ip": "fe80::a9fe:101",
-            "next-hop-ip": "fe80::a9fe:f003"
+            "gateway-ip": "fd00::a9fe:101",
+            "next-hop-ip": "fd00::a9fe:f003"
         }
     ]
 }
@@ -110,8 +110,8 @@ nochange_fileB = {
         },
         {
             "service-ip": "fe80::a9fe:a9fe",
-            "gateway-ip": "fe80::a9fe:101",
-            "next-hop-ip": "fe80::a9fe:f004"
+            "gateway-ip": "fd00::a9fe:101",
+            "next-hop-ip": "fd00::a9fe:f004"
         }
     ]
 }
@@ -280,5 +280,5 @@ class TestStateWatcher(base.BaseTestCase):
             "opflex-ns-proxy-44f67ef0-1fd8-7a7e-2bfb-e650cee859a9-v6", proxy)
         self.assertIn("--metadata_host 169.254.240.3 --metadata_port=80",
                       proxy)
-        self.assertIn("--metadata_host fe80::a9fe:f003 --metadata_port=80",
+        self.assertIn("--metadata_host fd00::a9fe:f003 --metadata_port=80",
                       proxy)
