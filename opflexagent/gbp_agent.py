@@ -766,7 +766,7 @@ def main_opflex():
     # Start everything.
     LOG.info("Initializing metadata service ... ")
     helper = cfg.CONF.AGENT.root_helper
-    metadata_mgr = as_metadata_manager.AsMetadataManager(LOG, helper)
+    metadata_mgr = as_metadata_manager.AsMetadataManager(LOG, helper, cfg=cfg)
     metadata_mgr.ensure_initialized()
     return agent
 

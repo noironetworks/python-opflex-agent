@@ -601,16 +601,17 @@ class SnatConnTrackHandler(object):
 
 
 class AsMetadataManager(object):
-    def __init__(self, logger, root_helper):
+    def __init__(self, logger, root_helper, cfg=cfg):
         global LOG
         LOG = logger
+        self.cfg = cfg
         self.root_helper = root_helper
         self.name = "AsMetadataManager"
         self.md_filename = "%s/%s" % (MD_DIR, MD_SUP_FILE_NAME)
         self.bridge_manager = opflexagent_utils.get_bridge_manager(
-                              cfg.CONF.OPFLEX)
+                              self.cfg.CONF.OPFLEX)
         self.initialized = False
-        self.disable_proxy = cfg.CONF.OPFLEX.disable_metadata_proxy
+        self.disable_proxy = self.cfg.CONF.OPFLEX.disable_metadata_proxy
 
     def init_all(self):
         self.init_host()
