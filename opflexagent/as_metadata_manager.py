@@ -40,6 +40,7 @@ from oslo_utils import encodeutils
 from opflexagent._i18n import _
 from opflexagent import constants as ofcst
 from opflexagent import config as oscfg  # noqa
+from opflexagent import constants as ofcst
 from opflexagent.utils import utils as opflexagent_utils
 
 LOG = logging.getLogger(__name__)
