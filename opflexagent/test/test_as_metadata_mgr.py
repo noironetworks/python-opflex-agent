@@ -14,6 +14,7 @@
 #    under the License.
 
 import copy
+import os
 import sys
 
 from unittest import mock
@@ -38,12 +39,14 @@ curr_alloc_json = {
         "domain-name": "sauto_k8s-bm-1_l3out-1_vrf",
         "domain-policy-space": "common",
         "next-hop-ip": "169.254.240.3",
+        "next-hop-ipv6": "fd00::a9fe:f003",
         "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"
     },
     "99e788f5-f579-83d2-6b9f-3051a21f63ab": {
         "domain-name": "k8s-bm-1_UnroutedVRF",
         "domain-policy-space": "common",
         "next-hop-ip": "169.254.240.4",
+        "next-hop-ipv6": "fd00::a9fe:f004",
         "uuid": "99e788f5-f579-83d2-6b9f-3051a21f63ab"
     }
 }
@@ -52,6 +55,16 @@ onefile_curr_alloc_json = {
         "domain-name": "sauto_k8s-bm-1_l3out-1_vrf",
         "domain-policy-space": "common",
         "next-hop-ip": "169.254.240.3",
+        "next-hop-ipv6": "fd00::a9fe:f003",
+        "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"
+    }
+}
+legacy_curr_alloc_json = {
+    "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9": {
+        "domain-name": "sauto_k8s-bm-1_l3out-1_vrf",
+        "domain-policy-space": "common",
+        "next-hop-ip": "169.254.240.3",
+        "next-hop-ipv6": "fe80::a9fe:f003",
         "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"
     }
 }
@@ -66,6 +79,30 @@ nochange_fileA = {
             "service-ip": "169.254.169.254",
             "gateway-ip": "169.254.1.1",
             "next-hop-ip": "169.254.240.3"
+        },
+        {
+            "service-ip": "fe80::a9fe:a9fe",
+            "gateway-ip": "fd00::a9fe:101",
+            "next-hop-ip": "fd00::a9fe:f003"
+        }
+    ]
+}
+legacy_link_local_fileA = {
+    "uuid": "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9",
+    "interface-name": "of-svc-ovsport",
+    "service-mac": "02:6a:66:eb:26:6a",
+    "domain-policy-space": "common",
+    "domain-name": "sauto_k8s-bm-1_l3out-1_vrf",
+    "service-mapping": [
+        {
+            "service-ip": "169.254.169.254",
+            "gateway-ip": "169.254.1.1",
+            "next-hop-ip": "169.254.240.3"
+        },
+        {
+            "service-ip": "fe80::a9fe:a9fe",
+            "gateway-ip": "fe80::a9fe:101",
+            "next-hop-ip": "fe80::a9fe:f003"
         }
     ]
 }
@@ -80,6 +117,11 @@ change_fileA = {
             "service-ip": "169.254.169.254",
             "gateway-ip": "169.254.1.1",
             "next-hop-ip": "169.254.240.3"
+        },
+        {
+            "service-ip": "fe80::a9fe:a9fe",
+            "gateway-ip": "fd00::a9fe:101",
+            "next-hop-ip": "fd00::a9fe:f003"
         }
     ]
 }
@@ -94,6 +136,11 @@ nochange_fileB = {
             "service-ip": "169.254.169.254",
             "gateway-ip": "169.254.1.1",
             "next-hop-ip": "169.254.240.4"
+        },
+        {
+            "service-ip": "fe80::a9fe:a9fe",
+            "gateway-ip": "fd00::a9fe:101",
+            "next-hop-ip": "fd00::a9fe:f004"
         }
     ]
 }
@@ -129,11 +176,116 @@ class TestEpWatcher(base.BaseTestCase):
             write_string = ''.join(write_list)
             self.assertEqual(write_string, JSON_FILE_DATA)
 
+    @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
+    @mock.patch('opflexagent.as_metadata_manager.read_jsonfile')
+    @mock.patch('os.listdir', return_value=['test.ep'])
+    def test_process_writes_instance_networks_before_services(
+            self, listdir_patch, read_jsonfile_patch, write_jsonfile_patch):
+        watcher = as_metadata_manager.EpWatcher.__new__(
+            as_metadata_manager.EpWatcher)
+        watcher.svcfile = '/state/anycast_services.state'
+        watcher.netsfile = '/state/instance_networks.state'
+
+        ep_file = {
+            'neutron-metadata-optimization': True,
+            'domain-name': TEST_NAME,
+            'domain-policy-space': TEST_TENANT,
+            'neutron-network': 'net_uuid',
+            'anycast-return-ip': ['fe80::f816:3eff:fe77:364b'],
+        }
+        read_jsonfile_patch.side_effect = [{}, ep_file]
+
+        watcher.process('test')
+
+        domain_uuid = watcher.gen_domain_uuid(TEST_TENANT, TEST_NAME)
+        self.assertEqual(
+            [
+                mock.call(
+                    watcher.netsfile,
+                    {domain_uuid: {
+                        'fe80::f816:3eff:fe77:364b': 'net_uuid'}}),
+                mock.call(
+                    watcher.svcfile,
+                    {domain_uuid: {
+                        'domain-name': TEST_NAME,
+                        'domain-policy-space': TEST_TENANT,
+                        'next-hop-ip': '169.254.240.3',
+                        'next-hop-ipv6': 'fd00::a9fe:f003',
+                        'uuid': domain_uuid}}),
+            ],
+            write_jsonfile_patch.call_args_list)
+
+
+class TestAsMetadataManager(base.BaseTestCase):
+
+    def setUp(self):
+        super(TestAsMetadataManager, self).setUp()
+
+    @mock.patch('os.remove')
+    @mock.patch('os.listdir')
+    def test_clean_files_preserves_state_files(self, listdir_patch,
+                                               remove_patch):
+        mgr = as_metadata_manager.AsMetadataManager.__new__(
+            as_metadata_manager.AsMetadataManager)
+        listdir_patch.side_effect = [
+            [],
+            ['anycast_services.state', 'instance_networks.state',
+             'old.proxy.state'],
+            [],
+            [],
+        ]
+
+        mgr.clean_files()
+
+        remove_patch.assert_called_once_with(
+            '%s/old.proxy.state' % as_metadata_manager.MD_DIR)
+
 
 class TestStateWatcher(base.BaseTestCase):
 
     def setUp(self):
         super(TestStateWatcher, self).setUp()
+        real_isfile = os.path.isfile
+        netsfile = "%s/%s" % (as_metadata_manager.MD_DIR,
+                              as_metadata_manager.STATE_FILENAME_NETS)
+
+        def isfile(path):
+            if path == netsfile:
+                return True
+            return real_isfile(path)
+
+        self.isfile_patch = mock.patch('os.path.isfile', side_effect=isfile)
+        self.isfile_mock = self.isfile_patch.start()
+        self.addCleanup(self.isfile_patch.stop)
+
+    @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
+    @mock.patch('os.remove')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager'
+                '.update_supervisor')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.del_ip')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.add_ip')
+    @mock.patch('opflexagent.as_metadata_manager.FileProcessor.run')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager'
+                '.get_asport_mac',
+                return_value="ff-ff-ff-ff-ff-ff")
+    @mock.patch('opflexagent.as_metadata_manager.read_jsonfile')
+    @mock.patch('os.listdir')
+    def test_process_waits_for_instance_networks_state(
+            self, listdir_patch, read_jsonfile_patch, asport_mac_patch,
+            fileprocessor_run_patch, add_ip_patch, del_ip_patch,
+            update_sv_patch, os_remove_patch, write_jsonfile_patch):
+        watcher = as_metadata_manager.StateWatcher()
+        self.isfile_mock.side_effect = None
+        self.isfile_mock.return_value = False
+        watcher.process("test")
+
+        self.assertFalse(read_jsonfile_patch.called)
+        self.assertFalse(listdir_patch.called)
+        self.assertFalse(write_jsonfile_patch.called)
+        self.assertFalse(add_ip_patch.called)
+        self.assertFalse(del_ip_patch.called)
+        self.assertFalse(update_sv_patch.called)
+        self.assertFalse(os_remove_patch.called)
 
     @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
     @mock.patch('os.remove')
@@ -192,7 +344,51 @@ class TestStateWatcher(base.BaseTestCase):
         self.assertEqual(write_jsonfile_patch.call_count, 1)
         self.assertEqual(read_jsonfile_patch.call_count, 3)
         self.assertEqual(os_remove_patch.call_count, 2)
-        self.assertEqual(add_ip_patch.call_count, 1)
+        self.assertEqual(add_ip_patch.call_count, 2)
+
+    @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
+    @mock.patch('os.remove')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager'
+                '.update_supervisor')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.del_ip')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager.add_ip')
+    @mock.patch('opflexagent.as_metadata_manager.FileProcessor.run')
+    @mock.patch('opflexagent.as_metadata_manager.AsMetadataManager'
+                '.get_asport_mac',
+                return_value="ff-ff-ff-ff-ff-ff")
+    @mock.patch('opflexagent.as_metadata_manager.read_jsonfile',
+                side_effect=[copy.deepcopy(curr_alloc_json),
+                             copy.deepcopy(legacy_link_local_fileA),
+                             copy.deepcopy(nochange_fileB)])
+    @mock.patch('os.listdir',
+                return_value=["44f67ef0-1fd8-7a7e-2bfb-e650cee859a9.as",
+                              "99e788f5-f579-83d2-6b9f-3051a21f63ab.as"])
+    def test_process_legacy_link_local_file(self, listdir_patch,
+                                            read_jsonfile_patch,
+                                            asport_mac_patch,
+                                            fileprocessor_run_patch,
+                                            add_ip_patch, del_ip_patch,
+                                            update_sv_patch,
+                                            os_remove_patch,
+                                            write_jsonfile_patch):
+        with mock.patch(MOCK_MODULE,
+                        new=mock.mock_open()) as open_file, mock.patch(
+                            'opflexagent.as_metadata_manager'
+                            '.AsMetadataManager.sh'):
+            watcher = as_metadata_manager.StateWatcher()
+            watcher.disable_proxy = False
+            watcher.process("test")
+        self.assertEqual(write_jsonfile_patch.call_count, 1)
+        self.assertEqual(read_jsonfile_patch.call_count, 3)
+        self.assertEqual(os_remove_patch.call_count, 2)
+        self.assertEqual(del_ip_patch.call_count, 2)
+        self.assertEqual(add_ip_patch.call_count, 2)
+        self.assertEqual(update_sv_patch.call_count, 1)
+        proxy = ''.join(call[0][0]
+                        for call in open_file().write.call_args_list)
+        self.assertIn("--metadata_host fd00::a9fe:f003 --metadata_port=80",
+                      proxy)
+        self.assertNotIn("--metadata_host fe80::a9fe:f003", proxy)
 
     @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
     @mock.patch('os.remove')
@@ -219,7 +415,7 @@ class TestStateWatcher(base.BaseTestCase):
         watcher.process("test")
         self.assertEqual(write_jsonfile_patch.call_count, 1)
         self.assertEqual(read_jsonfile_patch.call_count, 2)
-        self.assertEqual(add_ip_patch.call_count, 1)
+        self.assertEqual(add_ip_patch.call_count, 2)
         self.assertFalse(os_remove_patch.called)
         self.assertFalse(del_ip_patch.called)
 
@@ -249,3 +445,26 @@ class TestStateWatcher(base.BaseTestCase):
         watcher.process("test")
         self.assertEqual(os_remove_patch.call_count, 2)
         self.assertEqual(read_jsonfile_patch.call_count, 3)
+        self.assertEqual(del_ip_patch.call_count, 2)
+
+    def test_proxyconfig_dual_stack(self):
+        watcher = as_metadata_manager.StateWatcher.__new__(
+            as_metadata_manager.StateWatcher)
+        proxy = watcher.proxyconfig(curr_alloc_json[
+            "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"])
+        self.assertIn(
+            "opflex-ns-proxy-44f67ef0-1fd8-7a7e-2bfb-e650cee859a9-v4", proxy)
+        self.assertIn(
+            "opflex-ns-proxy-44f67ef0-1fd8-7a7e-2bfb-e650cee859a9-v6", proxy)
+        self.assertIn("--metadata_host 169.254.240.3 --metadata_port=80",
+                      proxy)
+        self.assertIn("--metadata_host fd00::a9fe:f003 --metadata_port=80",
+                      proxy)
+
+    def test_proxyconfig_legacy_link_local_next_hop(self):
+        watcher = as_metadata_manager.StateWatcher.__new__(
+            as_metadata_manager.StateWatcher)
+        proxy = watcher.proxyconfig(legacy_curr_alloc_json[
+            "44f67ef0-1fd8-7a7e-2bfb-e650cee859a9"])
+        self.assertIn("--metadata_host fd00::a9fe:f003 --metadata_port=80",
+                      proxy)
