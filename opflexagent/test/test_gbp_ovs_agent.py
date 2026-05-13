@@ -281,7 +281,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                 "internal-subnets": sorted(['192.168.0.0/16',
                                             '192.169.0.0/16',
                                             '1.1.1.0/24',
-                                            '169.254.0.0/16'])})
+                                            '169.254.0.0/16',
+                                            'fe80::a9fe:a9fe/128'])})
 
     def test_stale_endpoints_in_process_network_ports(self):
         self.agent.ep_manager.undeclare_endpoint = mock.Mock()
@@ -443,7 +444,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
                 "domain-name": mapping['vrf_name'],
                 "internal-subnets": sorted(['192.168.0.0/16',
                                             '192.169.0.0/16',
-                                            '169.254.0.0/16'])})
+                                            '169.254.0.0/16',
+                                            'fe80::a9fe:a9fe/128'])})
         self.assertFalse(self.agent.ep_manager._delete_vrf_file.called)
 
         # Now simulate a deletion
