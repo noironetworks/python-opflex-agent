@@ -127,6 +127,21 @@ def normalize_ipv6_next_hop(ipaddr):
                                  for idx, word in enumerate(words))))
 
 
+def normalize_ipv6_next_hop(ipaddr):
+    if not ipaddr:
+        return ipaddr
+    addr = netaddr.IPAddress(ipaddr)
+    if not addr.is_link_local():
+        return ipaddr
+    words = list(addr.words)
+    words[0] = 0xfd00
+    words[1] = 0
+    words[2] = 0
+    words[3] = 0
+    return str(netaddr.IPAddress(sum(word << (16 * (7 - idx))
+                                 for idx, word in enumerate(words))))
+
+
 class AddressPool(object):
     def __init__(self, base, size):
         self.base = base
@@ -526,8 +541,6 @@ class StateWatcher(FileWatcher):
             except Exception as e:
                 LOG.warn("EPwatcher: Exception in deleting IP: %s",
                          str(e))
-                LOG.warning("EPwatcher: Exception in deleting IP: %s",
-                         str(e))
 
         proxyfilename = PROXY_FILE_NAME_FORMAT % asvc["uuid"]
         proxyfilename = "%s/%s" % (MD_DIR, proxyfilename)
@@ -564,7 +577,7 @@ class StateWatcher(FileWatcher):
             try:
                 self.mgr.add_ip(addr)
             except Exception as e:
-                LOG.warning("EPwatcher: Exception in adding IP: %s",
+                LOG.warn("EPwatcher: Exception in adding IP: %s",
                          str(e))
 
         asfilename = AS_FILE_NAME_FORMAT % asvc["uuid"]
