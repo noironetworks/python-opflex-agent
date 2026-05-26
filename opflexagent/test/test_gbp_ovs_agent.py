@@ -82,6 +82,10 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
 
     def _initialize_agent(self):
         cfg.CONF.set_override('epg_mapping_dir', self.ep_dir, 'OPFLEX')
+        cfg.CONF.set_override('snats_mapping_dir',
+                              self.ep_dir + 'snats/', 'OPFLEX')
+        cfg.CONF.set_override('as_mapping_dir',
+                              self.ep_dir + 'services/', 'OPFLEX')
         kwargs = gbp_agent.create_agent_config_map(cfg.CONF)
 
         class MockFixedIntervalLoopingCall(object):
@@ -192,51 +196,17 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.subnet_update(mock.Mock(), fake_sub)
         self.assertEqual(set(['tenant-id']), self.agent.updated_vrf)
 
-    def test_binding_activate(self):
-        self.agent.binding_activate('context', port_id='id', host='host1')
-        self.assertIn('id', self.agent.activated_bindings)
+    def test_report_state_includes_dist_snat_mappings(self):
+        self.agent.state_rpc = mock.Mock()
+        self.agent.ep_manager.get_dist_snat_mappings = mock.Mock(
+            return_value={'66.66.66.7': {'start': 100, 'end': 199}})
 
-    def test_binding_activate_not_for_host(self):
-        self.agent.binding_activate('context', port_id='id', host='other-host')
-        self.assertEqual(set(), self.agent.activated_bindings)
+        self.agent._report_state()
 
-    def test_process_activated_bindings(self):
-        port_info = {}
-        port_info['added'] = set(['added_port_id'])
-        port_info['current'] = set(['activated_port_id'])
-        self.agent.process_activated_bindings(port_info,
-                                              set(['activated_port_id']))
-        self.assertIn('added_port_id', port_info['added'])
-        self.assertIn('activated_port_id', port_info['added'])
-
-    def test_process_activated_bindings_activated_port_not_present(self):
-        port_info = {}
-        port_info['added'] = set(['added_port_id'])
-        port_info['current'] = set()
-        self.agent.process_activated_bindings(port_info,
-                                              set(['activated_port_id']))
-        self.assertIn('added_port_id', port_info['added'])
-        self.assertNotIn('activated_port_id', port_info['added'])
-
-    def test_binding_deactivate_not_for_host(self):
-        self.agent.binding_deactivate('unused_context', port_id='id',
-                                      host='other_host')
-        self.assertEqual(set(), self.agent.deactivated_bindings)
-
-    def test_binding_deactivate(self):
-        self.agent.binding_deactivate('unused_context', port_id='id',
-                                      host='host1')
-        self.assertEqual(set(['id']), self.agent.deactivated_bindings)
-        self.agent.process_deactivated_bindings(port_info={})
-        self.assertEqual(set(), self.agent.deactivated_bindings)
-
-    def test_binding_deactivate_removed_port(self):
-        self.agent.binding_deactivate('unused_context', port_id='id',
-                                      host='host1')
-        self.assertEqual(set(['id']), self.agent.deactivated_bindings)
-        self.agent.process_deactivated_bindings(
-            port_info={'removed': {'id', }})
-        self.assertEqual(set(), self.agent.deactivated_bindings)
+        self.assertEqual(
+            {'66.66.66.7': {'start': 100, 'end': 199}},
+            self.agent.agent_state['configurations']['dist_snat_mappings'])
+        self.assertTrue(self.agent.state_rpc.report_state.called)
 
     def test_subnet_has_updates(self):
         fake_sub = {'tenant_id': 'tenant-id', 'id': 'someid'}
