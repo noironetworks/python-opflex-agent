@@ -24,6 +24,7 @@ from oslo_utils import uuidutils
 
 from opflexagent import as_metadata_manager
 from opflexagent import constants as ofcst
+from opflexagent import distributed_snat_manager
 from opflexagent import snat_iptables_manager
 from opflexagent.utils.ep_managers import endpoint_manager_base
 
@@ -97,6 +98,12 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
         self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
             bridge_manager)
+        self.dist_snat_manager = (
+                distributed_snat_manager.DistributedSnatManager(
+                    config['snats_mapping_dir'],
+                    config['as_mapping_dir'],
+                    self._write_file,
+                    self._delete_file))
         self._registered_endpoints = set()
         self._stale_endpoints = set()
         self.vif_int_dict = {}
@@ -221,6 +228,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
     def undeclare_endpoint(self, port_id):
         LOG.info("Endpoint undeclare requested for port %s", port_id)
         self._mapping_cleanup(port_id)
+        self.dist_snat_manager.cleanup_port(port_id)
         self._registered_endpoints.discard(port_id)
         self._stale_endpoints.discard(port_id)
         self.vif_int_dict.pop(port_id, None)
@@ -233,6 +241,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
     def get_access_int_for_vif(self, vif):
         return self.vif_int_dict.get(vif)
+
+    def get_dist_snat_mappings(self):
+        return self.dist_snat_manager.get_dist_snat_mappings()
 
     # Private Methods
 
@@ -474,7 +485,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             mapping_dict.setdefault('attributes', {}).update({
                 x[0].strip(): x[2].strip() for x in lbls})
 
-        self._handle_host_snat_ip(mapping.get('host_snat_ips', []))
+        self._handle_host_snat_ip(mapping, mapping_dict)
         self._fill_ip_mapping_info(port.vif_id, mac, mapping,
                                    sorted(ips + ips_aap + ips_ext),
                                    mapping_dict)
@@ -591,8 +602,24 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
         return vlan_ranges
 
-    def _handle_host_snat_ip(self, host_snat_ips):
+    def _handle_host_snat_ip(self, mapping, mapping_dict):
+        host_snat_ips = mapping.get('host_snat_ips', [])
+
+        # Distributed SNAT and legacy host-SNAT share host_snat_ips input,
+        # but they must not both program state for the same entry.
+        dist_snat_entries = self.dist_snat_manager.build_dist_snat_entries(
+            mapping, mapping_dict)
+        self.dist_snat_manager.sync_endpoint(mapping_dict['uuid'],
+                                             dist_snat_entries,
+                                             mapping_dict)
+
         for hsi in host_snat_ips:
+            # Entries carrying distributed SNAT fields are consumed above.
+            # Skip legacy SNAT processing to avoid duplicate programming.
+            if any(k in hsi for k in ('start_port', 'end_port', 'service_ip',
+                                      'service_vrf', 'service_nodes',
+                                      'service_mac')):
+                continue
             LOG.debug("Auto-allocated host SNAT IP: %s", hsi)
             es = hsi.get('external_segment_name')
             if not es:
