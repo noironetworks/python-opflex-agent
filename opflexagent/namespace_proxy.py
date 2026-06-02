@@ -209,6 +209,7 @@ def main():
                           "its initialization")),
     ]
 
+    config.register_common_config_options()
     cfg.CONF.register_cli_opts(opts)
     # Don't get the default configuration file
     cfg.CONF(project='neutron', default_config_files=[])
