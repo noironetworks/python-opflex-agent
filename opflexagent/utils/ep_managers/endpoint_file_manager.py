@@ -94,6 +94,8 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
             6: netaddr.IPSet(config['internal_floating_ip6_pool'])}
         if ofcst.METADATA_DEFAULT_IP in self.int_fip_pool[4]:
             self.int_fip_pool[4].remove(ofcst.METADATA_DEFAULT_IP)
+        if ofcst.METADATA_DEFAULT_IPV6 in self.int_fip_pool[6]:
+            self.int_fip_pool[6].remove(ofcst.METADATA_DEFAULT_IPV6)
 
         self.snat_iptables = snat_iptables_manager.SnatIptablesManager(
             bridge_manager)
@@ -450,8 +452,15 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         if virtual_ips:
             mapping_dict['virtual-ip'] = sorted(virtual_ips,
                                                 key=lambda x: x['ip'])
-        if ips or ips_aap:
-            mapping_dict['anycast-return-ip'] = sorted(ips + ips_aap)
+        anycast_return_ips = ips + ips_aap
+        if (mapping['enable_metadata_optimization'] and
+                any(netaddr.IPNetwork(ip).version == 6
+                    for ip in anycast_return_ips)):
+            anycast_return_ips.append(
+                str(netaddr.EUI(mac).ipv6_link_local()))
+        if anycast_return_ips:
+            mapping_dict['anycast-return-ip'] = sorted(
+                set(anycast_return_ips))
 
         if 'active_active_aap' in mapping:
             mapping_dict['active-active-aap'] = mapping['active_active_aap']
@@ -626,6 +635,26 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
 
     def _map_dhcp_info(self, fixed_ips, mapping, mapping_dict):
         """ Add DHCP specific info to the EP file."""
+        def append_static_route(routes, destination, next_hop):
+            cidr = netaddr.IPNetwork(destination)
+            route = {'dest': str(cidr.network),
+                     'dest-prefix': cidr.prefixlen,
+                     'next-hop': next_hop}
+            if route not in routes:
+                routes.append(route)
+
+        def get_dhcp_server_ip(sn, ip_version):
+            for ip_addr in sn.get('dhcp_server_ips', []) or []:
+                if netaddr.IPAddress(ip_addr).version == ip_version:
+                    return ip_addr, None
+
+            for mac, ip_addrs in (
+                    sn.get('dhcp_server_ports', {}) or {}).items():
+                for ip_addr in ip_addrs:
+                    if netaddr.IPAddress(ip_addr).version == ip_version:
+                        return ip_addr, mac
+            return None, None
+
         subnets = mapping['subnets']
         v4subnets = {k['id']: k for k in subnets
                      if k['ip_version'] == 4 and k['enable_dhcp']}
@@ -644,34 +673,41 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                      'prefix-len': netaddr.IPNetwork(sn['cidr']).prefixlen}
             dhcp4['static-routes'] = []
             for hr in sn['host_routes']:
-                cidr = netaddr.IPNetwork(hr['destination'])
-                dhcp4['static-routes'].append(
-                    {'dest': str(cidr.network),
-                     'dest-prefix': cidr.prefixlen,
-                     'next-hop': hr['nexthop']})
-            if 'dhcp_server_ips' in sn and sn['dhcp_server_ips']:
-                dhcp4['server-ip'] = sn['dhcp_server_ips'][0]
-            if 'dhcp_server_ports' in sn and sn['dhcp_server_ports']:
+                append_static_route(dhcp4['static-routes'],
+                                    hr['destination'], hr['nexthop'])
+            dhcp_server_ip, dhcp_mac = get_dhcp_server_ip(sn, 4)
+            if dhcp_server_ip:
+                dhcp4['server-ip'] = dhcp_server_ip
+                append_static_route(dhcp4['static-routes'],
+                                    "%s/32" % ofcst.METADATA_DEFAULT_IP,
+                                    dhcp_server_ip)
+            if dhcp_mac:
                 # REVISIT: The agent currenlty only supports a single
                 # IP, so just use the first IP from the first entry in
                 # the dict. Once the agent supports additional IPs, we
                 # can provide the full dict.
-                dhcp_mac = list(sn['dhcp_server_ports'].keys())[0]
                 dhcp4['server-mac'] = dhcp_mac
-                dhcp4['server-ip'] = sn['dhcp_server_ports'][dhcp_mac][0]
             if 'interface_mtu' in mapping:
                 dhcp4['interface-mtu'] = mapping['interface_mtu']
             if 'dhcp_lease_time' in mapping:
                 dhcp4['lease-time'] = mapping['dhcp_lease_time']
             mapping_dict['dhcp4'] = dhcp4
             break
-        if len(v6subnets) > 0 and list(v6subnets.values())[0][
-                'dns_nameservers']:
-            mapping_dict['dhcp6'] = {
-                'dns-servers': list(v6subnets.values())[0]['dns_nameservers']}
+        if len(v6subnets) > 0:
+            dhcp6 = {}
+            v6subnet = list(v6subnets.values())[0]
+            if v6subnet['dns_nameservers']:
+                dhcp6['dns-servers'] = v6subnet['dns_nameservers']
+            dhcp_server_ip, _dhcp_mac = get_dhcp_server_ip(v6subnet, 6)
+            if dhcp_server_ip:
+                dhcp6['static-routes'] = []
+                append_static_route(dhcp6['static-routes'],
+                                    "%s/128" % ofcst.METADATA_DEFAULT_IPV6,
+                                    dhcp_server_ip)
             if 'interface_mtu' in mapping:
-                mapping_dict['dhcp6']['interface-mtu'] = mapping[
-                    'interface_mtu']
+                dhcp6['interface-mtu'] = mapping['interface_mtu']
+            if dhcp6:
+                mapping_dict['dhcp6'] = dhcp6
 
     def _load_es_next_hop_info(self, es_cfg):
         def parse_range(val):
@@ -932,7 +968,7 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 vrf_info_copy = copy.deepcopy(vrf_info)
                 vrf_info_copy['internal-subnets'] = sorted(list(
                     vrf_info_copy['internal-subnets']) +
-                    [ofcst.METADATA_SUBNET])
+                    [ofcst.METADATA_SUBNET, ofcst.METADATA_SUBNET_V6])
                 self._write_vrf_file(mapping['l3_policy_id'], vrf_info_copy)
                 curr_vrf['info'] = vrf_info
             if vif_id:
