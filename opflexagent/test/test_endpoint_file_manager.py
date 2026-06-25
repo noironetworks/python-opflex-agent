@@ -55,6 +55,10 @@ class TestEndpointFileManager(base.OpflexTestBase):
 
     def _initialize_agent(self):
         cfg.CONF.set_override('epg_mapping_dir', self.ep_dir, 'OPFLEX')
+        cfg.CONF.set_override('snats_mapping_dir',
+                              self.ep_dir + 'snats/', 'OPFLEX')
+        cfg.CONF.set_override('as_mapping_dir',
+                              self.ep_dir + 'services/', 'OPFLEX')
         kwargs = gbp_agent.create_agent_config_map(cfg.CONF)
         agent = endpoint_file_manager.EndpointFileManager().initialize(
             'h1', mock.Mock(), kwargs)
@@ -72,6 +76,11 @@ class TestEndpointFileManager(base.OpflexTestBase):
         agent.snat_iptables = mock.Mock()
         agent.snat_iptables.setup_snat_for_es = mock.Mock(
             return_value=tuple([None, None]))
+        agent.dist_snat_manager = mock.Mock()
+        agent.dist_snat_manager.build_dist_snat_entries = mock.Mock(
+            return_value=[])
+        agent.dist_snat_manager.get_dist_snat_mappings = mock.Mock(
+            return_value={})
 
     def _port(self):
         port = mock.Mock()
@@ -1329,3 +1338,66 @@ class TestEndpointFileManager(base.OpflexTestBase):
                           'nat_epg_tenant': 'nat-epg-tenant'}])
         self.manager.declare_endpoint(port_1, mapping)
         self.manager.undeclare_endpoint(port_1.vif_id)
+
+    def test_dist_snat_host_snat_ips_delegates_to_manager(self):
+        """Endpoint manager should delegate dist-SNAT entry construction to
+        DistributedSnatManager and pass those entries through to sync.
+        """
+        mapping = self._get_gbp_details(
+            floating_ip=[],
+            host_snat_ips=[{
+                'external_segment_name': 'EXT-1',
+                'host_snat_ip': '200.0.0.50',
+                'gateway_ip': '200.0.0.1',
+                'prefixlen': 8,
+                'start_port': 10000,
+                'end_port': 10999,
+            }])
+
+        dist_entries = [{
+            'uuid': '00000000-0000-0000-0000-ffff980a0114',
+            'snat_ip': '200.0.0.50',
+            'start': 10000,
+            'end': 10999,
+            'snat_file': {'uuid': '00000000-0000-0000-0000-ffff980a0114'},
+            'service_file': {'uuid': '00000000-0000-0000-0000-ffff980a0114'},
+        }]
+        self.manager.dist_snat_manager.build_dist_snat_entries.return_value = (
+            dist_entries)
+
+        def _sync_side_effect(endpoint_uuid, entries, ep_mapping):
+            ep_mapping['snat-uuids'] = sorted(
+                [x['uuid'] for x in entries if x.get('uuid')])
+
+        self.manager.dist_snat_manager.sync_endpoint.side_effect = (
+            _sync_side_effect)
+
+        port = self._port()
+        self.manager.declare_endpoint(port, mapping)
+
+        self.assertTrue(
+            self.manager.dist_snat_manager.build_dist_snat_entries.called)
+        build_call = (
+            self.manager.dist_snat_manager.build_dist_snat_entries.call_args)
+        # Endpoint manager may enrich mapping before delegation; verify
+        # that core distributed-SNAT inputs are preserved.
+        delegated_mapping = build_call[0][0]
+        self.assertEqual(mapping['host_snat_ips'],
+                         delegated_mapping.get('host_snat_ips'))
+        self.assertEqual(mapping['vrf_tenant'],
+                         delegated_mapping.get('vrf_tenant'))
+        self.assertEqual('qpi', build_call[0][1].get('interface-name'))
+
+        self.manager.dist_snat_manager.sync_endpoint.assert_called_once()
+        sync_call = self.manager.dist_snat_manager.sync_endpoint.call_args
+        self.assertEqual(dist_entries, sync_call[0][1])
+
+        # Distributed host_snat_ips must not be consumed by legacy SNAT path.
+        self.assertFalse(self.manager.snat_iptables.setup_snat_for_es.called)
+
+        ep_name = port.vif_id + '_' + mapping['mac_address']
+        ep_write = [x for x in self.manager._write_endpoint_file.
+                    call_args_list if x[0][0] == ep_name]
+        self.assertTrue(ep_write)
+        self.assertEqual(['00000000-0000-0000-0000-ffff980a0114'],
+                         ep_write[0][0][1].get('snat-uuids'))
