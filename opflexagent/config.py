@@ -24,6 +24,10 @@ gbp_opts = [
                default='/var/lib/opflex-agent-ovs/services/',
                help=_("Directory where the anycast svc mappings will be "
                       "stored.")),
+    cfg.StrOpt('snats_mapping_dir',
+               default='/var/lib/opflex-agent-ovs/snats/',
+               help=_("Directory where distributed SNAT mapping files will "
+                      "be stored.")),
     cfg.StrOpt('opflex_agent_dir',
                default='/var/lib/neutron/opflex_agent',
                help=_("Directory where the opflex agent state will be "
