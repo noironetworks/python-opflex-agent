@@ -146,6 +146,12 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         # How many devices are likely used by a VM
         self.agent_state.get('configurations')['devices'] = (
             self.bridge_manager.int_br_device_count)
+        ep_mgr = getattr(self, 'ep_manager', None)
+        if ep_mgr and hasattr(ep_mgr, 'get_dist_snat_mappings'):
+            self.agent_state.get('configurations')['dist_snat_mappings'] = (
+                ep_mgr.get_dist_snat_mappings())
+        else:
+            self.agent_state.get('configurations')['dist_snat_mappings'] = {}
 
         try:
             self.state_rpc.report_state(self.context,
@@ -583,6 +589,8 @@ def _parse_files(conf_files):
 def create_agent_config_map(conf):
     agent_config = {}
     agent_config['epg_mapping_dir'] = conf.OPFLEX.epg_mapping_dir
+    agent_config['as_mapping_dir'] = conf.OPFLEX.as_mapping_dir
+    agent_config['snats_mapping_dir'] = conf.OPFLEX.snats_mapping_dir
     agent_config['opflex_networks'] = conf.OPFLEX.opflex_networks
     agent_config['vlan_networks'] = conf.OPFLEX.vlan_networks
     agent_config['endpoint_request_timeout'] = (
