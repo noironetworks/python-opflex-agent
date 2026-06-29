@@ -215,6 +215,66 @@ class TestEpWatcher(base.BaseTestCase):
             ],
             write_jsonfile_patch.call_args_list)
 
+    @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
+    @mock.patch('opflexagent.as_metadata_manager.read_jsonfile')
+    @mock.patch('os.listdir',
+                return_value=['project-a.ep', 'project-b.ep'])
+    def test_process_scopes_common_unrouted_vrf_by_policy_space(
+            self, listdir_patch, read_jsonfile_patch, write_jsonfile_patch):
+        watcher = as_metadata_manager.EpWatcher.__new__(
+            as_metadata_manager.EpWatcher)
+        watcher.svcfile = '/state/anycast_services.state'
+        watcher.netsfile = '/state/instance_networks.state'
+
+        project_a_ep = {
+            'neutron-metadata-optimization': True,
+            'policy-space-name': 'project-a',
+            'domain-name': 'UnroutedVRF',
+            'domain-policy-space': 'common',
+            'neutron-network': 'net-a',
+            'anycast-return-ip': ['192.0.2.10'],
+        }
+        project_b_ep = {
+            'neutron-metadata-optimization': True,
+            'policy-space-name': 'project-b',
+            'domain-name': 'UnroutedVRF',
+            'domain-policy-space': 'common',
+            'neutron-network': 'net-b',
+            'anycast-return-ip': ['192.0.2.10'],
+        }
+        read_jsonfile_patch.side_effect = [{}, project_a_ep, project_b_ep]
+
+        watcher.process('test')
+
+        project_a_uuid = '1b9267cc-f428-22b3-4d49-24a60079ff47'
+        project_b_uuid = 'd3a6c673-a3a5-6d41-c83a-e04564b6905b'
+        self.assertEqual(
+            [
+                mock.call(
+                    watcher.netsfile,
+                    {
+                        project_a_uuid: {'192.0.2.10': 'net-a'},
+                        project_b_uuid: {'192.0.2.10': 'net-b'},
+                    }),
+                mock.call(
+                    watcher.svcfile,
+                    {
+                        project_a_uuid: {
+                            'domain-name': 'UnroutedVRF',
+                            'domain-policy-space': 'common',
+                            'next-hop-ip': '169.254.240.3',
+                            'next-hop-ipv6': 'fd00::a9fe:f003',
+                            'uuid': project_a_uuid},
+                        project_b_uuid: {
+                            'domain-name': 'UnroutedVRF',
+                            'domain-policy-space': 'common',
+                            'next-hop-ip': '169.254.240.4',
+                            'next-hop-ipv6': 'fd00::a9fe:f004',
+                            'uuid': project_b_uuid},
+                    }),
+            ],
+            write_jsonfile_patch.call_args_list)
+
 
 class TestAsMetadataManager(base.BaseTestCase):
 
