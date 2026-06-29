@@ -91,6 +91,8 @@ STATE_FILE_EXTENSION = "state"
 STATE_FILE_NAME_FORMAT = "%s." + STATE_FILE_EXTENSION
 STATE_FILENAME_SVC = STATE_FILE_NAME_FORMAT % STATE_ANYCAST_SERVICES
 STATE_FILENAME_NETS = STATE_FILE_NAME_FORMAT % STATE_INSTANCE_NETWORKS
+COMMON_TENANT_NAME = 'common'
+UNROUTED_VRF_NAME = 'UnroutedVRF'
 
 
 def read_jsonfile(name):
@@ -346,11 +348,24 @@ class EpWatcher(FileWatcher):
         super(EpWatcher, self).__init__(
             epfiledir, epextensions, name="ep-watcher")
 
-    def gen_domain_uuid(self, tenant, name):
-        fqname = '%s|%s' % (tenant, name)
+    def gen_domain_uuid(self, *parts):
+        fqname = '|'.join(parts)
         fqhash = hashlib.md5(fqname.encode('utf-8')).hexdigest()  # nosec
         fquuid = str(uuid.UUID(fqhash))
         return fquuid
+
+    def is_common_unrouted_vrf(self, tenant, name):
+        if tenant != COMMON_TENANT_NAME or not name:
+            return False
+        return (name == UNROUTED_VRF_NAME or
+                name.endswith('_' + UNROUTED_VRF_NAME))
+
+    def gen_metadata_domain_uuid(self, ep, tenant, name):
+        if self.is_common_unrouted_vrf(tenant, name):
+            policy_space = ep.get('policy-space-name')
+            if policy_space:
+                return self.gen_domain_uuid(policy_space, tenant, name)
+        return self.gen_domain_uuid(tenant, name)
 
     def process(self, files):
         LOG.debug("EP files: %s", files)
@@ -395,7 +410,8 @@ class EpWatcher(FileWatcher):
                 if domain_name is None or domain_tenant is None:
                     continue
 
-                domain_uuid = self.gen_domain_uuid(domain_tenant, domain_name)
+                domain_uuid = self.gen_metadata_domain_uuid(
+                    ep, domain_tenant, domain_name)
                 if domain_uuid and domain_uuid not in new_svc:
                     if domain_uuid not in curr_svc:
                         updated = True
