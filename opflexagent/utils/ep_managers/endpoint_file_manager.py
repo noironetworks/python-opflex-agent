@@ -107,7 +107,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                     self._write_file,
                     self._delete_file,
                     zone_min=config.get('distributed_snat_zone_min', 1000),
-                    zone_max=config.get('distributed_snat_zone_max', 8191)))
+                    zone_max=config.get('distributed_snat_zone_max', 8191),
+                    config.get('distributed_snat_interface',
+                               'patch-fab-ex')))
         self._registered_endpoints = set()
         self._stale_endpoints = set()
         self.vif_int_dict = {}
