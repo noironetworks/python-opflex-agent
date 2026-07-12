@@ -41,6 +41,8 @@ class DistributedSnatManager(object):
         self._endpoint_to_snats = {}
         # snat_uuid -> {snat_ip,start,end}
         self._snat_to_ip_range = {}
+        # snat_uuid -> service_uuid
+        self._snat_to_service = {}
 
     def sync_endpoint(self, endpoint_uuid, dist_snat_entries, ep_mapping):
         old_snats = self._endpoint_to_snats.get(endpoint_uuid, set())
@@ -63,7 +65,16 @@ class DistributedSnatManager(object):
                 self._write_file(snat_uuid, entry['snat_file'],
                                  self.snat_mapping_file)
             if entry.get('service_file'):
-                self._write_file(snat_uuid, entry['service_file'],
+                service_uuid = entry['service_file'].get('uuid', snat_uuid)
+                old_service_uuid = self._snat_to_service.get(snat_uuid)
+                if old_service_uuid and old_service_uuid != service_uuid:
+                    self._delete_file(old_service_uuid,
+                                      self.service_mapping_file)
+                if (service_uuid != snat_uuid and
+                        old_service_uuid != snat_uuid):
+                    self._delete_file(snat_uuid, self.service_mapping_file)
+                self._snat_to_service[snat_uuid] = service_uuid
+                self._write_file(service_uuid, entry['service_file'],
                                  self.service_mapping_file)
 
         for snat_uuid in (old_snats - new_snats):
@@ -100,14 +111,17 @@ class DistributedSnatManager(object):
 
         self._snat_to_endpoints.pop(snat_uuid, None)
         self._snat_to_ip_range.pop(snat_uuid, None)
+        service_uuid = self._snat_to_service.pop(snat_uuid, snat_uuid)
         self._delete_file(snat_uuid, self.snat_mapping_file)
-        self._delete_file(snat_uuid, self.service_mapping_file)
+        self._delete_file(service_uuid, self.service_mapping_file)
 
-    def _stable_dist_snat_uuid(self, hsi):
+    def _stable_dist_snat_uuid(self, hsi, kind=None):
         seed = '%s|%s|%s' % (
             hsi.get('host_snat_ip', ''),
             hsi.get('external_segment_name', ''),
             hsi.get('service_ip', ''))
+        if kind:
+            seed = '%s|%s' % (kind, seed)
         digest = hashlib.md5(seed.encode('utf-8')).hexdigest()
         return str(uuid.UUID(digest))
 
@@ -131,6 +145,7 @@ class DistributedSnatManager(object):
                 continue
 
             snat_uuid = self._stable_dist_snat_uuid(hsi)
+            service_uuid = self._stable_dist_snat_uuid(hsi, 'service')
             service_mac = hsi.get('service_mac') or hsi.get('host_snat_mac')
             service_nodes = []
             for node in hsi.get('service_nodes', []):
@@ -157,7 +172,7 @@ class DistributedSnatManager(object):
                 snat_file['interface-vlan'] = interface_vlan
 
             service_file = {
-                'uuid': snat_uuid,
+                'uuid': service_uuid,
                 'domain-policy-space': service_domain,
                 'domain-name': (
                     hsi.get('service_vrf') or
