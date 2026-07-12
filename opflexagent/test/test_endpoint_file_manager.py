@@ -66,6 +66,13 @@ class TestEndpointFileManager(base.OpflexTestBase):
             return_value=('qpi', 'qpf')))
         return agent
 
+    def test_agent_config_includes_distributed_snat_interface(self):
+        cfg.CONF.set_override('distributed_snat_interface',
+                              'dist-snat-if', 'OPFLEX')
+        kwargs = gbp_agent.create_agent_config_map(cfg.CONF)
+        self.assertEqual('dist-snat-if',
+                         kwargs['distributed_snat_interface'])
+
     def _mock_agent(self, agent):
         agent._write_endpoint_file = mock.Mock(
             return_value=agent.epg_mapping_file)
