@@ -177,7 +177,8 @@ class TestDistributedSnatManager(base.OpflexTestBase):
         self.assertEqual('200.0.0.50', entry['snat_ip'])
         self.assertEqual(10000, entry['start'])
         self.assertEqual(10999, entry['end'])
-        self.assertEqual('qpi', entry['snat_file']['interface-name'])
+        self.assertEqual('patch-fab-ex',
+                         entry['snat_file']['interface-name'])
         self.assertEqual('200.0.0.50', entry['snat_file']['snat-ip'])
         self.assertEqual(10, entry['snat_file']['interface-vlan'])
         self.assertEqual('aa:bb:cc:00:22:66',
@@ -321,3 +322,29 @@ class TestDistributedSnatManager(base.OpflexTestBase):
 
         zones = [x['snat_file']['zone'] for x in entries]
         self.assertEqual([4000, 4001], zones)
+
+    def test_build_dist_snat_entries_uses_configured_interface(self):
+        self.mgr.distributed_snat_interface = 'dist-snat-if'
+        mapping = {
+            'host_snat_ips': [{
+                'external_segment_name': 'EXT-DIST',
+                'host_snat_ip': '200.0.0.50',
+                'host_snat_mac': 'aa:bb:cc:00:11:55',
+                'start_port': 10000,
+                'end_port': 10999,
+                'service_ip': '10.99.0.1',
+                'service_vrf': 'vrf-svc',
+            }],
+            'vrf_tenant': 'apic_tenant',
+            'vrf_name': 'name_of_l3p',
+        }
+        mapping_dict = {'interface-name': 'qpi'}
+
+        entries = self.mgr.build_dist_snat_entries(mapping, mapping_dict)
+
+        self.assertEqual(1, len(entries))
+        entry = entries[0]
+        self.assertEqual('dist-snat-if',
+                         entry['snat_file']['interface-name'])
+        self.assertEqual('dist-snat-if',
+                         entry['service_file']['interface-name'])

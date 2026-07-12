@@ -36,6 +36,10 @@ gbp_opts = [
                default=8191,
                help=_("Maximum conntrack zone number to allocate for "
                       "distributed SNAT.")),
+    cfg.StrOpt('distributed_snat_interface',
+               default='patch-fab-ex',
+               help=_("Interface name to use in distributed SNAT and "
+                      "service mapping files.")),
     cfg.StrOpt('opflex_agent_dir',
                default='/var/lib/neutron/opflex_agent',
                help=_("Directory where the opflex agent state will be "
