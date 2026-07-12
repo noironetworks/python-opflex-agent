@@ -637,6 +637,8 @@ def create_agent_config_map(conf):
         conf.OPFLEX.distributed_snat_zone_min)
     agent_config['distributed_snat_zone_max'] = (
         conf.OPFLEX.distributed_snat_zone_max)
+    agent_config['distributed_snat_interface'] = (
+        conf.OPFLEX.distributed_snat_interface)
     agent_config['opflex_networks'] = conf.OPFLEX.opflex_networks
     agent_config['vlan_networks'] = conf.OPFLEX.vlan_networks
     agent_config['endpoint_request_timeout'] = (
