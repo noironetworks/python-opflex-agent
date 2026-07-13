@@ -131,14 +131,23 @@ class DistributedSnatManager(object):
         except (TypeError, ValueError):
             return None
 
+    def _service_domain_from_external_segment(self, hsi, fallback):
+        external_segment = hsi.get('external_segment_name') or ''
+        for segment in external_segment.replace('/', ':').split(':'):
+            if segment.startswith('tn-') and len(segment) > 3:
+                return segment[3:]
+        return fallback
+
     def build_dist_snat_entries(self, mapping, mapping_dict):
         dist_entries = []
         host_snat_ips = mapping.get('host_snat_ips', [])
         interface_name = mapping_dict.get('interface-name')
         interface_vlan = mapping_dict.get('access-interface-vlan')
-        service_domain = mapping.get('vrf_tenant', 'common')
+        fallback_service_domain = mapping.get('vrf_tenant', 'common')
 
         for hsi in host_snat_ips:
+            service_domain = self._service_domain_from_external_segment(
+                hsi, fallback_service_domain)
             start = self._safe_int(hsi.get('start_port'))
             end = self._safe_int(hsi.get('end_port'))
             if start is None or end is None:
