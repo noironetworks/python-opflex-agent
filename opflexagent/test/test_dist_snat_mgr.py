@@ -45,17 +45,42 @@ class TestDistributedSnatManager(base.OpflexTestBase):
             except OSError:
                 pass
 
-        self.mgr = distributed_snat_manager.DistributedSnatManager(
+        self._write = _write
+        self._delete = _delete
+        self.mgr = self._new_manager()
+
+    def _new_manager(self, zone_min=None, zone_max=None):
+        return distributed_snat_manager.DistributedSnatManager(
             os.path.join(self.tmp_root, 'snats'),
             os.path.join(self.tmp_root, 'service'),
-            _write,
-            _delete)
+            self._write,
+            self._delete,
+            zone_min=zone_min,
+            zone_max=zone_max)
 
     def _cleanup(self):
         try:
             shutil.rmtree(self.tmp_root)
         except OSError:
             pass
+
+    def _dist_snat_mapping(self, host_snat_ips=None):
+        host_snat_ips = host_snat_ips or [{
+            'external_segment_name': 'EXT-DIST',
+            'host_snat_ip': '200.0.0.50',
+            'host_snat_mac': 'aa:bb:cc:00:11:55',
+            'service_mac': 'aa:bb:cc:00:22:66',
+            'start_port': 10000,
+            'end_port': 10999,
+            'service_ip': '10.99.0.1',
+            'service_vrf': 'vrf-svc',
+            'dest_prefix': '0.0.0.0/0',
+        }]
+        return {
+            'host_snat_ips': host_snat_ips,
+            'vrf_tenant': 'apic_tenant',
+            'vrf_name': 'name_of_l3p',
+        }
 
     def test_sync_endpoint_writes_files_and_ep_uuid_refs(self):
         ep_mapping = {}
@@ -161,6 +186,7 @@ class TestDistributedSnatManager(base.OpflexTestBase):
                          entry['service_file']['domain-policy-space'])
         self.assertEqual('vrf-svc', entry['service_file']['domain-name'])
         self.assertEqual('10.99.0.1', entry['service_file']['interface-ip'])
+        self.assertEqual(1000, entry['snat_file']['zone'])
         self.assertEqual(entry['uuid'], entry['snat_file']['uuid'])
         self.assertNotEqual(entry['snat_file']['uuid'],
                             entry['service_file']['uuid'])
@@ -194,3 +220,101 @@ class TestDistributedSnatManager(base.OpflexTestBase):
         self.assertEqual(
             'snat_tenant',
             entries[0]['service_file']['domain-policy-space'])
+
+    def test_build_dist_snat_entries_assigns_unique_zone_per_snat_ip(self):
+        mapping = self._dist_snat_mapping([
+            {
+                'external_segment_name': 'EXT-DIST',
+                'host_snat_ip': '200.0.0.50',
+                'host_snat_mac': 'aa:bb:cc:00:11:55',
+                'start_port': 10000,
+                'end_port': 10999,
+                'service_ip': '10.99.0.1',
+            },
+            {
+                'external_segment_name': 'EXT-DIST',
+                'host_snat_ip': '200.0.0.51',
+                'host_snat_mac': 'aa:bb:cc:00:11:56',
+                'start_port': 11000,
+                'end_port': 11999,
+                'service_ip': '10.99.0.2',
+            },
+        ])
+
+        entries = self.mgr.build_dist_snat_entries(
+            mapping, {'interface-name': 'qpi'})
+
+        zones = [x['snat_file']['zone'] for x in entries]
+        self.assertEqual([1000, 1001], zones)
+
+    def test_build_dist_snat_entries_reuses_zone_from_snat_file(self):
+        mapping = self._dist_snat_mapping()
+        mapping_dict = {'interface-name': 'qpi'}
+        entries = self.mgr.build_dist_snat_entries(mapping, mapping_dict)
+        self.mgr.sync_endpoint('port-id|aa-bb-cc-dd-ee-ff', entries, {})
+
+        restarted_mgr = self._new_manager()
+
+        restarted_entries = restarted_mgr.build_dist_snat_entries(
+            mapping, mapping_dict)
+
+        self.assertEqual(entries[0]['snat_file']['zone'],
+                         restarted_entries[0]['snat_file']['zone'])
+
+    def test_build_dist_snat_entries_reuses_zone_after_cleanup(self):
+        mapping1 = self._dist_snat_mapping([{
+            'external_segment_name': 'EXT-DIST',
+            'host_snat_ip': '200.0.0.50',
+            'host_snat_mac': 'aa:bb:cc:00:11:55',
+            'start_port': 10000,
+            'end_port': 10999,
+            'service_ip': '10.99.0.1',
+        }])
+        mapping2 = self._dist_snat_mapping([{
+            'external_segment_name': 'EXT-DIST',
+            'host_snat_ip': '200.0.0.51',
+            'host_snat_mac': 'aa:bb:cc:00:11:56',
+            'start_port': 11000,
+            'end_port': 11999,
+            'service_ip': '10.99.0.2',
+        }])
+        mapping_dict = {'interface-name': 'qpi'}
+
+        first_entries = self.mgr.build_dist_snat_entries(mapping1,
+                                                         mapping_dict)
+        self.assertEqual(1000, first_entries[0]['snat_file']['zone'])
+        self.mgr.sync_endpoint('port-id|aa-bb-cc-dd-ee-ff',
+                               first_entries, {})
+        self.mgr.sync_endpoint('port-id|aa-bb-cc-dd-ee-ff', [], {})
+
+        second_entries = self.mgr.build_dist_snat_entries(mapping2,
+                                                          mapping_dict)
+        self.assertEqual(1000, second_entries[0]['snat_file']['zone'])
+
+    def test_build_dist_snat_entries_uses_configured_zone_range(self):
+        self.mgr = self._new_manager(zone_min=4000, zone_max=4002)
+
+        mapping = self._dist_snat_mapping([
+            {
+                'external_segment_name': 'EXT-DIST',
+                'host_snat_ip': '200.0.0.50',
+                'host_snat_mac': 'aa:bb:cc:00:11:55',
+                'start_port': 10000,
+                'end_port': 10999,
+                'service_ip': '10.99.0.1',
+            },
+            {
+                'external_segment_name': 'EXT-DIST',
+                'host_snat_ip': '200.0.0.51',
+                'host_snat_mac': 'aa:bb:cc:00:11:56',
+                'start_port': 11000,
+                'end_port': 11999,
+                'service_ip': '10.99.0.2',
+            },
+        ])
+
+        entries = self.mgr.build_dist_snat_entries(
+            mapping, {'interface-name': 'qpi'})
+
+        zones = [x['snat_file']['zone'] for x in entries]
+        self.assertEqual([4000, 4001], zones)
