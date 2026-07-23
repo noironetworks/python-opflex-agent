@@ -123,7 +123,8 @@ class TestDistributedSnatManager(base.OpflexTestBase):
     def test_build_dist_snat_entries_from_host_snat_ips(self):
         mapping = {
             'host_snat_ips': [{
-                'external_segment_name': 'EXT-DIST',
+                'external_segment_name': (
+                    'uni:tn-common:out-fab2021_2:instP-fab2021_2'),
                 'host_snat_ip': '200.0.0.50',
                 'host_snat_mac': 'aa:bb:cc:00:11:55',
                 'service_mac': 'aa:bb:cc:00:22:66',
@@ -156,7 +157,7 @@ class TestDistributedSnatManager(base.OpflexTestBase):
                          entry['snat_file']['interface-mac'])
         self.assertEqual([{'start': 10000, 'end': 10999}],
                          entry['snat_file']['port-range'])
-        self.assertEqual('apic_tenant',
+        self.assertEqual('common',
                          entry['service_file']['domain-policy-space'])
         self.assertEqual('vrf-svc', entry['service_file']['domain-name'])
         self.assertEqual('10.99.0.1', entry['service_file']['interface-ip'])
@@ -169,3 +170,27 @@ class TestDistributedSnatManager(base.OpflexTestBase):
                          new_entries[0]['snat_file']['uuid'])
         self.assertEqual(entry['service_file']['uuid'],
                          new_entries[0]['service_file']['uuid'])
+
+    def test_build_dist_snat_entries_uses_non_common_external_segment_tenant(
+            self):
+        mapping = {
+            'host_snat_ips': [{
+                'external_segment_name': (
+                    'uni:tn-snat_tenant:out-ext:instP-ext'),
+                'host_snat_ip': '200.0.0.51',
+                'host_snat_mac': 'aa:bb:cc:00:11:55',
+                'start_port': 11000,
+                'end_port': 11999,
+                'service_ip': '10.99.0.2',
+            }],
+            'vrf_tenant': 'apic_tenant',
+            'vrf_name': 'name_of_l3p',
+        }
+        mapping_dict = {'interface-name': 'qpi'}
+
+        entries = self.mgr.build_dist_snat_entries(mapping, mapping_dict)
+
+        self.assertEqual(1, len(entries))
+        self.assertEqual(
+            'snat_tenant',
+            entries[0]['service_file']['domain-policy-space'])
