@@ -69,9 +69,17 @@ class TestDistributedSnatManager(base.OpflexTestBase):
                 'snat-ip': '66.66.66.7',
                 'port-range': [{'start': 100, 'end': 199}]},
             'service_file': {
-                'uuid': '00000000-0000-0000-0000-ffff980a0114',
+                'uuid': '00000000-0000-0000-0000-ffff980a0115',
                 'interface-ip': '16.5.168.7'}
         }
+
+        old_service_file = os.path.join(
+            self.tmp_root, 'service',
+            '00000000-0000-0000-0000-ffff980a0114.service')
+        if not os.path.exists(os.path.dirname(old_service_file)):
+            os.makedirs(os.path.dirname(old_service_file))
+        with open(old_service_file, 'w') as f:
+            json.dump({'uuid': dist_entry['uuid']}, f)
 
         self.mgr.sync_endpoint('port-id|aa-bb-cc-dd-ee-ff',
                                [dist_entry],
@@ -87,9 +95,10 @@ class TestDistributedSnatManager(base.OpflexTestBase):
                                  '00000000-0000-0000-0000-ffff980a0114.snat')
         service_file = os.path.join(
             self.tmp_root, 'service',
-            '00000000-0000-0000-0000-ffff980a0114.service')
+            '00000000-0000-0000-0000-ffff980a0115.service')
         self.assertTrue(os.path.exists(snat_file))
         self.assertTrue(os.path.exists(service_file))
+        self.assertFalse(os.path.exists(old_service_file))
 
     def test_cleanup_port_deletes_files_when_last_endpoint_removed(self):
         dist_entry = {
@@ -151,3 +160,12 @@ class TestDistributedSnatManager(base.OpflexTestBase):
                          entry['service_file']['domain-policy-space'])
         self.assertEqual('vrf-svc', entry['service_file']['domain-name'])
         self.assertEqual('10.99.0.1', entry['service_file']['interface-ip'])
+        self.assertEqual(entry['uuid'], entry['snat_file']['uuid'])
+        self.assertNotEqual(entry['snat_file']['uuid'],
+                            entry['service_file']['uuid'])
+
+        new_entries = self.mgr.build_dist_snat_entries(mapping, mapping_dict)
+        self.assertEqual(entry['snat_file']['uuid'],
+                         new_entries[0]['snat_file']['uuid'])
+        self.assertEqual(entry['service_file']['uuid'],
+                         new_entries[0]['service_file']['uuid'])
