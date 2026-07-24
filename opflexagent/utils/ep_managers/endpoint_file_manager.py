@@ -103,7 +103,9 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                     config['snats_mapping_dir'],
                     config['as_mapping_dir'],
                     self._write_file,
-                    self._delete_file))
+                    self._delete_file,
+                    zone_min=config.get('distributed_snat_zone_min', 1000),
+                    zone_max=config.get('distributed_snat_zone_max', 8191)))
         self._registered_endpoints = set()
         self._stale_endpoints = set()
         self.vif_int_dict = {}
