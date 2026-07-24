@@ -633,6 +633,10 @@ def create_agent_config_map(conf):
     agent_config['epg_mapping_dir'] = conf.OPFLEX.epg_mapping_dir
     agent_config['as_mapping_dir'] = conf.OPFLEX.as_mapping_dir
     agent_config['snats_mapping_dir'] = conf.OPFLEX.snats_mapping_dir
+    agent_config['distributed_snat_zone_min'] = (
+        conf.OPFLEX.distributed_snat_zone_min)
+    agent_config['distributed_snat_zone_max'] = (
+        conf.OPFLEX.distributed_snat_zone_max)
     agent_config['opflex_networks'] = conf.OPFLEX.opflex_networks
     agent_config['vlan_networks'] = conf.OPFLEX.vlan_networks
     agent_config['endpoint_request_timeout'] = (

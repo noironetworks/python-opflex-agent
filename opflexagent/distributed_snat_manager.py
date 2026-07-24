@@ -11,6 +11,7 @@
 #    under the License.
 
 import hashlib
+import json
 import os
 import uuid
 
@@ -19,6 +20,8 @@ SNAT_FILE_EXTENSION = 'snat'
 SNAT_FILE_FORMAT = "%s." + SNAT_FILE_EXTENSION
 SERVICE_FILE_EXTENSION = 'service'
 SERVICE_FILE_FORMAT = "%s." + SERVICE_FILE_EXTENSION
+SNAT_CT_ZONE_MIN = 1000
+SNAT_CT_ZONE_MAX = 8191
 
 
 class DistributedSnatManager(object):
@@ -28,12 +31,23 @@ class DistributedSnatManager(object):
     endpoint manager file writer/delete helpers for all filesystem updates.
     """
 
-    def __init__(self, snats_dir, service_dir, write_fn, delete_fn):
+    def __init__(self, snats_dir, service_dir, write_fn, delete_fn,
+                 zone_min=SNAT_CT_ZONE_MIN,
+                 zone_max=SNAT_CT_ZONE_MAX):
         self.snat_mapping_file = os.path.join(snats_dir, SNAT_FILE_FORMAT)
         self.service_mapping_file = os.path.join(service_dir,
                                                  SERVICE_FILE_FORMAT)
         self._write_file = write_fn
         self._delete_file = delete_fn
+        self.zone_min = zone_min
+        self.zone_max = zone_max
+        if self.zone_min is None or self.zone_min < SNAT_CT_ZONE_MIN:
+            self.zone_min = SNAT_CT_ZONE_MIN
+        if self.zone_max is None or self.zone_max > SNAT_CT_ZONE_MAX:
+            self.zone_max = SNAT_CT_ZONE_MAX
+        if self.zone_min > self.zone_max:
+            self.zone_min = SNAT_CT_ZONE_MIN
+            self.zone_max = SNAT_CT_ZONE_MAX
 
         # snat_uuid -> set(endpoint_uuid)
         self._snat_to_endpoints = {}
@@ -43,6 +57,10 @@ class DistributedSnatManager(object):
         self._snat_to_ip_range = {}
         # snat_uuid -> service_uuid
         self._snat_to_service = {}
+        # snat_ip -> conntrack zone
+        self._snat_ip_to_zone = {}
+        self._used_zones = set()
+        self._load_existing_snat_zones(snats_dir)
 
     def sync_endpoint(self, endpoint_uuid, dist_snat_entries, ep_mapping):
         old_snats = self._endpoint_to_snats.get(endpoint_uuid, set())
@@ -110,10 +128,74 @@ class DistributedSnatManager(object):
             return
 
         self._snat_to_endpoints.pop(snat_uuid, None)
-        self._snat_to_ip_range.pop(snat_uuid, None)
+        snat_info = self._snat_to_ip_range.pop(snat_uuid, None)
+        snat_ip = (snat_info.get('snat_ip')
+               if isinstance(snat_info, dict) else None)
         service_uuid = self._snat_to_service.pop(snat_uuid, snat_uuid)
         self._delete_file(snat_uuid, self.snat_mapping_file)
         self._delete_file(service_uuid, self.service_mapping_file)
+        self._release_zone_for_snat_ip(snat_ip)
+
+    def _release_zone_for_snat_ip(self, snat_ip):
+        if not snat_ip:
+            return
+
+        if any(info.get('snat_ip') == snat_ip
+               for info in list(self._snat_to_ip_range.values())):
+            return
+
+        zone = self._snat_ip_to_zone.pop(snat_ip, None)
+        if zone is not None:
+            self._used_zones.discard(zone)
+
+    def _load_existing_snat_zones(self, snats_dir):
+        if not os.path.isdir(snats_dir):
+            return
+
+        for filename in sorted(os.listdir(snats_dir)):
+            if not filename.endswith('.' + SNAT_FILE_EXTENSION):
+                continue
+
+            try:
+                with open(os.path.join(snats_dir, filename)) as snat_file:
+                    snat_mapping = json.load(snat_file)
+            except (IOError, TypeError, ValueError):
+                continue
+            if not isinstance(snat_mapping, dict):
+                continue
+
+            zone = self._safe_int(snat_mapping.get('zone'))
+            if not self._valid_zone(zone):
+                continue
+
+            snat_ip = snat_mapping.get('snat-ip')
+            if (snat_ip and snat_ip not in self._snat_ip_to_zone and
+                    zone not in self._used_zones):
+                self._snat_ip_to_zone[snat_ip] = zone
+            self._used_zones.add(zone)
+
+    def _valid_zone(self, zone):
+        return (zone is not None and
+                self.zone_min <= zone <= self.zone_max)
+
+    def _next_available_zone(self):
+        for zone in range(self.zone_min, self.zone_max + 1):
+            if zone not in self._used_zones:
+                return zone
+        raise RuntimeError("No distributed SNAT conntrack zones available")
+
+    def _zone_for_snat_ip(self, snat_ip):
+        if not snat_ip:
+            return None
+
+        zone = self._snat_ip_to_zone.get(snat_ip)
+        if zone is not None:
+            return zone
+
+        zone = self._next_available_zone()
+        self._snat_ip_to_zone[snat_ip] = zone
+        self._used_zones.add(zone)
+        return zone
 
     def _stable_dist_snat_uuid(self, hsi, kind=None):
         seed = '%s|%s|%s' % (
@@ -156,6 +238,7 @@ class DistributedSnatManager(object):
             snat_uuid = self._stable_dist_snat_uuid(hsi)
             service_uuid = self._stable_dist_snat_uuid(hsi, 'service')
             service_mac = hsi.get('service_mac') or hsi.get('host_snat_mac')
+            snat_zone = self._zone_for_snat_ip(hsi.get('host_snat_ip'))
             service_nodes = []
             for node in hsi.get('service_nodes', []):
                 node_start = self._safe_int(node.get('start_port'))
@@ -179,6 +262,8 @@ class DistributedSnatManager(object):
             }
             if interface_vlan is not None:
                 snat_file['interface-vlan'] = interface_vlan
+            if snat_zone is not None:
+                snat_file['zone'] = snat_zone
 
             service_file = {
                 'uuid': service_uuid,
