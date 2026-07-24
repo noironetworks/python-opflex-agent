@@ -28,6 +28,14 @@ gbp_opts = [
                default='/var/lib/opflex-agent-ovs/snats/',
                help=_("Directory where distributed SNAT mapping files will "
                       "be stored.")),
+    cfg.IntOpt('distributed_snat_zone_min',
+               default=1000,
+               help=_("Minimum conntrack zone number to allocate for "
+                      "distributed SNAT.")),
+    cfg.IntOpt('distributed_snat_zone_max',
+               default=8191,
+               help=_("Maximum conntrack zone number to allocate for "
+                      "distributed SNAT.")),
     cfg.StrOpt('opflex_agent_dir',
                default='/var/lib/neutron/opflex_agent',
                help=_("Directory where the opflex agent state will be "
