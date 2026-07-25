@@ -157,6 +157,7 @@ class TestDistributedSnatManager(base.OpflexTestBase):
                 'end_port': 10999,
                 'service_ip': '10.99.0.1',
                 'service_vrf': 'vrf-svc',
+                'service_vlan': 10,
                 'dest_prefix': '0.0.0.0/0',
                 'service_nodes': [{
                     'mac': 'dd:ee:ff:00:11:22',
@@ -178,6 +179,7 @@ class TestDistributedSnatManager(base.OpflexTestBase):
         self.assertEqual(10999, entry['end'])
         self.assertEqual('qpi', entry['snat_file']['interface-name'])
         self.assertEqual('200.0.0.50', entry['snat_file']['snat-ip'])
+        self.assertEqual(10, entry['snat_file']['interface-vlan'])
         self.assertEqual('aa:bb:cc:00:22:66',
                          entry['snat_file']['interface-mac'])
         self.assertEqual([{'start': 10000, 'end': 10999}],
@@ -185,6 +187,7 @@ class TestDistributedSnatManager(base.OpflexTestBase):
         self.assertEqual('common',
                          entry['service_file']['domain-policy-space'])
         self.assertEqual('vrf-svc', entry['service_file']['domain-name'])
+        self.assertEqual(10, entry['service_file']['interface-vlan'])
         self.assertEqual('10.99.0.1', entry['service_file']['interface-ip'])
         self.assertEqual(1000, entry['snat_file']['zone'])
         self.assertEqual(entry['uuid'], entry['snat_file']['uuid'])
