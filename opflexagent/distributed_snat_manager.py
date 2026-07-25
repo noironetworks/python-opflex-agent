@@ -224,7 +224,6 @@ class DistributedSnatManager(object):
         dist_entries = []
         host_snat_ips = mapping.get('host_snat_ips', [])
         interface_name = mapping_dict.get('interface-name')
-        interface_vlan = mapping_dict.get('access-interface-vlan')
         fallback_service_domain = mapping.get('vrf_tenant', 'common')
 
         for hsi in host_snat_ips:
@@ -260,8 +259,8 @@ class DistributedSnatManager(object):
                 'port-range': [{'start': start, 'end': end}],
                 'remote': service_nodes,
             }
-            if interface_vlan is not None:
-                snat_file['interface-vlan'] = interface_vlan
+            if hsi['service_vlan'] is not None:
+                snat_file['interface-vlan'] = hsi['service_vlan']
             if snat_zone is not None:
                 snat_file['zone'] = snat_zone
 
@@ -282,8 +281,8 @@ class DistributedSnatManager(object):
                     'conntrack-enabled': True,
                 }]
             }
-            if interface_vlan is not None:
-                service_file['interface-vlan'] = interface_vlan
+            if hsi['service_vlan'] is not None:
+                service_file['interface-vlan'] = hsi['service_vlan']
 
             dist_entries.append({
                 'uuid': snat_uuid,
