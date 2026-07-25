@@ -33,7 +33,8 @@ class DistributedSnatManager(object):
 
     def __init__(self, snats_dir, service_dir, write_fn, delete_fn,
                  zone_min=SNAT_CT_ZONE_MIN,
-                 zone_max=SNAT_CT_ZONE_MAX):
+                 zone_max=SNAT_CT_ZONE_MAX,
+                 distributed_snat_interface='patch-fab-ex'):
         self.snat_mapping_file = os.path.join(snats_dir, SNAT_FILE_FORMAT)
         self.service_mapping_file = os.path.join(service_dir,
                                                  SERVICE_FILE_FORMAT)
@@ -48,6 +49,7 @@ class DistributedSnatManager(object):
         if self.zone_min > self.zone_max:
             self.zone_min = SNAT_CT_ZONE_MIN
             self.zone_max = SNAT_CT_ZONE_MAX
+        self.distributed_snat_interface = distributed_snat_interface
 
         # snat_uuid -> set(endpoint_uuid)
         self._snat_to_endpoints = {}
@@ -223,7 +225,7 @@ class DistributedSnatManager(object):
     def build_dist_snat_entries(self, mapping, mapping_dict):
         dist_entries = []
         host_snat_ips = mapping.get('host_snat_ips', [])
-        interface_name = mapping_dict.get('interface-name')
+        interface_name = self.distributed_snat_interface
         fallback_service_domain = mapping.get('vrf_tenant', 'common')
 
         for hsi in host_snat_ips:
