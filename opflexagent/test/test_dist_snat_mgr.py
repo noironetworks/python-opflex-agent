@@ -202,6 +202,77 @@ class TestDistributedSnatManager(base.OpflexTestBase):
         self.assertEqual(entry['service_file']['uuid'],
                          new_entries[0]['service_file']['uuid'])
 
+    def test_build_dist_snat_entries_uses_rpc_snat_uuid(self):
+        requested_snat_uuid = '11111111-2222-3333-4444-555555555555'
+        mapping = {
+            'host_snat_ips': [{
+                'external_segment_name': 'EXT-DIST',
+                'host_snat_ip': '200.0.0.50',
+                'host_snat_mac': 'aa:bb:cc:00:11:55',
+                'service_mac': 'aa:bb:cc:00:22:66',
+                'service_vlan': 10,
+                'start_port': 10000,
+                'end_port': 10999,
+                'service_ip': '10.99.0.1',
+                'service_vrf': 'vrf-svc',
+                'service_vlan': 10,
+                'snat_uuid': requested_snat_uuid,
+            }],
+            'vrf_tenant': 'apic_tenant',
+            'vrf_name': 'name_of_l3p',
+        }
+
+        entries = self.mgr.build_dist_snat_entries(
+            mapping, {'interface-name': 'qpi'})
+
+        self.assertEqual(requested_snat_uuid, entries[0]['uuid'])
+        self.assertEqual(requested_snat_uuid, entries[0]['snat_file']['uuid'])
+
+    def test_sync_endpoint_preserves_service_file_when_snat_uuid_changes(self):
+        requested_snat_uuid = '11111111-2222-3333-4444-555555555555'
+        endpoint_uuid = 'port-id|aa-bb-cc-dd-ee-ff'
+        mapping = {
+            'host_snat_ips': [{
+                'external_segment_name': 'EXT-DIST',
+                'host_snat_ip': '200.0.0.50',
+                'host_snat_mac': 'aa:bb:cc:00:11:55',
+                'service_mac': 'aa:bb:cc:00:22:66',
+                'service_vlan': 10,
+                'start_port': 10000,
+                'end_port': 10999,
+                'service_ip': '10.99.0.1',
+                'service_vrf': 'vrf-svc',
+                'service_vlan': 10,
+            }],
+            'vrf_tenant': 'apic_tenant',
+            'vrf_name': 'name_of_l3p',
+        }
+        mapping_dict = {'interface-name': 'qpi'}
+
+        generated_entries = self.mgr.build_dist_snat_entries(
+            mapping, mapping_dict)
+        generated_snat_uuid = generated_entries[0]['uuid']
+        service_uuid = generated_entries[0]['service_file']['uuid']
+        self.mgr.sync_endpoint(endpoint_uuid, generated_entries, {})
+
+        mapping['host_snat_ips'][0]['snat_uuid'] = requested_snat_uuid
+        requested_entries = self.mgr.build_dist_snat_entries(
+            mapping, mapping_dict)
+        self.assertEqual(service_uuid,
+                         requested_entries[0]['service_file']['uuid'])
+
+        self.mgr.sync_endpoint(endpoint_uuid, requested_entries, {})
+
+        generated_snat_file = os.path.join(
+            self.tmp_root, 'snats', '%s.snat' % generated_snat_uuid)
+        requested_snat_file = os.path.join(
+            self.tmp_root, 'snats', '%s.snat' % requested_snat_uuid)
+        service_file = os.path.join(
+            self.tmp_root, 'service', '%s.service' % service_uuid)
+        self.assertFalse(os.path.exists(generated_snat_file))
+        self.assertTrue(os.path.exists(requested_snat_file))
+        self.assertTrue(os.path.exists(service_file))
+
     def test_build_dist_snat_entries_uses_non_common_external_segment_tenant(
             self):
         mapping = {
