@@ -87,11 +87,15 @@ class DistributedSnatManager(object):
             if entry.get('service_file'):
                 service_uuid = entry['service_file'].get('uuid', snat_uuid)
                 old_service_uuid = self._snat_to_service.get(snat_uuid)
-                if old_service_uuid and old_service_uuid != service_uuid:
+                if (old_service_uuid and old_service_uuid != service_uuid and
+                        not self._service_file_is_referenced(
+                            old_service_uuid, ignored_snat_uuid=snat_uuid)):
                     self._delete_file(old_service_uuid,
                                       self.service_mapping_file)
                 if (service_uuid != snat_uuid and
-                        old_service_uuid != snat_uuid):
+                        old_service_uuid != snat_uuid and
+                        not self._service_file_is_referenced(
+                            snat_uuid, ignored_snat_uuid=snat_uuid)):
                     self._delete_file(snat_uuid, self.service_mapping_file)
                 self._snat_to_service[snat_uuid] = service_uuid
                 self._write_file(service_uuid, entry['service_file'],
@@ -135,8 +139,15 @@ class DistributedSnatManager(object):
                if isinstance(snat_info, dict) else None)
         service_uuid = self._snat_to_service.pop(snat_uuid, snat_uuid)
         self._delete_file(snat_uuid, self.snat_mapping_file)
-        self._delete_file(service_uuid, self.service_mapping_file)
+        if not self._service_file_is_referenced(service_uuid):
+            self._delete_file(service_uuid, self.service_mapping_file)
         self._release_zone_for_snat_ip(snat_ip)
+
+    def _service_file_is_referenced(self, service_uuid,
+                                    ignored_snat_uuid=None):
+        return any(
+            snat_uuid != ignored_snat_uuid and mapped_uuid == service_uuid
+            for snat_uuid, mapped_uuid in self._snat_to_service.items())
 
     def _release_zone_for_snat_ip(self, snat_ip):
         if not snat_ip:
@@ -236,7 +247,8 @@ class DistributedSnatManager(object):
             if start is None or end is None:
                 continue
 
-            snat_uuid = self._stable_dist_snat_uuid(hsi)
+            snat_uuid = (hsi.get('snat_uuid') or
+                         self._stable_dist_snat_uuid(hsi))
             service_uuid = self._stable_dist_snat_uuid(hsi, 'service')
             service_mac = hsi.get('service_mac') or hsi.get('host_snat_mac')
             snat_zone = self._zone_for_snat_ip(hsi.get('host_snat_ip'))
