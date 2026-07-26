@@ -276,7 +276,13 @@ class DistributedSnatManager(object):
             if hsi['service_vlan'] is not None:
                 snat_file['interface-vlan'] = hsi['service_vlan']
             if snat_zone is not None:
-                snat_file['zone'] = snat_zone
+                # TODO(thbachma): Once the agent is fixed to
+                # support multiple connection tracking zones
+                # for distributed snat, use the allocated zone.
+                # Until then, we have to use the same hard-coded
+                # value ocross all hosts (use the minimum value,
+                # so worst-case it's still configurable).
+                snat_file['zone'] = self.zone_min
 
             service_file = {
                 'uuid': service_uuid,
