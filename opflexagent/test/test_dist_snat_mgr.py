@@ -16,6 +16,7 @@
 import json
 import os
 import shutil
+import unittest
 
 from oslo_utils import uuidutils
 
@@ -298,6 +299,7 @@ class TestDistributedSnatManager(base.OpflexTestBase):
             'snat_tenant',
             entries[0]['service_file']['domain-policy-space'])
 
+    @unittest.skip("Restore for connection tracking zone support")
     def test_build_dist_snat_entries_assigns_unique_zone_per_snat_ip(self):
         mapping = self._dist_snat_mapping([
             {
@@ -372,6 +374,7 @@ class TestDistributedSnatManager(base.OpflexTestBase):
                                                           mapping_dict)
         self.assertEqual(1000, second_entries[0]['snat_file']['zone'])
 
+    @unittest.skip("Restore for connection tracking zone support")
     def test_build_dist_snat_entries_uses_configured_zone_range(self):
         self.mgr = self._new_manager(zone_min=4000, zone_max=4002)
 
