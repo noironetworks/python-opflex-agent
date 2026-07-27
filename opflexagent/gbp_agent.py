@@ -106,6 +106,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.deleted_ports = set()
         # Stores VRF update notifications
         self.updated_vrf = set()
+        # Stores SNAT update notifications
+        self.updated_snat = set()
         # Stores the port IDs whose binding has been deactivated
         self.deactivated_bindings = set()
         # Stores the port IDs whose binding has been activated
@@ -213,8 +215,10 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                      [topics.PORT, topics.DELETE],
                      [topics.SECURITY_GROUP, topics.UPDATE],
                      [topics.SUBNET, topics.UPDATE],
-                     [rpc.TOPIC_OPFLEX, rpc.NOTIFY_VRF, topics.UPDATE],
-                     [rpc.TOPIC_OPFLEX, rpc.VRF, topics.UPDATE]]
+                     [rpc.TOPIC_OPFLEX, rpc.NOTIFY_SNAT, topics.UPDATE],
+                     [rpc.TOPIC_OPFLEX, rpc.VRF, topics.UPDATE],
+                     [rpc.TOPIC_OPFLEX, rpc.SNAT, topics.UPDATE]]
+
         self.connection = agent_rpc.create_consumers(
             self.endpoints, self.topic, consumers, start_listening=False)
 
@@ -223,6 +227,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 self.updated_ports or
                 self.deleted_ports or
                 self.updated_vrf or
+                self.updated_snat or
                 self.deactivated_bindings or
                 self.activated_bindings or
                 self.sg_agent.firewall_refresh_needed())
@@ -231,7 +236,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         return (port_info.get('added') or
                 port_info.get('removed') or
                 port_info.get('updated') or
-                port_info.get('vrf_updated'))
+                port_info.get('vrf_updated') or
+                port_info.get('snat_updated'))
 
     def try_port_binding(self, port, net_uuid, network_type, physical_network,
                          fixed_ips, device_owner, segmentation_id):
@@ -344,6 +350,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             self.treat_devices_removed(stale_eps)
         if port_info.get('vrf_updated'):
             self.process_vrf_update(port_info['vrf_updated'])
+        if port_info.get('snat_updated'):
+            self.process_snat_update(port_info['snat_updated'])
         # If one of the above operations fails => resync with plugin
         return resync_a | resync_b
 
@@ -374,6 +382,30 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             # REVISIT(ivar): this is not a public facing API, we will move to
             # the right method once the redesign is complete.
             self.ep_manager.vrf_info_to_file(details)
+
+    def process_snat_update(self, snat_update):
+        # TODO(thbachma): use the async model
+        snat_details_list = self.of_rpc.get_snat_details_list(
+            self.context, agent_id=self.agent_id,
+            snat_ids=snat_update, host=self.host)
+        for details in snat_details_list:
+            # REVISIT(thbachma): this is not a public facing API, we will
+            # move to the right method once the redesign is complete.
+            keep = True
+            snat_uuid = details.get("snat_uuid")
+            # responses should always have the host SNAT key and UUID
+            if not snat_uuid:
+                LOG.error("Received SNAT update with no SNAT data")
+                continue
+            # If we don't have all the data, then this is a deletion.
+            if not details.get("service_mac"):
+                keep = False
+            hsi = details
+            # TODO(thbachma): For now, mapping can be an empty dict,
+            # but it should at least include the vrf_name and vrf_tenant.
+            mapping = {}
+            self.ep_manager.dist_snat_manager.sync_host_snat_ip(
+                hsi, mapping, keep=keep)
 
     def treat_devices_added_or_updated(self, details):
         """Process added or updated devices
@@ -537,6 +569,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
         self.activated_bindings = set()
         updated_vrf_copy = self.updated_vrf
         self.updated_vrf = set()
+        updated_snat_copy = self.updated_snat
+        self.updated_snat = set()
         self.deleted_ports = set()
         self.updated_ports = set()
         try:
@@ -553,6 +587,8 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
             vrf_info = updated_vrf_copy & set(self.ep_manager.vrf_dict.keys())
             port_info['vrf_updated'] = vrf_info
+            snat_info = updated_snat_copy
+            port_info['snat_updated'] = snat_info
             LOG.debug("Agent rpc_loop - iteration:%(iter_num)d - "
                       "port information retrieved. "
                       "Elapsed:%(elapsed).3f",
@@ -592,6 +628,7 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
                 self.updated_ports |= updated_ports_copy
                 self.deleted_ports |= deleted_ports_copy
                 self.updated_vrf |= updated_vrf_copy
+                self.updated_snat |= updated_snat_copy
                 self.activated_bindings |= activated_bindings_copy
 
     def daemon_loop(self):
