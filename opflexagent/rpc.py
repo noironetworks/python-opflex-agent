@@ -21,16 +21,19 @@ LOG = logging.getLogger(__name__)
 TOPIC_OPFLEX = 'opflex'
 ENDPOINT = 'endpoint'
 VRF = 'vrf'
+SNAT = 'snat'
 NOTIFY_VRF = 'notify-vrf'
+NOTIFY_SNAT = 'notify-snat'
 
 
 class AgentNotifierApi(object):
     """Server side notification API:
 
     - Version 1.3: add notify vrf
+    - Version 1.4: add notify snat
     """
 
-    BASE_RPC_API_VERSION = '1.3'
+    BASE_RPC_API_VERSION = '1.4'
 
     def __init__(self, topic):
         target = oslo_messaging.Target(
@@ -44,10 +47,14 @@ class AgentNotifierApi(object):
                                                          topics.UPDATE)
         self.topic_opflex_notify_vrf = topics.get_topic_name(
             topic, TOPIC_OPFLEX, NOTIFY_VRF, topics.UPDATE)
+        self.topic_opflex_notify_snat = topics.get_topic_name(
+            topic, TOPIC_OPFLEX, NOTIFY_SNAT, topics.UPDATE)
         self.topic_opflex_endpoint_update = topics.get_topic_name(
             topic, TOPIC_OPFLEX, ENDPOINT, topics.UPDATE)
         self.topic_opflex_vrf_update = topics.get_topic_name(
             topic, TOPIC_OPFLEX, VRF, topics.UPDATE)
+        self.topic_opflex_snat_update = topics.get_topic_name(
+            topic, TOPIC_OPFLEX, SNAT, topics.UPDATE)
 
     def port_update(self, context, port):
         cctxt = self.client.prepare(fanout=True, topic=self.topic_port_update,
@@ -71,6 +78,12 @@ class AgentNotifierApi(object):
                                     version='1.3')
         cctxt.cast(context, 'opflex_notify_vrf', vrf=vrf)
 
+    def opflex_notify_snat(self, context, snat):
+        cctxt = self.client.prepare(fanout=True,
+                                    topic=self.topic_opflex_notify_snat,
+                                    version='1.4')
+        cctxt.cast(context, 'opflex_notify_snat', snat=snat)
+
     def opflex_endpoint_update(self, context, details, host=None):
         cctxt = self.client.prepare(
             topic=self.topic_opflex_endpoint_update, server=host,
@@ -83,14 +96,22 @@ class AgentNotifierApi(object):
                                     version='1.2')
         cctxt.cast(context, 'opflex_vrf_update', details=details)
 
+    def opflex_snat_update(self, context, details):
+        cctxt = self.client.prepare(fanout=True,
+                                    topic=self.topic_opflex_snat_update,
+                                    version='1.4')
+        cctxt.cast(context, 'opflex_snat_update', details=details)
+
 
 class GBPServerRpcApi(object):
     """Agent-side RPC (stub) for agent-to-plugin interaction.
 
     Version 1.1: add async request_* APIs
+    Version 1.2: add async request_snat_* APIs
     """
 
     GBP_RPC_VERSION = "1.1"
+    DISTRIBUTED_SNAT_RPC_VERSION = "1.2"
 
     def __init__(self, topic):
         target = oslo_messaging.Target(
@@ -120,6 +141,19 @@ class GBPServerRpcApi(object):
         cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
         return cctxt.call(context, 'get_vrf_details_list', agent_id=agent_id,
                           vrf_ids=vrf_ids, host=host)
+
+    @log.log_method_call
+    def get_snat_details(self, context, agent_id, snat_id=None, host=None):
+        cctxt = self.client.prepare(version=self.DISTRIBUTED_SNAT_RPC_VERSION)
+        return cctxt.call(context, 'get_snat_details', agent_id=agent_id,
+                          snat_id=snat_id, host=host)
+
+    @log.log_method_call
+    def get_snat_details_list(self, context,
+                              agent_id, snat_ids=None, host=None):
+        cctxt = self.client.prepare(version=self.DISTRIBUTED_SNAT_RPC_VERSION)
+        return cctxt.call(context, 'get_snat_details_list', agent_id=agent_id,
+                          snat_ids=snat_ids, host=host)
 
     @log.log_method_call
     def request_endpoint_details(self, context, agent_id, request=None,
@@ -157,6 +191,24 @@ class GBPServerRpcApi(object):
                    agent_id=agent_id, requests=requests, host=host)
 
     @log.log_method_call
+    def request_snat_details(self, context, agent_id, request=None,
+                             host=None):
+        # Request is a tuple with the device_id as first element, and the
+        # request ID as second element
+        cctxt = self.client.prepare(version=self.DISTRIBUTED_SNAT_RPC_VERSION)
+        cctxt.call(context, 'request_snat_details', agent_id=agent_id,
+                   request=request, host=host)
+
+    @log.log_method_call
+    def request_snat_details_list(self, context, agent_id, requests=None,
+                                  host=None):
+        # Requests is a list of tuples with the device_id as first element,
+        # and the request ID as second element
+        cctxt = self.client.prepare(version=self.DISTRIBUTED_SNAT_RPC_VERSION)
+        cctxt.call(context, 'request_snat_details_list',
+                   agent_id=agent_id, requests=requests, host=host)
+
+    @log.log_method_call
     def ip_address_owner_update(self, context, agent_id, ip_owner_info,
                                 host=None):
         cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
@@ -170,8 +222,9 @@ class GBPServerRpcCallback(object):
     # History
     #   1.0 Initial version
     #   1.1 Async request_* APIs
+    #   1.2 Async request_snat* APIs
 
-    RPC_API_VERSION = "1.1"
+    RPC_API_VERSION = "1.2"
     target = oslo_messaging.Target(version=RPC_API_VERSION)
 
     def __init__(self, gbp_driver, agent_notifier=None):
@@ -202,6 +255,22 @@ class GBPServerRpcCallback(object):
                 **kwargs
             )
             for vrf_id in kwargs.pop('vrf_ids', [])
+        ]
+
+    def get_snat_details(self, context, snat_id=None, host=None, **kwargs):
+        return self.gbp_driver.get_snat_details(context, snat_id=snat_id,
+                                                host=host, **kwargs)
+
+    def get_snat_details_list(self, context, **kwargs):
+        host = kwargs.pop('host', None)
+        return [
+            self.get_snat_details(
+                context,
+                snat_id=snat_id,
+                host=host,
+                **kwargs
+            )
+            for snat_id in kwargs.pop('snat_ids', [])
         ]
 
     def request_endpoint_details(self, context, **kwargs):
@@ -248,6 +317,28 @@ class GBPServerRpcCallback(object):
             self.agent_notifier.opflex_vrf_update(
                 context, [x for x in result if x], host=kwargs.get('host'))
 
+    def request_snat_details(self, context, **kwargs):
+        result = [self.gbp_driver.request_snat_details(context, **kwargs)]
+        # Notify the agent back once the answer is calculated
+        if result[0]:
+            self.agent_notifier.opflex_snat_update(
+                context, result, host=kwargs.get('host'))
+
+    def request_snat_details_list(self, context, **kwargs):
+        result = []
+        for request in kwargs.pop('requests', []):
+            details = self.gbp_driver.request_snat_details(
+                context, request=request, **kwargs)
+            if details:
+                result.append(details)
+
+        # Notify the agent back once the answer is calculated
+        # Exclude empty answers as an error as occurred and the agent might
+        # want to retry
+        if result:
+            self.agent_notifier.opflex_snat_update(
+                context, result, host=kwargs.get('host'))
+
     def ip_address_owner_update(self, context, **kwargs):
         self.gbp_driver.ip_address_owner_update(context, **kwargs)
 
@@ -256,7 +347,7 @@ class OpenstackRpcMixin(object):
     """A mix-in that enable Opflex agent
     support in agent implementations.
     """
-    target = oslo_messaging.Target(version='1.3')
+    target = oslo_messaging.Target(version='1.4')
 
     def subnet_update(self, context, subnet):
         self.updated_vrf.add(subnet['tenant_id'])
@@ -266,6 +357,10 @@ class OpenstackRpcMixin(object):
     def opflex_notify_vrf(self, context, vrf):
         self.updated_vrf.add(vrf)
         LOG.debug("opflex_notify_vrf message processed for vrf %s", vrf)
+
+    def opflex_notify_snat(self, context, snat):
+        self.updated_snat.add(snat)
+        LOG.debug("opflex_notify_snat message processed for snat %s", snat)
 
     def port_update(self, context, **kwargs):
         port = kwargs.get('port')
