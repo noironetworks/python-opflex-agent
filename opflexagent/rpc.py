@@ -22,15 +22,17 @@ TOPIC_OPFLEX = 'opflex'
 ENDPOINT = 'endpoint'
 VRF = 'vrf'
 NOTIFY_VRF = 'notify-vrf'
+DISTRIBUTED_SNAT = 'distributed-snat'
 
 
 class AgentNotifierApi(object):
     """Server side notification API:
 
     - Version 1.3: add notify vrf
+    - Version 1.4: add distributed SNAT update
     """
 
-    BASE_RPC_API_VERSION = '1.3'
+    BASE_RPC_API_VERSION = '1.4'
 
     def __init__(self, topic):
         target = oslo_messaging.Target(
@@ -48,6 +50,8 @@ class AgentNotifierApi(object):
             topic, TOPIC_OPFLEX, ENDPOINT, topics.UPDATE)
         self.topic_opflex_vrf_update = topics.get_topic_name(
             topic, TOPIC_OPFLEX, VRF, topics.UPDATE)
+        self.topic_opflex_distributed_snat_update = topics.get_topic_name(
+            topic, TOPIC_OPFLEX, DISTRIBUTED_SNAT, topics.UPDATE)
 
     def port_update(self, context, port):
         cctxt = self.client.prepare(fanout=True, topic=self.topic_port_update,
@@ -83,14 +87,23 @@ class AgentNotifierApi(object):
                                     version='1.2')
         cctxt.cast(context, 'opflex_vrf_update', details=details)
 
+    def opflex_distributed_snat_update(self, context, details, host=None):
+        cctxt = self.client.prepare(
+            topic=self.topic_opflex_distributed_snat_update, server=host,
+            version='1.4')
+        cctxt.cast(context, 'opflex_distributed_snat_update',
+                   details=details)
+
 
 class GBPServerRpcApi(object):
     """Agent-side RPC (stub) for agent-to-plugin interaction.
 
     Version 1.1: add async request_* APIs
+    Version 1.2: add distributed SNAT request API
     """
 
     GBP_RPC_VERSION = "1.1"
+    DISTRIBUTED_SNAT_RPC_VERSION = "1.2"
 
     def __init__(self, topic):
         target = oslo_messaging.Target(
@@ -157,6 +170,13 @@ class GBPServerRpcApi(object):
                    agent_id=agent_id, requests=requests, host=host)
 
     @log.log_method_call
+    def request_distributed_snat_details(self, context, agent_id, host=None):
+        cctxt = self.client.prepare(
+            version=self.DISTRIBUTED_SNAT_RPC_VERSION)
+        cctxt.call(context, 'request_distributed_snat_details',
+                   agent_id=agent_id, host=host)
+
+    @log.log_method_call
     def ip_address_owner_update(self, context, agent_id, ip_owner_info,
                                 host=None):
         cctxt = self.client.prepare(version=self.GBP_RPC_VERSION)
@@ -170,8 +190,9 @@ class GBPServerRpcCallback(object):
     # History
     #   1.0 Initial version
     #   1.1 Async request_* APIs
+    #   1.2 Distributed SNAT request API
 
-    RPC_API_VERSION = "1.1"
+    RPC_API_VERSION = "1.2"
     target = oslo_messaging.Target(version=RPC_API_VERSION)
 
     def __init__(self, gbp_driver, agent_notifier=None):
@@ -248,6 +269,13 @@ class GBPServerRpcCallback(object):
             self.agent_notifier.opflex_vrf_update(
                 context, [x for x in result if x], host=kwargs.get('host'))
 
+    def request_distributed_snat_details(self, context, **kwargs):
+        details = self.gbp_driver.request_distributed_snat_details(
+            context, **kwargs)
+        if details is not None:
+            self.agent_notifier.opflex_distributed_snat_update(
+                context, details, host=kwargs.get('host'))
+
     def ip_address_owner_update(self, context, **kwargs):
         self.gbp_driver.ip_address_owner_update(context, **kwargs)
 
@@ -256,7 +284,7 @@ class OpenstackRpcMixin(object):
     """A mix-in that enable Opflex agent
     support in agent implementations.
     """
-    target = oslo_messaging.Target(version='1.3')
+    target = oslo_messaging.Target(version='1.4')
 
     def subnet_update(self, context, subnet):
         self.updated_vrf.add(subnet['tenant_id'])
@@ -286,3 +314,6 @@ class OpenstackRpcMixin(object):
 
     def opflex_vrf_update(self, context, details):
         self._opflex_vrf_update(self, context, details)
+
+    def opflex_distributed_snat_update(self, context, details):
+        self._opflex_distributed_snat_update(context, details)
