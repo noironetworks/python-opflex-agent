@@ -10,6 +10,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import copy
 import hashlib
 import json
 import os
@@ -55,6 +56,10 @@ class DistributedSnatManager(object):
         self._snat_to_endpoints = {}
         # endpoint_uuid -> set(snat_uuid)
         self._endpoint_to_snats = {}
+        # snat_uuid -> latest endpoint-owned distributed SNAT entry
+        self._snat_to_local_entry = {}
+        # snat_uuid -> latest host-level remote-only distributed SNAT entry
+        self._snat_to_remote_entry = {}
         # snat_uuid -> {snat_ip,start,end}
         self._snat_to_ip_range = {}
         # snat_uuid -> service_uuid
@@ -76,30 +81,9 @@ class DistributedSnatManager(object):
             new_snats.add(snat_uuid)
             self._snat_to_endpoints.setdefault(snat_uuid, set()).add(
                 endpoint_uuid)
-            self._snat_to_ip_range[snat_uuid] = {
-                'snat_ip': entry.get('snat_ip'),
-                'start': entry.get('start'),
-                'end': entry.get('end')}
-
-            if entry.get('snat_file'):
-                self._write_file(snat_uuid, entry['snat_file'],
-                                 self.snat_mapping_file)
-            if entry.get('service_file'):
-                service_uuid = entry['service_file'].get('uuid', snat_uuid)
-                old_service_uuid = self._snat_to_service.get(snat_uuid)
-                if (old_service_uuid and old_service_uuid != service_uuid and
-                        not self._service_file_is_referenced(
-                            old_service_uuid, ignored_snat_uuid=snat_uuid)):
-                    self._delete_file(old_service_uuid,
-                                      self.service_mapping_file)
-                if (service_uuid != snat_uuid and
-                        old_service_uuid != snat_uuid and
-                        not self._service_file_is_referenced(
-                            snat_uuid, ignored_snat_uuid=snat_uuid)):
-                    self._delete_file(snat_uuid, self.service_mapping_file)
-                self._snat_to_service[snat_uuid] = service_uuid
-                self._write_file(service_uuid, entry['service_file'],
-                                 self.service_mapping_file)
+            self._snat_to_ip_range[snat_uuid] = self._entry_ip_range(entry)
+            self._snat_to_local_entry[snat_uuid] = entry
+            self._render_dist_snat_files(snat_uuid)
 
         for snat_uuid in (old_snats - new_snats):
             self._discard_snat_for_endpoint(endpoint_uuid, snat_uuid)
@@ -110,6 +94,47 @@ class DistributedSnatManager(object):
         else:
             ep_mapping.pop('snat-uuids', None)
             self._endpoint_to_snats.pop(endpoint_uuid, None)
+
+    def sync_host_snat_ip(self, hsi, mapping=None, keep=True):
+        if not hsi:
+            return
+
+        snat_uuid = hsi.get('snat_uuid') or self._stable_dist_snat_uuid(hsi)
+        if not keep:
+            remote_entry = self._snat_to_remote_entry.pop(snat_uuid, None)
+            if snat_uuid in self._snat_to_local_entry:
+                self._render_dist_snat_files(snat_uuid)
+                return
+            if self._update_existing_local_snat_file(
+                    snat_uuid, remote_entry, keep=False):
+                return
+
+            snat_info = self._snat_to_ip_range.pop(snat_uuid, None)
+            snat_ip = (snat_info.get('snat_ip')
+                       if isinstance(snat_info, dict) else None)
+            service_uuid = self._stable_dist_snat_uuid(hsi, 'service')
+            self._delete_dist_snat_files(
+                snat_uuid, snat_ip or hsi.get('host_snat_ip'),
+                service_uuid=service_uuid)
+            return
+
+        entry = self._build_dist_snat_entry(hsi, mapping or {}, local=False)
+        if not entry:
+            return
+
+        if snat_uuid in self._snat_to_local_entry:
+            self._snat_to_remote_entry[snat_uuid] = entry
+            self._render_dist_snat_files(snat_uuid)
+            return
+        previous_remote_entry = self._snat_to_remote_entry.get(snat_uuid)
+        if self._update_existing_local_snat_file(
+                snat_uuid, entry, previous_remote_entry=previous_remote_entry):
+            self._snat_to_remote_entry[snat_uuid] = entry
+            return
+
+        self._snat_to_remote_entry[snat_uuid] = entry
+        self._snat_to_ip_range[snat_uuid] = self._entry_ip_range(entry)
+        self._render_dist_snat_files(snat_uuid)
 
     def cleanup_port(self, port_id):
         for ep_uuid in [x for x in list(self._endpoint_to_snats)
@@ -134,14 +159,139 @@ class DistributedSnatManager(object):
             return
 
         self._snat_to_endpoints.pop(snat_uuid, None)
+        self._snat_to_local_entry.pop(snat_uuid, None)
+        if snat_uuid in self._snat_to_remote_entry:
+            self._snat_to_ip_range[snat_uuid] = self._entry_ip_range(
+                self._snat_to_remote_entry[snat_uuid])
+            self._render_dist_snat_files(snat_uuid)
+            return
+
         snat_info = self._snat_to_ip_range.pop(snat_uuid, None)
         snat_ip = (snat_info.get('snat_ip')
-               if isinstance(snat_info, dict) else None)
-        service_uuid = self._snat_to_service.pop(snat_uuid, snat_uuid)
+                   if isinstance(snat_info, dict) else None)
+        self._delete_dist_snat_files(snat_uuid, snat_ip)
+
+    def _entry_ip_range(self, entry):
+        return {
+            'snat_ip': entry.get('snat_ip'),
+            'start': entry.get('start'),
+            'end': entry.get('end')}
+
+    def _read_existing_snat_file(self, snat_uuid):
+        try:
+            with open(self.snat_mapping_file % snat_uuid) as snat_file:
+                snat_mapping = json.load(snat_file)
+        except (IOError, OSError, TypeError, ValueError):
+            return None
+        if not isinstance(snat_mapping, dict):
+            return None
+        return snat_mapping
+
+    def _update_existing_local_snat_file(
+            self, snat_uuid, remote_entry=None, keep=True,
+            previous_remote_entry=None):
+        snat_file = self._read_existing_snat_file(snat_uuid)
+        if not snat_file or not snat_file.get('local'):
+            return False
+
+        if remote_entry:
+            remote_nodes = remote_entry.get('snat_file', {}).get('remote', [])
+            previous_remote = None
+            if previous_remote_entry:
+                previous_remote = previous_remote_entry.get(
+                    '_existing_local_remote')
+            if keep:
+                if previous_remote is None:
+                    previous_remote = copy.deepcopy(
+                        snat_file.get('remote', []))
+                remote_entry['_existing_local_remote'] = copy.deepcopy(
+                    previous_remote)
+                snat_file['remote'] = self._merge_remote_nodes(
+                    previous_remote, remote_nodes)
+            else:
+                previous_remote = remote_entry.get('_existing_local_remote')
+                if previous_remote is None:
+                    return True
+                snat_file['remote'] = copy.deepcopy(previous_remote)
+            self._write_file(snat_uuid, snat_file, self.snat_mapping_file)
+        return True
+
+    def _delete_dist_snat_files(self, snat_uuid, snat_ip=None,
+                                service_uuid=None):
+        service_uuid = self._snat_to_service.pop(
+            snat_uuid, service_uuid or snat_uuid)
         self._delete_file(snat_uuid, self.snat_mapping_file)
         if not self._service_file_is_referenced(service_uuid):
             self._delete_file(service_uuid, self.service_mapping_file)
         self._release_zone_for_snat_ip(snat_ip)
+
+    def _render_dist_snat_files(self, snat_uuid):
+        local_entry = self._snat_to_local_entry.get(snat_uuid)
+        remote_entry = self._snat_to_remote_entry.get(snat_uuid)
+        snat_file = self._snat_file_for_entries(local_entry, remote_entry)
+        if snat_file:
+            self._write_file(snat_uuid, snat_file, self.snat_mapping_file)
+
+        service_entry = self._service_entry_for_snat(local_entry, remote_entry)
+        if service_entry:
+            self._write_service_file_for_entry(snat_uuid, service_entry)
+
+    def _snat_file_for_entries(self, local_entry, remote_entry):
+        source_entry = None
+        for entry in (local_entry, remote_entry):
+            if entry and entry.get('snat_file'):
+                source_entry = entry
+                break
+        if not source_entry:
+            return None
+
+        snat_file = copy.deepcopy(source_entry['snat_file'])
+        if local_entry and remote_entry:
+            local_remote = local_entry.get('snat_file', {}).get('remote', [])
+            remote_remote = remote_entry.get('snat_file', {}).get(
+                'remote', [])
+            snat_file['remote'] = self._merge_remote_nodes(
+                local_remote, remote_remote)
+        return snat_file
+
+    def _merge_remote_nodes(self, *remote_lists):
+        nodes = []
+        seen = set()
+        for remote_list in remote_lists:
+            for node in (remote_list or []):
+                marker = json.dumps(node, sort_keys=True)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                nodes.append(copy.deepcopy(node))
+        return nodes
+
+    def _service_entry_for_snat(self, *entries):
+        for entry in entries:
+            if entry and entry.get('service_file'):
+                return entry
+        return None
+
+    def _write_service_file_for_entry(self, snat_uuid, entry):
+        service_file = entry.get('service_file')
+        if not service_file:
+            return
+
+        service_uuid = service_file.get('uuid', snat_uuid)
+        old_service_uuid = self._snat_to_service.get(snat_uuid)
+        if (old_service_uuid and old_service_uuid != service_uuid and
+                not self._service_file_is_referenced(
+                    old_service_uuid, ignored_snat_uuid=snat_uuid)):
+            self._delete_file(old_service_uuid,
+                              self.service_mapping_file)
+        if (service_uuid != snat_uuid and
+                old_service_uuid != snat_uuid and
+                not self._service_file_is_referenced(
+                    snat_uuid, ignored_snat_uuid=snat_uuid)):
+            self._delete_file(snat_uuid, self.service_mapping_file)
+        self._snat_to_service[snat_uuid] = service_uuid
+        self._write_file(service_uuid, service_file,
+                         self.service_mapping_file)
 
     def _service_file_is_referenced(self, service_uuid,
                                     ignored_snat_uuid=None):
@@ -233,83 +383,94 @@ class DistributedSnatManager(object):
                 return segment[3:]
         return fallback
 
+    def _service_nodes_from_host_snat_ip(self, hsi):
+        service_nodes = []
+        for node in hsi.get('service_nodes', []):
+            node_start = self._safe_int(node.get('start_port'))
+            node_end = self._safe_int(node.get('end_port'))
+            if node_start is None or node_end is None:
+                continue
+            service_nodes.append({
+                'mac': node.get('mac'),
+                'port-range': [{'start': node_start, 'end': node_end}]
+            })
+        return service_nodes
+
+    def _build_dist_snat_entry(self, hsi, mapping, local=True):
+        if not hsi or not hsi.get('host_snat_ip'):
+            return None
+
+        service_domain = self._service_domain_from_external_segment(
+            hsi, mapping.get('vrf_tenant', 'common'))
+        start = self._safe_int(hsi.get('start_port'))
+        end = self._safe_int(hsi.get('end_port'))
+        if local and (start is None or end is None):
+            return None
+
+        snat_uuid = (hsi.get('snat_uuid') or
+                     self._stable_dist_snat_uuid(hsi))
+        service_uuid = self._stable_dist_snat_uuid(hsi, 'service')
+        service_mac = hsi.get('service_mac') or hsi.get('host_snat_mac')
+        snat_zone = self._zone_for_snat_ip(hsi.get('host_snat_ip'))
+        service_nodes = self._service_nodes_from_host_snat_ip(hsi)
+
+        snat_file = {
+            'uuid': snat_uuid,
+            'interface-name': self.distributed_snat_interface,
+            'snat-ip': hsi.get('host_snat_ip'),
+            'interface-mac': service_mac,
+            'local': local,
+            'dest': [hsi.get('dest_prefix', '0.0.0.0/0')],
+            'port-range': ([{'start': start, 'end': end}]
+                           if local else []),
+            'remote': service_nodes,
+        }
+        if hsi.get('service_vlan') is not None:
+            snat_file['interface-vlan'] = hsi['service_vlan']
+        if snat_zone is not None:
+            # TODO(thbachma): Once the agent is fixed to
+            # support multiple connection tracking zones
+            # for distributed snat, use the allocated zone.
+            # Until then, we have to use the same hard-coded
+            # value ocross all hosts (use the minimum value,
+            # so worst-case it's still configurable).
+            snat_file['zone'] = self.zone_min
+
+        service_file = {
+            'uuid': service_uuid,
+            'domain-policy-space': service_domain,
+            'domain-name': (
+                hsi.get('service_vrf') or
+                mapping.get('vrf_name')
+            ),
+            'service-mode': 'loadbalancer',
+            'service-mac': service_mac,
+            'interface-name': self.distributed_snat_interface,
+            'interface-ip': hsi.get('service_ip'),
+            'service-mapping': [{
+                'next-hop-ips': None,
+                'terminating-next-hop-ips': None,
+                'conntrack-enabled': True,
+            }]
+        }
+        if hsi.get('service_vlan') is not None:
+            service_file['interface-vlan'] = hsi['service_vlan']
+
+        return {
+            'uuid': snat_uuid,
+            'snat_ip': hsi.get('host_snat_ip'),
+            'start': start if local else None,
+            'end': end if local else None,
+            'snat_file': snat_file,
+            'service_file': service_file,
+        }
+
     def build_dist_snat_entries(self, mapping, mapping_dict):
         dist_entries = []
         host_snat_ips = mapping.get('host_snat_ips', [])
-        interface_name = self.distributed_snat_interface
-        fallback_service_domain = mapping.get('vrf_tenant', 'common')
 
         for hsi in host_snat_ips:
-            service_domain = self._service_domain_from_external_segment(
-                hsi, fallback_service_domain)
-            start = self._safe_int(hsi.get('start_port'))
-            end = self._safe_int(hsi.get('end_port'))
-            if start is None or end is None:
-                continue
-
-            snat_uuid = (hsi.get('snat_uuid') or
-                         self._stable_dist_snat_uuid(hsi))
-            service_uuid = self._stable_dist_snat_uuid(hsi, 'service')
-            service_mac = hsi.get('service_mac') or hsi.get('host_snat_mac')
-            snat_zone = self._zone_for_snat_ip(hsi.get('host_snat_ip'))
-            service_nodes = []
-            for node in hsi.get('service_nodes', []):
-                node_start = self._safe_int(node.get('start_port'))
-                node_end = self._safe_int(node.get('end_port'))
-                if node_start is None or node_end is None:
-                    continue
-                service_nodes.append({
-                    'mac': node.get('mac'),
-                    'port-range': [{'start': node_start, 'end': node_end}]
-                })
-
-            snat_file = {
-                'uuid': snat_uuid,
-                'interface-name': interface_name,
-                'snat-ip': hsi.get('host_snat_ip'),
-                'interface-mac': service_mac,
-                'local': True,
-                'dest': [hsi.get('dest_prefix', '0.0.0.0/0')],
-                'port-range': [{'start': start, 'end': end}],
-                'remote': service_nodes,
-            }
-            if hsi['service_vlan'] is not None:
-                snat_file['interface-vlan'] = hsi['service_vlan']
-            if snat_zone is not None:
-                # TODO(thbachma): Once the agent is fixed to
-                # support multiple connection tracking zones
-                # for distributed snat, use the allocated zone.
-                # Until then, we have to use the same hard-coded
-                # value ocross all hosts (use the minimum value,
-                # so worst-case it's still configurable).
-                snat_file['zone'] = self.zone_min
-
-            service_file = {
-                'uuid': service_uuid,
-                'domain-policy-space': service_domain,
-                'domain-name': (
-                    hsi.get('service_vrf') or
-                    mapping.get('vrf_name')
-                ),
-                'service-mode': 'loadbalancer',
-                'service-mac': service_mac,
-                'interface-name': interface_name,
-                'interface-ip': hsi.get('service_ip'),
-                'service-mapping': [{
-                    'next-hop-ips': None,
-                    'terminating-next-hop-ips': None,
-                    'conntrack-enabled': True,
-                }]
-            }
-            if hsi['service_vlan'] is not None:
-                service_file['interface-vlan'] = hsi['service_vlan']
-
-            dist_entries.append({
-                'uuid': snat_uuid,
-                'snat_ip': hsi.get('host_snat_ip'),
-                'start': start,
-                'end': end,
-                'snat_file': snat_file,
-                'service_file': service_file,
-            })
+            entry = self._build_dist_snat_entry(hsi, mapping)
+            if entry:
+                dist_entries.append(entry)
         return dist_entries
