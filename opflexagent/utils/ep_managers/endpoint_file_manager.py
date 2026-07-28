@@ -1121,4 +1121,4 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         try:
             os.remove(file_format % port_id)
         except OSError as e:
-            LOG.debug(e.message)
+            LOG.debug(e)
