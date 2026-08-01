@@ -196,18 +196,6 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.subnet_update(mock.Mock(), fake_sub)
         self.assertEqual(set(['tenant-id']), self.agent.updated_vrf)
 
-    def test_report_state_includes_dist_snat_mappings(self):
-        self.agent.state_rpc = mock.Mock()
-        self.agent.ep_manager.get_dist_snat_mappings = mock.Mock(
-            return_value={'66.66.66.7': {'start': 100, 'end': 199}})
-
-        self.agent._report_state()
-
-        self.assertEqual(
-            {'66.66.66.7': {'start': 100, 'end': 199}},
-            self.agent.agent_state['configurations']['dist_snat_mappings'])
-        self.assertTrue(self.agent.state_rpc.report_state.called)
-
     def test_binding_activate(self):
         self.agent.binding_activate('context', port_id='id', host='host1')
         self.assertIn('id', self.agent.activated_bindings)
@@ -253,6 +241,30 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         self.agent.process_deactivated_bindings(
             port_info={'removed': {'id', }})
         self.assertEqual(set(), self.agent.deactivated_bindings)
+
+    def test_report_state_includes_dist_snat_mappings(self):
+        self.agent.state_rpc = mock.Mock()
+        self.agent.ep_manager.get_dist_snat_mappings = mock.Mock(
+            return_value={'66.66.66.7': {'start': 100, 'end': 199}})
+
+        self.agent._report_state()
+
+        self.assertEqual(
+            {'66.66.66.7': {'start': 100, 'end': 199}},
+            self.agent.agent_state['configurations']['dist_snat_mappings'])
+        self.assertTrue(self.agent.state_rpc.report_state.called)
+
+    def test_process_snat_update_deletes_missing_snat_detail(self):
+        snat_uuid = '00000000-0000-0000-0000-ffff980a0114'
+        self.agent.of_rpc.get_snat_details_list = mock.Mock(return_value=[])
+        self.agent.ep_manager.dist_snat_manager.sync_host_snat_ip = (
+            mock.Mock())
+
+        self.agent.process_snat_update(set([snat_uuid]))
+
+        self.agent.ep_manager.dist_snat_manager.sync_host_snat_ip.\
+            assert_called_once_with({'snat_uuid': snat_uuid}, {},
+                                    keep=False)
 
     def test_subnet_has_updates(self):
         fake_sub = {'tenant_id': 'tenant-id', 'id': 'someid'}
