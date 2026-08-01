@@ -231,6 +231,77 @@ class TestDistributedSnatManager(base.OpflexTestBase):
         self.assertFalse(os.path.exists(
             self._mapping_file_path('service', service_uuid, 'service')))
 
+    def test_sync_host_snat_ip_delete_by_uuid_after_restart(self):
+        snat_uuid = '00000000-0000-0000-0000-ffff980a0114'
+        hsi = {
+            'external_segment_name': 'EXT-DIST',
+            'host_snat_ip': '200.0.0.50',
+            'host_snat_mac': 'aa:bb:cc:00:11:55',
+            'service_mac': 'aa:bb:cc:00:22:66',
+            'service_vlan': 10,
+            'service_ip': '10.99.0.1',
+            'service_vrf': 'vrf-svc',
+            'snat_uuid': snat_uuid,
+            'service_nodes': [{
+                'mac': 'dd:ee:ff:00:11:22',
+                'start_port': 20000,
+                'end_port': 20999,
+            }],
+        }
+        mapping = {
+            'vrf_tenant': 'apic_tenant',
+            'vrf_name': 'name_of_l3p',
+        }
+        self.mgr.sync_host_snat_ip(hsi, mapping, keep=True)
+        service_uuid = self.mgr._stable_dist_snat_uuid(hsi, 'service')
+
+        restarted_mgr = self._new_manager()
+        restarted_mgr.sync_host_snat_ip({'snat_uuid': snat_uuid}, {},
+                                        keep=False)
+
+        self.assertFalse(os.path.exists(
+            self._mapping_file_path('snats', snat_uuid, 'snat')))
+        self.assertFalse(os.path.exists(
+            self._mapping_file_path('service', service_uuid, 'service')))
+
+    def test_sync_host_snat_ip_delete_by_uuid_removes_local_state(self):
+        snat_uuid = '00000000-0000-0000-0000-ffff980a0114'
+        endpoint_uuid = 'port-id|aa-bb-cc-dd-ee-ff'
+        mapping = self._dist_snat_mapping([{
+            'external_segment_name': 'EXT-DIST',
+            'host_snat_ip': '200.0.0.50',
+            'host_snat_mac': 'aa:bb:cc:00:11:55',
+            'service_mac': 'aa:bb:cc:00:22:66',
+            'service_vlan': 10,
+            'start_port': 10000,
+            'end_port': 10999,
+            'service_ip': '10.99.0.1',
+            'service_vrf': 'vrf-svc',
+            'dest_prefix': '0.0.0.0/0',
+            'snat_uuid': snat_uuid,
+        }])
+        dist_entries = self.mgr.build_dist_snat_entries(
+            mapping, {'interface-name': 'qpi'})
+        self.mgr.sync_endpoint(endpoint_uuid, dist_entries, {})
+        service_uuid = dist_entries[0]['service_file']['uuid']
+
+        remote_hsi = dict(mapping['host_snat_ips'][0])
+        remote_hsi['service_nodes'] = [{
+            'mac': 'dd:ee:ff:00:11:22',
+            'start_port': 20000,
+            'end_port': 20999,
+        }]
+        self.mgr.sync_host_snat_ip(remote_hsi, mapping, keep=True)
+
+        self.mgr.sync_host_snat_ip({'snat_uuid': snat_uuid}, {},
+                                   keep=False)
+
+        self.assertFalse(os.path.exists(
+            self._mapping_file_path('snats', snat_uuid, 'snat')))
+        self.assertFalse(os.path.exists(
+            self._mapping_file_path('service', service_uuid, 'service')))
+        self.assertEqual({}, self.mgr.get_dist_snat_mappings())
+
     def test_sync_host_snat_ip_update_preserves_local_file_after_restart(
             self):
         snat_uuid = '00000000-0000-0000-0000-ffff980a0114'
@@ -365,6 +436,42 @@ class TestDistributedSnatManager(base.OpflexTestBase):
         self.assertEqual(
             {'200.0.0.50': {'start': 10000, 'end': 10999}},
             self.mgr.get_dist_snat_mappings())
+
+    def test_cleanup_port_deletes_empty_remote_only_mapping(self):
+        snat_uuid = '00000000-0000-0000-0000-ffff980a0114'
+        mapping = self._dist_snat_mapping([{
+            'external_segment_name': 'EXT-DIST',
+            'host_snat_ip': '200.0.0.50',
+            'host_snat_mac': 'aa:bb:cc:00:11:55',
+            'service_mac': 'aa:bb:cc:00:22:66',
+            'service_vlan': 10,
+            'start_port': 10000,
+            'end_port': 10999,
+            'service_ip': '10.99.0.1',
+            'service_vrf': 'vrf-svc',
+            'dest_prefix': '0.0.0.0/0',
+            'snat_uuid': snat_uuid,
+        }])
+        dist_entries = self.mgr.build_dist_snat_entries(
+            mapping, {'interface-name': 'qpi'})
+        self.mgr.sync_endpoint('port-id|aa-bb-cc-dd-ee-ff',
+                               dist_entries, {})
+        service_uuid = dist_entries[0]['service_file']['uuid']
+
+        remote_hsi = dict(mapping['host_snat_ips'][0])
+        remote_hsi['service_nodes'] = []
+        self.mgr.sync_host_snat_ip(remote_hsi, mapping, keep=True)
+
+        snat_file = self._read_mapping_file('snats', snat_uuid, 'snat')
+        self.assertTrue(snat_file['local'])
+        self.assertEqual([], snat_file['remote'])
+
+        self.mgr.cleanup_port('port-id')
+
+        self.assertFalse(os.path.exists(
+            self._mapping_file_path('snats', snat_uuid, 'snat')))
+        self.assertFalse(os.path.exists(
+            self._mapping_file_path('service', service_uuid, 'service')))
 
     def test_cleanup_port_preserves_remote_only_mapping(self):
         snat_uuid = '00000000-0000-0000-0000-ffff980a0114'
