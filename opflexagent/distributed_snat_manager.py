@@ -21,6 +21,7 @@ SNAT_FILE_EXTENSION = 'snat'
 SNAT_FILE_FORMAT = "%s." + SNAT_FILE_EXTENSION
 SERVICE_FILE_EXTENSION = 'service'
 SERVICE_FILE_FORMAT = "%s." + SERVICE_FILE_EXTENSION
+SERVICE_UUID = 'service-uuid'
 SNAT_CT_ZONE_MIN = 1000
 SNAT_CT_ZONE_MAX = 8191
 
@@ -101,6 +102,11 @@ class DistributedSnatManager(object):
 
         snat_uuid = hsi.get('snat_uuid') or self._stable_dist_snat_uuid(hsi)
         if not keep:
+            if self._delete_requested_by_uuid(hsi):
+                self._forget_snat_references(snat_uuid)
+                self._delete_snat_state(snat_uuid, hsi)
+                return
+
             remote_entry = self._snat_to_remote_entry.pop(snat_uuid, None)
             if snat_uuid in self._snat_to_local_entry:
                 self._render_dist_snat_files(snat_uuid)
@@ -109,17 +115,21 @@ class DistributedSnatManager(object):
                     snat_uuid, remote_entry, keep=False):
                 return
 
-            snat_info = self._snat_to_ip_range.pop(snat_uuid, None)
-            snat_ip = (snat_info.get('snat_ip')
-                       if isinstance(snat_info, dict) else None)
-            service_uuid = self._stable_dist_snat_uuid(hsi, 'service')
-            self._delete_dist_snat_files(
-                snat_uuid, snat_ip or hsi.get('host_snat_ip'),
-                service_uuid=service_uuid)
+            self._delete_snat_state(snat_uuid, hsi)
             return
 
         entry = self._build_dist_snat_entry(hsi, mapping or {}, local=False)
         if not entry:
+            return
+
+        if not self._entry_has_remote_nodes(entry):
+            self._snat_to_remote_entry.pop(snat_uuid, None)
+            if snat_uuid in self._snat_to_local_entry:
+                self._render_dist_snat_files(snat_uuid)
+                return
+            if self._clear_existing_local_snat_file_remote(snat_uuid):
+                return
+            self._delete_snat_state(snat_uuid, hsi)
             return
 
         if snat_uuid in self._snat_to_local_entry:
@@ -161,10 +171,13 @@ class DistributedSnatManager(object):
         self._snat_to_endpoints.pop(snat_uuid, None)
         self._snat_to_local_entry.pop(snat_uuid, None)
         if snat_uuid in self._snat_to_remote_entry:
-            self._snat_to_ip_range[snat_uuid] = self._entry_ip_range(
-                self._snat_to_remote_entry[snat_uuid])
-            self._render_dist_snat_files(snat_uuid)
-            return
+            remote_entry = self._snat_to_remote_entry[snat_uuid]
+            if self._entry_has_remote_nodes(remote_entry):
+                self._snat_to_ip_range[snat_uuid] = self._entry_ip_range(
+                    remote_entry)
+                self._render_dist_snat_files(snat_uuid)
+                return
+            self._snat_to_remote_entry.pop(snat_uuid, None)
 
         snat_info = self._snat_to_ip_range.pop(snat_uuid, None)
         snat_ip = (snat_info.get('snat_ip')
@@ -176,6 +189,35 @@ class DistributedSnatManager(object):
             'snat_ip': entry.get('snat_ip'),
             'start': entry.get('start'),
             'end': entry.get('end')}
+
+    def _entry_has_remote_nodes(self, entry):
+        return bool(entry and entry.get('snat_file', {}).get('remote'))
+
+    def _delete_requested_by_uuid(self, hsi):
+        return set(hsi) <= set(['snat_uuid'])
+
+    def _forget_snat_references(self, snat_uuid):
+        self._snat_to_remote_entry.pop(snat_uuid, None)
+        self._snat_to_local_entry.pop(snat_uuid, None)
+        endpoints = self._snat_to_endpoints.pop(snat_uuid, set())
+        for endpoint_uuid in list(endpoints):
+            endpoint_snats = self._endpoint_to_snats.get(endpoint_uuid)
+            if not endpoint_snats:
+                continue
+            endpoint_snats.discard(snat_uuid)
+            if endpoint_snats:
+                self._endpoint_to_snats[endpoint_uuid] = endpoint_snats
+            else:
+                self._endpoint_to_snats.pop(endpoint_uuid, None)
+
+    def _delete_snat_state(self, snat_uuid, hsi):
+        snat_info = self._snat_to_ip_range.pop(snat_uuid, None)
+        snat_ip = (snat_info.get('snat_ip')
+                   if isinstance(snat_info, dict) else None)
+        service_uuid = self._service_uuid_for_delete(snat_uuid, hsi)
+        self._delete_dist_snat_files(
+            snat_uuid, snat_ip or hsi.get('host_snat_ip'),
+            service_uuid=service_uuid)
 
     def _read_existing_snat_file(self, snat_uuid):
         try:
@@ -216,14 +258,41 @@ class DistributedSnatManager(object):
             self._write_file(snat_uuid, snat_file, self.snat_mapping_file)
         return True
 
+    def _clear_existing_local_snat_file_remote(self, snat_uuid):
+        snat_file = self._read_existing_snat_file(snat_uuid)
+        if not snat_file or not snat_file.get('local'):
+            return False
+
+        snat_file['remote'] = []
+        self._write_file(snat_uuid, snat_file, self.snat_mapping_file)
+        return True
+
     def _delete_dist_snat_files(self, snat_uuid, snat_ip=None,
                                 service_uuid=None):
+        if service_uuid is None:
+            snat_file = self._read_existing_snat_file(snat_uuid)
+            service_uuid = snat_file and snat_file.get(SERVICE_UUID)
         service_uuid = self._snat_to_service.pop(
             snat_uuid, service_uuid or snat_uuid)
         self._delete_file(snat_uuid, self.snat_mapping_file)
         if not self._service_file_is_referenced(service_uuid):
             self._delete_file(service_uuid, self.service_mapping_file)
         self._release_zone_for_snat_ip(snat_ip)
+
+    def _service_uuid_for_delete(self, snat_uuid, hsi):
+        service_uuid = self._snat_to_service.get(snat_uuid)
+        if service_uuid:
+            return service_uuid
+
+        snat_file = self._read_existing_snat_file(snat_uuid)
+        service_uuid = snat_file and snat_file.get(SERVICE_UUID)
+        if service_uuid:
+            return service_uuid
+
+        if (hsi.get('host_snat_ip') or hsi.get('external_segment_name') or
+                hsi.get('service_ip')):
+            return self._stable_dist_snat_uuid(hsi, 'service')
+        return None
 
     def _render_dist_snat_files(self, snat_uuid):
         local_entry = self._snat_to_local_entry.get(snat_uuid)
@@ -252,6 +321,12 @@ class DistributedSnatManager(object):
                 'remote', [])
             snat_file['remote'] = self._merge_remote_nodes(
                 local_remote, remote_remote)
+        service_entry = self._service_entry_for_snat(local_entry, remote_entry)
+        if service_entry:
+            service_file = service_entry.get('service_file', {})
+            service_uuid = service_file.get('uuid')
+            if service_uuid:
+                snat_file[SERVICE_UUID] = service_uuid
         return snat_file
 
     def _merge_remote_nodes(self, *remote_lists):
