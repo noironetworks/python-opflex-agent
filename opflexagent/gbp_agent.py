@@ -385,18 +385,21 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
 
     def process_snat_update(self, snat_update):
         # TODO(thbachma): use the async model
+        requested_snats = set(snat_update or [])
+        seen_snats = set()
         snat_details_list = self.of_rpc.get_snat_details_list(
             self.context, agent_id=self.agent_id,
-            snat_ids=snat_update, host=self.host)
-        for details in snat_details_list:
+            snat_ids=requested_snats, host=self.host)
+        for details in (snat_details_list or []):
             # REVISIT(thbachma): this is not a public facing API, we will
             # move to the right method once the redesign is complete.
             keep = True
-            snat_uuid = details.get("snat_uuid")
+            snat_uuid = details and details.get("snat_uuid")
             # responses should always have the host SNAT key and UUID
             if not snat_uuid:
                 LOG.error("Received SNAT update with no SNAT data")
                 continue
+            seen_snats.add(snat_uuid)
             # If we don't have all the data, then this is a deletion.
             if not details.get("service_mac"):
                 keep = False
@@ -406,6 +409,9 @@ class GBPOpflexAgent(sg_rpc.SecurityGroupAgentRpcCallbackMixin,
             mapping = {}
             self.ep_manager.dist_snat_manager.sync_host_snat_ip(
                 hsi, mapping, keep=keep)
+        for snat_uuid in (requested_snats - seen_snats):
+            self.ep_manager.dist_snat_manager.sync_host_snat_ip(
+                {'snat_uuid': snat_uuid}, {}, keep=False)
 
     def treat_devices_added_or_updated(self, details):
         """Process added or updated devices
