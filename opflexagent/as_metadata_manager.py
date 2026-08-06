@@ -44,6 +44,15 @@ from opflexagent.utils import utils as opflexagent_utils
 
 LOG = logging.getLogger(__name__)
 
+
+def _get_multiprocessing_context():
+    if (os.name == 'posix' and
+            hasattr(multiprocessing, 'get_all_start_methods') and
+            'fork' in multiprocessing.get_all_start_methods()):
+        return multiprocessing.get_context('fork')
+    return multiprocessing
+
+
 gbp_opts = [
     cfg.StrOpt('epg_mapping_dir',
                default='/var/lib/opflex-agent-ovs/endpoints/',
@@ -232,7 +241,8 @@ class FileWatcher(object):
         self.name = name
         self.watchdir = watchdir
         self.extensions = extensions.split(',')
-        self.eventq = multiprocessing.Queue()
+        self.mp_context = _get_multiprocessing_context()
+        self.eventq = self.mp_context.Queue()
         self.auto_restart_fileprocessor = True
 
         self.start_file_processor()
@@ -289,7 +299,7 @@ class FileWatcher(object):
             self.eventq,
             functools.partial(self.process))
         fprun = functools.partial(fp.run)
-        self.processor = multiprocessing.Process(target=fprun)
+        self.processor = self.mp_context.Process(target=fprun)
         self.processor.start()
 
 

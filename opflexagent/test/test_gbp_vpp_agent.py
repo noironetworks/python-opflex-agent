@@ -96,6 +96,7 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         resources = [
             mock.patch('oslo_service.loopingcall.FixedIntervalLoopingCall',
                 new=MockFixedIntervalLoopingCall),
+            mock.patch('opflexagent.opflex_notify.worker', return_value=None),
             mock.patch('opflexagent.gbp_agent.GBPOpflexAgent.'
                 '_report_state'),
             mock.patch('opflexagent.as_metadata_manager.'
@@ -136,7 +137,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         agent.bridge_manager.trunk_rpc = mock.Mock()
         agent.of_rpc.get_gbp_details = mock.Mock()
         agent.port_manager.of_rpc.request_endpoint_details_list = mock.Mock()
-        agent.notify_worker.terminate()
+        if agent.notify_worker is not None:
+            agent.notify_worker.terminate()
 
     def test_port_unbound_snat_cleanup(self):
         self.agent.int_br = mock.Mock()
