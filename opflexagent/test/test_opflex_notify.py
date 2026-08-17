@@ -35,12 +35,10 @@ class TestOpflexNotify(base.BaseTestCase):
         # Configure the Cisco APIC mechanism driver
         cfg.CONF.set_override('opflex_notify_socket_path',
                               '/the/path', 'OPFLEX')
-        python_version_short = f"py{sys.version_info.major}" \
-                               f"{sys.version_info.minor}"
         python_version_long = f"python{sys.version_info.major}." \
                               f"{sys.version_info.minor}"
-        self.policy_d_path = os.path.join('.tox',
-                python_version_short, 'lib', python_version_long,
+        self.policy_d_path = os.path.join(
+                sys.prefix, 'lib', python_version_long,
                 'site-packages', 'neutron', 'tests', 'etc', 'policy.d')
 
         os.makedirs(self.policy_d_path, exist_ok=True)
@@ -81,3 +79,119 @@ class TestOpflexNotify(base.BaseTestCase):
                     mock.call.recv(len(encoded_msg))]
                 )
                 self.assertEqual(read_msg, ('foo', 'bar', '192.168.0.1'))
+
+    def test_handle_sends_owner_updates_and_skips_empty_uuid(self):
+        self.agent = opflex_notify.OpflexNotifyAgent()
+        self.agent.of_rpc = mock.Mock()
+        self.agent._handle(['port-1|extra', '', 'port-2'], 'aa:bb',
+                           '192.168.0.2')
+
+        self.agent.of_rpc.ip_address_owner_update.assert_has_calls([
+            mock.call(self.agent.context, self.agent.agent_id,
+                      {'port': 'port-1', 'ip_address_v4': '192.168.0.2',
+                       'mac': 'aa:bb'}, host=self.agent.host),
+            mock.call(self.agent.context, self.agent.agent_id,
+                      {'port': 'port-2', 'ip_address_v4': '192.168.0.2',
+                       'mac': 'aa:bb'}, host=self.agent.host),
+        ])
+
+    def test_handle_ignores_rpc_exception(self):
+        self.agent = opflex_notify.OpflexNotifyAgent()
+        self.agent.of_rpc = mock.Mock()
+        self.agent.of_rpc.ip_address_owner_update.side_effect = Exception(
+            'boom')
+        self.assertIsNone(self.agent._handle(['port-1'], 'aa:bb', '1.1.1.1'))
+
+    def test_connect_returns_none_when_socket_missing_or_connect_fails(self):
+        self.agent = opflex_notify.OpflexNotifyAgent()
+        with mock.patch('os.path.exists', return_value=False):
+            self.assertIsNone(self.agent._connect())
+
+        client = mock.Mock()
+        client.connect.side_effect = RuntimeError('boom')
+        with mock.patch('os.path.exists', return_value=True), \
+                mock.patch('socket.socket', return_value=client):
+            self.assertIsNone(self.agent._connect())
+        client.close.assert_called_once_with()
+
+    def test_read_msg_rejects_short_and_malformed_messages(self):
+        self.agent = opflex_notify.OpflexNotifyAgent()
+
+        client = mock.Mock()
+        client.recv.return_value = b'bad'
+        self.assertIsNone(self.agent._read_msg(client))
+
+        client = mock.Mock()
+        client.recv.side_effect = [struct.pack('I', socket.htonl(10)), b'bad']
+        self.assertIsNone(self.agent._read_msg(client))
+
+        client = mock.Mock()
+        msg = bytearray(json.dumps({'method': 'virtual-ip'}).encode('utf-8'))
+        client.recv.side_effect = [struct.pack('I', socket.htonl(len(msg))),
+                                   msg]
+        self.assertIsNone(self.agent._read_msg(client))
+
+        client = mock.Mock()
+        msg = bytearray(json.dumps(
+            {'method': 'other', 'params': {}}).encode('utf-8'))
+        client.recv.side_effect = [struct.pack('I', socket.htonl(len(msg))),
+                                   msg]
+        self.assertIsNone(self.agent._read_msg(client))
+
+    def test_throttle_and_exit(self):
+        self.agent = opflex_notify.OpflexNotifyAgent()
+        with mock.patch('time.sleep') as sleep:
+            self.agent._throttle()
+        sleep.assert_called_once_with(1)
+
+        client = mock.Mock()
+        with mock.patch('sys.exit', side_effect=SystemExit) as exit_mock:
+            self.assertRaises(SystemExit, self.agent._exit, client)
+        client.close.assert_called_once_with()
+        exit_mock.assert_called_once_with(0)
+
+        client.close.side_effect = RuntimeError('boom')
+        with mock.patch('sys.exit', side_effect=SystemExit):
+            self.assertRaises(SystemExit, self.agent._exit, client)
+
+    def test_run_returns_without_socket_and_processes_one_message(self):
+        self.agent = opflex_notify.OpflexNotifyAgent()
+        self.agent.sockname = None
+        self.assertIsNone(self.agent.run())
+
+        self.agent.sockname = '/socket'
+        client = mock.Mock()
+        with mock.patch.object(self.agent, '_connect', return_value=client), \
+                mock.patch.object(self.agent, '_read_msg',
+                                  side_effect=[(['port'], 'aa:bb', '1.1.1.1'),
+                                               None]), \
+                mock.patch.object(self.agent, '_handle') as handle, \
+                mock.patch.object(self.agent, '_throttle',
+                                  side_effect=[None, KeyboardInterrupt]), \
+                mock.patch.object(self.agent, '_exit',
+                                  side_effect=SystemExit) as exit_mock:
+            self.assertRaises(SystemExit, self.agent.run)
+
+        handle.assert_called_once_with(['port'], 'aa:bb', '1.1.1.1')
+        client.close.assert_called_once_with()
+        exit_mock.assert_called_once_with(client)
+
+    def test_worker_and_main(self):
+        with mock.patch('opflexagent.opflex_notify.config.init') as init, \
+                mock.patch('opflexagent.opflex_notify.config.setup_logging'), \
+                mock.patch('opflexagent.opflex_notify.utils.log_opt_values'), \
+                mock.patch('multiprocessing.Process.start') as start:
+            worker = opflex_notify.worker(initconfig=True, daemon=False)
+
+        self.assertFalse(worker.daemon)
+        start.assert_called_once_with()
+        self.assertTrue(init.called)
+
+        with mock.patch('opflexagent.opflex_notify.worker') as worker_mock:
+            self.assertIsNone(opflex_notify.main())
+        worker_mock.assert_called_once_with(initconfig=True, daemon=False)
+
+    def test_worker_returns_none_on_initialization_error(self):
+        with mock.patch('opflexagent.opflex_notify.config.init',
+                side_effect=RuntimeError('boom')):
+            self.assertIsNone(opflex_notify.worker(initconfig=True))

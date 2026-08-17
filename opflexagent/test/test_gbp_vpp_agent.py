@@ -129,6 +129,8 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
         agent.opflex_networks = ['phys_net']
         # Mock bridge
         agent.bridge_manager.int_br = mock.Mock()
+        agent.bridge_manager.get_vif_port_set = mock.Mock(
+            return_value={})
         agent.bridge_manager.int_br.get_vif_port_set = mock.Mock(
             return_value=set())
         agent.bridge_manager.add_patch_ports = mock.Mock()
