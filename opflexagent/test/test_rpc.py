@@ -97,3 +97,51 @@ class TestOpflexRpc(base.OpflexTestBase):
             mock.ANY, host='h1', requests=list(range(3)))
         self.assertFalse(
             self.callback.agent_notifier.opflex_vrf_update.called)
+
+    def test_request_snat_details(self):
+        result = {'snat_uuid': 'snat-1'}
+        self.callback.gbp_driver.request_snat_details = mock.Mock(
+            return_value=result)
+        self.callback.request_snat_details(mock.ANY, host='h1')
+        (self.callback.agent_notifier.opflex_snat_update.
+            assert_called_once_with(mock.ANY, [result], host='h1'))
+
+        # Test None return
+        self.callback.agent_notifier.opflex_snat_update.reset_mock()
+        result = None
+        self.callback.gbp_driver.request_snat_details = mock.Mock(
+            return_value=result)
+        self.callback.request_snat_details(mock.ANY, host='h1')
+        self.assertFalse(
+            self.callback.agent_notifier.opflex_snat_update.called)
+
+    def test_request_snat_details_list(self):
+        result = {'snat_uuid': 'snat-1'}
+        self.callback.gbp_driver.request_snat_details = mock.Mock(
+            return_value=result)
+        self.callback.request_snat_details_list(
+            mock.ANY, host='h1', requests=list(range(3)))
+        (self.callback.agent_notifier.opflex_snat_update.
+            assert_called_once_with(mock.ANY, [result] * 3, host='h1'))
+
+        # Test None return
+        self.callback.agent_notifier.opflex_snat_update.reset_mock()
+        result = None
+        self.callback.gbp_driver.request_snat_details = mock.Mock(
+            return_value=result)
+        self.callback.request_snat_details_list(
+            mock.ANY, host='h1', requests=list(range(3)))
+        self.assertFalse(
+            self.callback.agent_notifier.opflex_snat_update.called)
+
+    def test_get_snat_details_list(self):
+        self.callback.gbp_driver.get_snat_details = mock.Mock(
+            side_effect=lambda _ctx, snat_id=None, **_kwargs: {
+                'snat_uuid': snat_id})
+        result = self.callback.get_snat_details_list(
+            mock.ANY, host='h1', snat_ids=['s1', 's2'])
+
+        self.assertEqual([
+            {'snat_uuid': 's1'},
+            {'snat_uuid': 's2'}
+        ], result)
