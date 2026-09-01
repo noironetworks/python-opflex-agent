@@ -268,6 +268,28 @@ class TestGBPOpflexAgent(base.OpflexTestBase):
             assert_called_once_with({'snat_uuid': snat_uuid}, {},
                                     keep=False)
 
+    def test_process_snat_update_syncs_present_snat_details(self):
+        snat_uuid_keep = '00000000-0000-0000-0000-ffff980a0111'
+        snat_uuid_delete = '00000000-0000-0000-0000-ffff980a0222'
+        details = [
+            {'snat_uuid': snat_uuid_keep,
+             'service_mac': 'aa:bb:cc:dd:ee:ff'},
+            {'snat_uuid': snat_uuid_delete}
+        ]
+        self.agent.of_rpc.get_snat_details_list = mock.Mock(
+            return_value=details)
+        self.agent.ep_manager.dist_snat_manager.sync_host_snat_ip = (
+            mock.Mock())
+
+        self.agent.process_snat_update(
+            set([snat_uuid_keep, snat_uuid_delete]))
+
+        (self.agent.ep_manager.dist_snat_manager.sync_host_snat_ip.
+            assert_has_calls([
+                mock.call(details[0], {}, keep=True),
+                mock.call(details[1], {}, keep=False)
+            ], any_order=True))
+
     def test_subnet_has_updates(self):
         fake_sub = {'tenant_id': 'tenant-id', 'id': 'someid'}
         polling_manager = mock.Mock()
