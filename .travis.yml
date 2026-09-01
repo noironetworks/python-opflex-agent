@@ -18,6 +18,9 @@ matrix:
     - python: 3.13
       env:
         - TOX_ENV=py313
+    - python: 3.14
+      env:
+        - TOX_ENV=py314
 
 
 install:

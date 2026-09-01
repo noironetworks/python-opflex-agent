@@ -175,17 +175,18 @@ class OpflexNotifyAgent(object):
                 LOG.error('Run: {}'.format(e))
 
 
+class OpflexNotifyWorker(multiprocessing.Process):
+    def __init__(self):
+        self.agent = None
+        super(OpflexNotifyWorker, self).__init__()
+
+    def run(self):
+        self.agent = OpflexNotifyAgent()
+        self.agent.run()
+        return
+
+
 def worker(initconfig=False, daemon=True):
-    class OpflexNotifyWorker(multiprocessing.Process):
-        def __init__(self):
-            self.agent = None
-            super(OpflexNotifyWorker, self).__init__()
-
-        def run(self):
-            self.agent = OpflexNotifyAgent()
-            self.agent.run()
-            return
-
     worker = None
     try:
         if initconfig:
@@ -198,6 +199,7 @@ def worker(initconfig=False, daemon=True):
         worker.start()
     except Exception as e:
         LOG.error('Worker Initalization: {}'.format(e))
+        worker = None
     return worker
 
 
