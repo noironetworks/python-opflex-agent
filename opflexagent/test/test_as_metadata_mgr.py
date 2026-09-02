@@ -20,6 +20,7 @@ import sys
 from unittest import mock
 
 from neutron.tests import base
+from six.moves import queue as Queue
 
 from opflexagent import as_metadata_manager
 
@@ -300,6 +301,177 @@ class TestAsMetadataManager(base.BaseTestCase):
         remove_patch.assert_called_once_with(
             '%s/old.proxy.state' % as_metadata_manager.MD_DIR)
 
+    def test_address_pool_and_metadata_helpers(self):
+        pool = as_metadata_manager.AddressPool(5, 2)
+        self.assertEqual(5, pool.get_addr())
+        self.assertEqual(6, pool.get_addr())
+        self.assertIsNone(pool.get_addr())
+
+        self.assertEqual('fd00::a9fe:f003',
+                         as_metadata_manager.normalize_ipv6_next_hop(
+                             'fe80::a9fe:f003'))
+        self.assertEqual('10.0.0.1',
+                         as_metadata_manager.normalize_ipv6_next_hop(
+                             '10.0.0.1'))
+
+    @mock.patch('opflexagent.as_metadata_manager.open',
+                new_callable=mock.mock_open)
+    def test_write_file_and_sh(self, mock_file):
+        mgr = as_metadata_manager.AsMetadataManager.__new__(
+            as_metadata_manager.AsMetadataManager)
+        mgr.name = 'mgr'
+        mgr.root_helper = None
+
+        mgr.write_file('/tmp/test.txt', 'hello')
+        mock_file.assert_called_once_with('/tmp/test.txt', 'w')
+
+        with mock.patch(
+            'opflexagent.as_metadata_manager.subprocess.check_output',
+            return_value=b'ok') as check_output:
+            self.assertEqual('ok', mgr.sh('echo ok'))
+            check_output.assert_called_once()
+
+        with mock.patch(
+            'opflexagent.as_metadata_manager.subprocess.check_output',
+            side_effect=RuntimeError('boom')):
+            self.assertEqual('', mgr.sh('echo fail'))
+
+
+class TestMetadataManagerLifecycleCoverage(base.BaseTestCase):
+
+    def test_file_processor_run_and_conn_track(self):
+        eventq = mock.Mock()
+        eventq.get.side_effect = [
+            mock.Mock(maskname='IN_DELETE', pathname='/tmp/a.ep'),
+            mock.Mock(maskname='IN_CLOSE_WRITE', pathname='/tmp/b.ep'),
+            as_metadata_manager.EOQ,
+        ]
+        eventq.get_nowait.side_effect = [
+            mock.Mock(maskname='IN_MOVED_TO', pathname='/tmp/c.ep'),
+            Queue.Empty,
+        ]
+        proc = as_metadata_manager.FileProcessor(
+            '/tmp', ['.ep'], eventq, lambda files: files)
+        proc.run()
+
+        handler = as_metadata_manager.EventHandler(
+            watcher=mock.Mock(), extensions=['.ep'])
+        event = mock.Mock(pathname='/tmp/keep.ep', maskname='IN_CLOSE_WRITE')
+        self.assertTrue(handler.action(event))
+
+        conn = as_metadata_manager.SnatConnTrackHandler.__new__(
+            as_metadata_manager.SnatConnTrackHandler)
+        conn.mgr = mock.Mock()
+        conn.syslog_facility = 'local0'
+        conn.syslog_severity = 'notice'
+        with mock.patch('opflexagent.as_metadata_manager.open',
+                        new_callable=mock.mock_open()) as open_file, \
+                mock.patch(
+                    'opflexagent.as_metadata_manager.os.remove') as remove:
+            conn.conn_track_create('netns1')
+            conn.conn_track_del('netns1')
+            self.assertTrue(open_file.called)
+            self.assertTrue(remove.called)
+        self.assertIn('opflex-conn-track-netns1', conn.conn_track_config(
+            'netns1'))
+
+        with mock.patch('opflexagent.as_metadata_manager.os.path.exists',
+                        return_value=True), \
+                mock.patch('opflexagent.as_metadata_manager.os.listdir',
+                           return_value=['foo.snat', 'bar.txt']), \
+                mock.patch.object(as_metadata_manager.SnatConnTrackHandler,
+                                  'conn_track_del') as del_fn:
+            conn.cleanup_all_conn_track()
+            del_fn.assert_called_once_with('foo')
+
+    def test_as_metadata_manager_lifecycle_and_helpers(self):
+        mgr = as_metadata_manager.AsMetadataManager.__new__(
+            as_metadata_manager.AsMetadataManager)
+        mgr.root_helper = None
+        mgr.name = 'mgr'
+        mgr.md_filename = '/tmp/metadata.conf'
+        mgr.bridge_manager = mock.Mock()
+        mgr.initialized = False
+        mgr.disable_proxy = False
+
+        mgr.clean_files = mock.Mock()
+        mgr.init_all = mock.Mock()
+        mgr.ensure_initialized()
+        self.assertTrue(mgr.initialized)
+
+        mgr.initialized = True
+        mgr.clean_files = mock.Mock()
+        mgr.stop_supervisor = mock.Mock()
+        mgr.ensure_terminated()
+        self.assertFalse(mgr.initialized)
+
+        mgr.sh = mock.Mock(return_value='')
+        mgr.add_default_route('169.254.1.1')
+        mgr.sh.assert_any_call('ip netns exec %s ip route add default via %s' %
+                               (as_metadata_manager.SVC_NS,
+                                '169.254.1.1'))
+
+        mgr.sh.reset_mock()
+        mgr.sh.side_effect = ['net 169.254.1.2/16', 'net 169.254.1.2/16', '']
+        self.assertTrue(mgr.has_ip('169.254.1.2'))
+        self.assertFalse(mgr.has_ip('169.254.1.3'))
+
+        mgr.sh.reset_mock()
+        mgr.sh.side_effect = [
+            'net 169.254.1.2/16', '', 'net 169.254.1.2/16', '']
+        mgr.add_ip('169.254.1.2')
+        mgr.del_ip('169.254.1.2')
+        self.assertEqual(2, mgr.sh.call_count)
+
+        mgr.sh.reset_mock()
+        mgr.sh.side_effect = None
+        mgr.sh.return_value = 'link/ether aa:bb:cc:dd:ee:ff'
+        self.assertEqual('link/ether aa:bb:cc:dd:ee:ff', mgr.get_asport_mac())
+
+        mgr.sh.reset_mock()
+        mgr.sh.side_effect = lambda *args, **kwargs: ''
+        mgr.add_ip = mock.Mock()
+        mgr.add_default_route = mock.Mock()
+        mgr.init_host()
+        mgr.bridge_manager.plug_metadata_port.assert_called_once_with(
+            mgr.sh, as_metadata_manager.SVC_OVS_PORT)
+        mgr.add_default_route = (
+            as_metadata_manager.AsMetadataManager.add_default_route.__get__(
+                mgr, as_metadata_manager.AsMetadataManager))
+
+        mgr.write_file = mock.Mock()
+        mgr.init_supervisor()
+        self.assertTrue(mgr.write_file.called)
+        mgr.write_file.reset_mock()
+
+        mgr.disable_proxy = True
+        mgr.init_supervisor()
+        self.assertTrue(mgr.write_file.called)
+
+        mgr.sh.reset_mock()
+        mgr.sh.return_value = ''
+        mgr.update_supervisor()
+        self.assertEqual(2, mgr.sh.call_count)
+
+        mgr.sh.reset_mock()
+        mgr.reload_supervisor()
+        self.assertEqual(1, mgr.sh.call_count)
+
+        mgr.sh.reset_mock()
+        mgr.sh.side_effect = None
+        mgr.sh.return_value = 'net fe80::a9fe:f003/64'
+        self.assertTrue(mgr.has_ip('fe80::a9fe:f003'))
+
+        mgr.sh.reset_mock()
+        mgr.sh.return_value = ''
+        mgr.add_default_route('fd00::a9fe:101', ip_version=6)
+        self.assertIn('ip -6 route add default via fd00::a9fe:101',
+                  mgr.sh.call_args[0][0])
+
+        mgr.sh.reset_mock()
+        mgr.sh.return_value = 'net 169.254.1.2/16'
+        self.assertTrue(mgr.has_ip('169.254.1.2'))
+
 
 class TestStateWatcher(base.BaseTestCase):
 
@@ -518,8 +690,140 @@ class TestStateWatcher(base.BaseTestCase):
             "opflex-ns-proxy-44f67ef0-1fd8-7a7e-2bfb-e650cee859a9-v6", proxy)
         self.assertIn("--metadata_host 169.254.240.3 --metadata_port=80",
                       proxy)
-        self.assertIn("--metadata_host fd00::a9fe:f003 --metadata_port=80",
-                      proxy)
+
+
+class TestMetadataManagerCoverage(base.BaseTestCase):
+
+    def test_file_processor_and_file_watcher_helpers(self):
+        proc = as_metadata_manager.FileProcessor(
+            '/tmp', ['.ep'], mock.Mock(), mock.Mock(return_value=['ok']))
+        self.assertEqual(['ok'], proc.scanfiles([('update', 'x.ep'),
+                                                ('delete', 'ignore.txt')]))
+
+        watcher = as_metadata_manager.FileWatcher.__new__(
+            as_metadata_manager.FileWatcher)
+        watcher.name = 'watcher-test'
+        watcher.watchdir = '/tmp'
+        watcher.extensions = ['.ep']
+        watcher.eventq = mock.Mock()
+        watcher.processor = mock.Mock()
+        watcher.processor.is_alive.return_value = False
+        watcher.auto_restart_fileprocessor = True
+        watcher.start_file_processor = mock.Mock()
+        watcher.restart_file_processor(None, None)
+        watcher.start_file_processor.assert_called_once_with()
+        watcher.auto_restart_fileprocessor = False
+        watcher.terminate(None, None)
+        watcher.eventq.put.assert_called_with(as_metadata_manager.EOQ)
+
+        handler = as_metadata_manager.EventHandler(watcher=mock.Mock(),
+                                                  extensions='.ep')
+        event = mock.Mock(pathname='/tmp/x.ep', maskname='IN_DELETE')
+        handler.action(event)
+        self.assertTrue(handler.watcher.action.called)
+
+        mock_q = mock.Mock()
+        mock_q.get.side_effect = [
+            mock.Mock(maskname='IN_DELETE', pathname='/tmp/x.ep'),
+            mock.Mock(maskname='IN_CLOSE_WRITE', pathname='/tmp/y.ep'),
+            as_metadata_manager.EOQ,
+        ]
+        mock_q.get_nowait.side_effect = [
+            mock.Mock(maskname='IN_MOVED_TO', pathname='/tmp/z.ep'),
+            Queue.Empty,
+        ]
+        proc = as_metadata_manager.FileProcessor('/tmp', ['.ep'], mock_q,
+                                                mock.Mock(return_value=True))
+        proc.run()
+
+    def test_as_metadata_manager_lifecycle_and_commands(self):
+        mgr = as_metadata_manager.AsMetadataManager.__new__(
+            as_metadata_manager.AsMetadataManager)
+        mgr.root_helper = None
+        mgr.name = 'mgr'
+        mgr.md_filename = '/tmp/metadata.conf'
+        mgr.bridge_manager = mock.Mock()
+        mgr.initialized = False
+
+        with mock.patch(
+            'opflexagent.as_metadata_manager.subprocess.check_output',
+            return_value=b'net 10.0.0.1/24') as check_output:
+            self.assertEqual('net 10.0.0.1/24', mgr.sh('fake command'))
+            self.assertIn('fake command',
+                          check_output.call_args[0][0].decode())
+
+        mgr.sh = mock.Mock()
+        mgr.add_default_route('169.254.1.1')
+        mgr.sh.assert_any_call('ip netns exec %s ip route add default via %s' %
+                               (as_metadata_manager.SVC_NS,
+                                '169.254.1.1'))
+
+        mgr.sh.reset_mock()
+        mgr.sh.return_value = 'net 169.254.1.2/16'
+        self.assertTrue(mgr.has_ip('169.254.1.2'))
+        self.assertFalse(mgr.has_ip('169.254.1.3'))
+
+        mgr.sh.reset_mock()
+        mgr.add_ip('169.254.1.2')
+        mgr.del_ip('169.254.1.2')
+        self.assertEqual(3, mgr.sh.call_count)
+
+        mgr.sh.reset_mock()
+        mgr.sh.return_value = 'link/ether aa:bb:cc:dd:ee:ff'
+        self.assertIn('aa:bb:cc:dd:ee:ff', mgr.get_asport_mac())
+
+        mgr.sh.reset_mock()
+        mgr.sh.side_effect = lambda *args, **kwargs: ''
+        mgr.init_host()
+        mgr.bridge_manager.plug_metadata_port.assert_called_once()
+        mgr.sh.side_effect = None
+
+        mgr.write_file = mock.Mock()
+        mgr.disable_proxy = True
+        mgr.init_supervisor()
+        self.assertTrue(mgr.write_file.called)
+        mgr.write_file.reset_mock()
+
+        mgr.disable_proxy = False
+        mgr.init_supervisor()
+        self.assertTrue(mgr.write_file.called)
+
+        mgr.clean_files = mock.Mock()
+        mgr.init_all = mock.Mock()
+        mgr.ensure_initialized()
+        self.assertTrue(mgr.initialized)
+
+        mgr.initialized = True
+        mgr.clean_files = mock.Mock()
+        mgr.stop_supervisor = mock.Mock()
+        mgr.ensure_terminated()
+        self.assertFalse(mgr.initialized)
+
+        mgr.sh.reset_mock()
+        mgr.sh.return_value = ''
+        mgr.add_default_route('fd00::a9fe:101', ip_version=6)
+        mgr.sh.assert_any_call(
+            'ip netns exec %s ip -6 route add default via %s dev %s' %
+            (as_metadata_manager.SVC_NS, 'fd00::a9fe:101',
+             as_metadata_manager.SVC_NS_PORT))
+
+        ip6 = as_metadata_manager.SVC_V6_IP_DEFAULT
+        mgr.sh.reset_mock()
+        mgr.sh.return_value = 'net %s/64' % ip6
+        self.assertTrue(mgr.has_ip(ip6))
+        mgr.sh.reset_mock()
+        mgr.sh.return_value = 'nope'
+        self.assertFalse(mgr.has_ip(ip6))
+
+        mgr.sh.reset_mock()
+        mgr.add_ip(ip6)
+        mgr.del_ip(ip6)
+        self.assertEqual(3, mgr.sh.call_count)
+
+        mgr.write_file = mock.Mock()
+        mgr.disable_proxy = False
+        mgr.init_supervisor()
+        self.assertIn('metadata-agent', str(mgr.write_file.call_args[0][1]))
 
     def test_proxyconfig_legacy_link_local_next_hop(self):
         watcher = as_metadata_manager.StateWatcher.__new__(
