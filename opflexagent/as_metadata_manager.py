@@ -93,6 +93,9 @@ STATE_FILENAME_SVC = STATE_FILE_NAME_FORMAT % STATE_ANYCAST_SERVICES
 STATE_FILENAME_NETS = STATE_FILE_NAME_FORMAT % STATE_INSTANCE_NETWORKS
 COMMON_TENANT_NAME = 'common'
 UNROUTED_VRF_NAME = 'UnroutedVRF'
+BRIDGE_DOMAIN_POLICY_SPACE = 'bridge-domain-policy-space'
+BRIDGE_DOMAIN_NAME = 'bridge-domain-name'
+NETWORK_TYPE_TAG = 'net'
 
 
 def read_jsonfile(name):
@@ -363,9 +366,30 @@ class EpWatcher(FileWatcher):
     def gen_metadata_domain_uuid(self, ep, tenant, name):
         if self.is_common_unrouted_vrf(tenant, name):
             policy_space = ep.get('policy-space-name')
+            network = ep.get('neutron-network')
+            if policy_space and network:
+                return self.gen_domain_uuid(policy_space, network,
+                                            tenant, name)
             if policy_space:
                 return self.gen_domain_uuid(policy_space, tenant, name)
         return self.gen_domain_uuid(tenant, name)
+
+    def get_metadata_bridge_domain(self, ep, tenant, name):
+        if not self.is_common_unrouted_vrf(tenant, name):
+            return {}
+        policy_space = ep.get('policy-space-name')
+        network = ep.get('neutron-network')
+        if policy_space and network:
+            return {
+                BRIDGE_DOMAIN_POLICY_SPACE: policy_space,
+                BRIDGE_DOMAIN_NAME: '%s_%s' % (NETWORK_TYPE_TAG, network),
+            }
+        if policy_space or network:
+            LOG.warning(
+                "Incomplete metadata bridge-domain scope for %s/%s: "
+                "policy-space-name and neutron-network are both required",
+                tenant, name)
+        return {}
 
     def process(self, files):
         LOG.debug("EP files: %s", files)
@@ -410,6 +434,8 @@ class EpWatcher(FileWatcher):
                 if domain_name is None or domain_tenant is None:
                     continue
 
+                bridge_domain = self.get_metadata_bridge_domain(
+                    ep, domain_tenant, domain_name)
                 domain_uuid = self.gen_metadata_domain_uuid(
                     ep, domain_tenant, domain_name)
                 if domain_uuid and domain_uuid not in new_svc:
@@ -427,6 +453,7 @@ class EpWatcher(FileWatcher):
                             'next-hop-ipv6': as_addr_v6,
                             'uuid': as_uuid,
                         }
+                        new_svc[domain_uuid].update(bridge_domain)
                     else:
                         thisip6 = curr_svc[domain_uuid].get('next-hop-ipv6')
                         thisip6 = normalize_ipv6_next_hop(thisip6)
@@ -438,6 +465,17 @@ class EpWatcher(FileWatcher):
                                 'next-hop-ipv6'):
                             updated = True
                         curr_svc[domain_uuid]['next-hop-ipv6'] = thisip6
+                        for key in [BRIDGE_DOMAIN_POLICY_SPACE,
+                                    BRIDGE_DOMAIN_NAME]:
+                            if key in bridge_domain:
+                                if curr_svc[domain_uuid].get(key) != \
+                                        bridge_domain[key]:
+                                    updated = True
+                                    curr_svc[domain_uuid][key] = \
+                                        bridge_domain[key]
+                            elif key in curr_svc[domain_uuid]:
+                                updated = True
+                                del curr_svc[domain_uuid][key]
                         new_svc[domain_uuid] = curr_svc[domain_uuid]
                         del curr_svc[domain_uuid]
 
@@ -523,6 +561,9 @@ class StateWatcher(FileWatcher):
         for idx in ["uuid", "domain-name", "domain-policy-space"]:
             if asvc[idx] != alloc[idx]:
                 return False
+        for idx in [BRIDGE_DOMAIN_POLICY_SPACE, BRIDGE_DOMAIN_NAME]:
+            if asvc.get(idx) != alloc.get(idx):
+                return False
         service_map = {
             svc["service-ip"]: svc["next-hop-ip"]
             for svc in asvc.get("service-mapping", [])
@@ -572,6 +613,10 @@ class StateWatcher(FileWatcher):
                 },
             ],
         }
+
+        for key in [BRIDGE_DOMAIN_POLICY_SPACE, BRIDGE_DOMAIN_NAME]:
+            if alloc.get(key):
+                asvc[key] = alloc[key]
 
         for addr in [alloc["next-hop-ip"], alloc_ipv6]:
             try:
