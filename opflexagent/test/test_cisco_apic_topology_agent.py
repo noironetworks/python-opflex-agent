@@ -135,3 +135,74 @@ class TestCiscoApicTopologyAgent(base.BaseTestCase):
             self.agent._check_for_new_peers(context)
             self.agent.service_agent.update_link.assert_called_with(
                 context, *expected)
+
+    def test_valid_peers_and_report_state(self):
+        peer = (SERVICE_HOST, SERVICE_HOST_IFACE,
+                SERVICE_HOST_MAC, APIC_EXT_SWITCH,
+                APIC_EXT_MODULE, APIC_EXT_PORT, '2',
+                SERVICE_PEER_PORT_DESC)
+        self.agent.invalid_peers = [peer]
+        peers = {SERVICE_HOST_IFACE: [peer, peer]}
+        self.assertEqual({}, self.agent._valid_peers(peers))
+
+        self.agent.invalid_peers = []
+        valid = {SERVICE_HOST_IFACE: [peer]}
+        self.assertEqual({SERVICE_HOST_IFACE: peer},
+                         self.agent._valid_peers(valid))
+
+        self.agent.state_agent = mock.Mock()
+        self.agent.state = {'start_flag': True}
+        self.agent.report_send(mock.Mock())
+        self.agent.state_agent.report_state.assert_called_once()
+        self.assertNotIn('start_flag', self.agent.state)
+
+    def test_launch_and_agent_main(self):
+        with (
+                mock.patch(
+                    'opflexagent.apic_topology.common_cfg.'
+                    'register_common_config_options'),
+                mock.patch('opflexagent.apic_topology.cfg.CONF') as mock_conf,
+                mock.patch(
+                    'opflexagent.apic_topology.config.register_root_helper'),
+                mock.patch('opflexagent.apic_topology.common_cfg.init'),
+                mock.patch('opflexagent.apic_topology.config.setup_logging'),
+                mock.patch('opflexagent.apic_topology.config.setup_privsep'),
+                mock.patch(
+                    'opflexagent.apic_topology.service.'
+                    'Service.create') as create,
+                mock.patch('opflexagent.apic_topology.svc.launch') as launch):
+            mock_conf.apic_host_agent.apic_agent_report_interval = 10
+            mock_conf.apic_host_agent.apic_agent_poll_interval = 20
+            apic_topology.launch('binary', 'manager', topic='topic')
+            create.assert_called_once_with(binary='binary', manager='manager',
+                                          topic='topic',
+                                          report_interval=10,
+                                          periodic_interval=20)
+            launch.assert_called_once()
+
+        with mock.patch('opflexagent.apic_topology.launch') as launch_mock:
+            apic_topology.agent_main()
+        launch_mock.assert_called_once_with(
+            apic_topology.BINARY_APIC_HOST_AGENT,
+            'opflexagent.apic_topology.ApicTopologyAgent')
+
+    def test_get_mac_and_report_send_exception_paths(self):
+        self.agent.interfaces = {SERVICE_HOST_IFACE: SERVICE_HOST_MAC}
+        self.assertEqual(SERVICE_HOST_MAC,
+                 self.agent._get_mac(SERVICE_HOST_IFACE))
+
+        self.agent.interfaces = {}
+        with mock.patch('opflexagent.apic_topology.ip_lib.IPDevice',
+                        side_effect=RuntimeError('boom')):
+            self.assertIsNone(self.agent._get_mac('bad-iface'))
+
+        self.agent.state_agent = None
+        self.agent.report_send(mock.Mock())
+
+        self.agent.state_agent = mock.Mock()
+        self.agent.state = {'start_flag': True}
+        self.agent.state_agent.report_state.side_effect = AttributeError()
+        self.agent.report_send(mock.Mock())
+
+        self.agent.state_agent.report_state.side_effect = RuntimeError('boom')
+        self.agent.report_send(mock.Mock())

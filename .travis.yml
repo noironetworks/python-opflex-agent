@@ -21,6 +21,9 @@ matrix:
     - python: 3.14
       env:
         - TOX_ENV=py314
+    - python: 3.10
+      env:
+        - TOX_ENV=cover
 
 
 install:

@@ -16,6 +16,8 @@
 from neutron.common import config as nconfig  # noqa
 from neutron.conf.plugins.ml2 import config  # noqa
 from neutron.tests.unit import testlib_api
+from neutron_lib import exceptions as exc
+from neutron_lib.plugins.ml2 import api
 from oslo_config import cfg
 
 from opflexagent import config as ofconf  # noqa
@@ -57,3 +59,40 @@ class OpflexTypeTest(testlib_api.SqlTestCase):
         cfg.CONF.set_override('path_mtu', 0, group='ml2')
         self.driver.physnet_mtus = {}
         self.assertEqual(0, self.driver.get_mtu('physnet1'))
+
+    def test_validate_and_allocate_segments(self):
+        invalid = {
+            api.NETWORK_TYPE: 'opflex',
+            api.PHYSICAL_NETWORK: 'physnet1',
+            'unexpected': 'value',
+        }
+        self.assertRaises(exc.InvalidInput,
+                          self.driver.validate_provider_segment,
+                          invalid)
+
+        valid = {
+            api.NETWORK_TYPE: 'opflex',
+            api.PHYSICAL_NETWORK: 'physnet1',
+            api.MTU: 1500,
+        }
+        self.driver.validate_provider_segment(valid)
+
+        segment = {api.NETWORK_TYPE: 'opflex',
+                   api.PHYSICAL_NETWORK: 'physnet1'}
+        reserved = self.driver.reserve_provider_segment(None, segment)
+        self.assertEqual('physnet1', reserved[api.PHYSICAL_NETWORK])
+        self.assertIn(api.MTU, reserved)
+
+        tenant = self.driver.allocate_tenant_segment(None)
+        self.assertEqual('opflex', tenant[api.NETWORK_TYPE])
+        self.assertEqual('physnet1', tenant[api.PHYSICAL_NETWORK])
+
+        self.driver.release_segment(None, {'foo': 'bar'})
+        self.assertFalse(self.driver.is_partial_segment({}))
+
+    def test_get_type_and_initialize(self):
+        self.assertEqual('opflex', self.driver.get_type())
+        self.driver.initialize()
+        self.driver.initialize_network_segment_range_support()
+        self.driver.update_network_segment_range_allocations()
+        self.assertIsNone(self.driver.get_network_segment_ranges())
