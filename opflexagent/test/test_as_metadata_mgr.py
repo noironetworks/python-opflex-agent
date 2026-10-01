@@ -157,6 +157,31 @@ class TestEpWatcher(base.BaseTestCase):
             hash = self.watcher.gen_domain_uuid(TEST_TENANT, TEST_NAME)
             self.assertEqual(hash, HASH_RESULT)
 
+    @mock.patch('opflexagent.as_metadata_manager.LOG.warning')
+    def test_incomplete_common_unrouted_bridge_domain_scope_warns(
+            self, warning_patch):
+        watcher = as_metadata_manager.EpWatcher.__new__(
+            as_metadata_manager.EpWatcher)
+
+        scope = watcher.get_metadata_bridge_domain(
+            {'policy-space-name': 'project-a'}, 'common', 'UnroutedVRF')
+
+        self.assertEqual({}, scope)
+        warning_patch.assert_called_once_with(
+            "Incomplete metadata bridge-domain scope for %s/%s: "
+            "policy-space-name and neutron-network are both required",
+            'common', 'UnroutedVRF')
+
+        warning_patch.reset_mock()
+        scope = watcher.get_metadata_bridge_domain(
+            {'neutron-network': 'net-a'}, 'common', 'UnroutedVRF')
+
+        self.assertEqual({}, scope)
+        warning_patch.assert_called_once_with(
+            "Incomplete metadata bridge-domain scope for %s/%s: "
+            "policy-space-name and neutron-network are both required",
+            'common', 'UnroutedVRF')
+
     def test_read_json_file(self):
         with mock.patch(MOCK_MODULE,
                 new=mock.mock_open(read_data=JSON_FILE_DATA)) as open_file:
@@ -246,8 +271,8 @@ class TestEpWatcher(base.BaseTestCase):
 
         watcher.process('test')
 
-        project_a_uuid = '1b9267cc-f428-22b3-4d49-24a60079ff47'
-        project_b_uuid = 'd3a6c673-a3a5-6d41-c83a-e04564b6905b'
+        project_a_uuid = 'a810335c-79df-0f9f-af27-174aa792bc4a'
+        project_b_uuid = 'c8206452-6e65-139b-885f-a6bef3dd2882'
         self.assertEqual(
             [
                 mock.call(
@@ -262,18 +287,65 @@ class TestEpWatcher(base.BaseTestCase):
                         project_a_uuid: {
                             'domain-name': 'UnroutedVRF',
                             'domain-policy-space': 'common',
+                            'bridge-domain-policy-space': 'project-a',
+                            'bridge-domain-name': 'net_net-a',
                             'next-hop-ip': '169.254.240.3',
                             'next-hop-ipv6': 'fd00::a9fe:f003',
                             'uuid': project_a_uuid},
                         project_b_uuid: {
                             'domain-name': 'UnroutedVRF',
                             'domain-policy-space': 'common',
+                            'bridge-domain-policy-space': 'project-b',
+                            'bridge-domain-name': 'net_net-b',
                             'next-hop-ip': '169.254.240.4',
                             'next-hop-ipv6': 'fd00::a9fe:f004',
                             'uuid': project_b_uuid},
                     }),
             ],
             write_jsonfile_patch.call_args_list)
+
+    @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
+    @mock.patch('opflexagent.as_metadata_manager.read_jsonfile')
+    @mock.patch('os.listdir',
+                return_value=['net-a.ep', 'net-b.ep'])
+    def test_process_scopes_same_project_networks_with_overlapping_ips(
+            self, listdir_patch, read_jsonfile_patch, write_jsonfile_patch):
+        watcher = as_metadata_manager.EpWatcher.__new__(
+            as_metadata_manager.EpWatcher)
+        watcher.svcfile = '/state/anycast_services.state'
+        watcher.netsfile = '/state/instance_networks.state'
+
+        endpoint = {
+            'neutron-metadata-optimization': True,
+            'policy-space-name': 'project-a',
+            'domain-name': 'UnroutedVRF',
+            'domain-policy-space': 'common',
+            'anycast-return-ip': ['192.0.2.10'],
+        }
+        endpoint_a = endpoint.copy()
+        endpoint_a['neutron-network'] = 'net-a'
+        endpoint_b = endpoint.copy()
+        endpoint_b['neutron-network'] = 'net-b'
+        read_jsonfile_patch.side_effect = [{}, endpoint_a, endpoint_b]
+
+        watcher.process('test')
+
+        calls = {call.args[0]: call.args[1]
+                 for call in write_jsonfile_patch.call_args_list}
+        services = calls[watcher.svcfile]
+        networks = calls[watcher.netsfile]
+        self.assertEqual(2, len(services))
+        self.assertEqual(2, len(networks))
+        service_by_bd = {
+            service['bridge-domain-name']: service
+            for service in services.values()
+        }
+        self.assertEqual(
+            'project-a',
+            service_by_bd['net_net-a']['bridge-domain-policy-space'])
+        self.assertEqual(
+            'project-a',
+            service_by_bd['net_net-b']['bridge-domain-policy-space'])
 
 
 class TestAsMetadataManager(base.BaseTestCase):
@@ -317,6 +389,30 @@ class TestStateWatcher(base.BaseTestCase):
         self.isfile_patch = mock.patch('os.path.isfile', side_effect=isfile)
         self.isfile_mock = self.isfile_patch.start()
         self.addCleanup(self.isfile_patch.stop)
+
+    @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
+    def test_as_create_writes_bridge_domain_scope(self, write_jsonfile_patch):
+        watcher = as_metadata_manager.StateWatcher.__new__(
+            as_metadata_manager.StateWatcher)
+        watcher.svc_ovsport_mac = 'ff-ff-ff-ff-ff-ff'
+        watcher.disable_proxy = True
+        watcher.mgr = mock.Mock()
+        allocation = {
+            'uuid': 'service-uuid',
+            'domain-policy-space': 'common',
+            'domain-name': 'UnroutedVRF',
+            'bridge-domain-policy-space': 'project-a',
+            'bridge-domain-name': 'net_net-a',
+            'next-hop-ip': '169.254.240.3',
+            'next-hop-ipv6': 'fd00::a9fe:f003',
+        }
+
+        watcher.as_create(allocation)
+
+        service = write_jsonfile_patch.call_args[0][1]
+        self.assertEqual('project-a',
+                         service['bridge-domain-policy-space'])
+        self.assertEqual('net_net-a', service['bridge-domain-name'])
 
     @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
     @mock.patch('os.remove')
