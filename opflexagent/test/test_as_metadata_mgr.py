@@ -170,7 +170,8 @@ class TestEpWatcher(base.BaseTestCase):
         self.assertEqual({}, scope)
         warning_patch.assert_called_once_with(
             "Incomplete metadata bridge-domain scope for %s/%s: "
-            "policy-space-name and neutron-network are both required",
+            "policy space and bridge-domain name or neutron-network "
+            "are required",
             'common', 'UnroutedVRF')
 
         warning_patch.reset_mock()
@@ -180,8 +181,27 @@ class TestEpWatcher(base.BaseTestCase):
         self.assertEqual({}, scope)
         warning_patch.assert_called_once_with(
             "Incomplete metadata bridge-domain scope for %s/%s: "
-            "policy-space-name and neutron-network are both required",
+            "policy space and bridge-domain name or neutron-network "
+            "are required",
             'common', 'UnroutedVRF')
+
+        warning_patch.reset_mock()
+        scope = watcher.get_metadata_bridge_domain(
+            {'bridge-domain-policy-space': 'project-a',
+             'bridge-domain-name': 'net_net-a'},
+            'common', 'UnroutedVRF')
+
+        self.assertEqual({
+            'bridge-domain-policy-space': 'project-a',
+            'bridge-domain-name': 'net_net-a'}, scope)
+        self.assertEqual(
+            watcher.gen_domain_uuid(
+                'project-a', 'net_net-a', 'common', 'UnroutedVRF'),
+            watcher.gen_metadata_domain_uuid(
+                {'bridge-domain-policy-space': 'project-a',
+                 'bridge-domain-name': 'net_net-a'},
+                'common', 'UnroutedVRF'))
+        warning_patch.assert_not_called()
 
     def test_read_json_file(self):
         with mock.patch(MOCK_MODULE,
@@ -318,15 +338,17 @@ class TestEpWatcher(base.BaseTestCase):
 
         endpoint = {
             'neutron-metadata-optimization': True,
-            'policy-space-name': 'project-a',
+            'bridge-domain-policy-space': 'project-a',
             'domain-name': 'UnroutedVRF',
             'domain-policy-space': 'common',
             'anycast-return-ip': ['192.0.2.10'],
         }
         endpoint_a = endpoint.copy()
         endpoint_a['neutron-network'] = 'net-a'
+        endpoint_a['bridge-domain-name'] = 'net_net-a'
         endpoint_b = endpoint.copy()
         endpoint_b['neutron-network'] = 'net-b'
+        endpoint_b['bridge-domain-name'] = 'net_net-b'
         read_jsonfile_patch.side_effect = [{}, endpoint_a, endpoint_b]
 
         watcher.process('test')
