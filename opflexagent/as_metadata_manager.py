@@ -98,6 +98,13 @@ BRIDGE_DOMAIN_NAME = 'bridge-domain-name'
 NETWORK_TYPE_TAG = 'net'
 
 
+def is_common_unrouted_vrf(tenant, name):
+    if tenant != COMMON_TENANT_NAME or not name:
+        return False
+    return (name == UNROUTED_VRF_NAME or
+            name.endswith('_' + UNROUTED_VRF_NAME))
+
+
 def read_jsonfile(name):
     retval = {}
     try:
@@ -358,17 +365,19 @@ class EpWatcher(FileWatcher):
         return fquuid
 
     def is_common_unrouted_vrf(self, tenant, name):
-        if tenant != COMMON_TENANT_NAME or not name:
-            return False
-        return (name == UNROUTED_VRF_NAME or
-                name.endswith('_' + UNROUTED_VRF_NAME))
+        return is_common_unrouted_vrf(tenant, name)
 
     def gen_metadata_domain_uuid(self, ep, tenant, name):
         if self.is_common_unrouted_vrf(tenant, name):
-            policy_space = ep.get('policy-space-name')
+            policy_space = (ep.get(BRIDGE_DOMAIN_POLICY_SPACE) or
+                            ep.get('policy-space-name'))
             network = ep.get('neutron-network')
             if policy_space and network:
                 return self.gen_domain_uuid(policy_space, network,
+                                            tenant, name)
+            bridge_domain = ep.get(BRIDGE_DOMAIN_NAME)
+            if policy_space and bridge_domain:
+                return self.gen_domain_uuid(policy_space, bridge_domain,
                                             tenant, name)
             if policy_space:
                 return self.gen_domain_uuid(policy_space, tenant, name)
@@ -377,17 +386,22 @@ class EpWatcher(FileWatcher):
     def get_metadata_bridge_domain(self, ep, tenant, name):
         if not self.is_common_unrouted_vrf(tenant, name):
             return {}
-        policy_space = ep.get('policy-space-name')
+        policy_space = (ep.get(BRIDGE_DOMAIN_POLICY_SPACE) or
+                        ep.get('policy-space-name'))
         network = ep.get('neutron-network')
-        if policy_space and network:
+        bridge_domain = ep.get(BRIDGE_DOMAIN_NAME)
+        if policy_space and (bridge_domain or network):
             return {
                 BRIDGE_DOMAIN_POLICY_SPACE: policy_space,
-                BRIDGE_DOMAIN_NAME: '%s_%s' % (NETWORK_TYPE_TAG, network),
+                BRIDGE_DOMAIN_NAME: (
+                    bridge_domain or
+                    '%s_%s' % (NETWORK_TYPE_TAG, network)),
             }
-        if policy_space or network:
+        if policy_space or network or bridge_domain:
             LOG.warning(
                 "Incomplete metadata bridge-domain scope for %s/%s: "
-                "policy-space-name and neutron-network are both required",
+                "policy space and bridge-domain name or neutron-network "
+                "are required",
                 tenant, name)
         return {}
 
