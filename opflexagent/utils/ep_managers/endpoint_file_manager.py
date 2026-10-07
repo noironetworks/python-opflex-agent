@@ -502,6 +502,14 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
         self._fill_ip_mapping_info(port.vif_id, mac, mapping,
                                    sorted(ips + ips_aap + ips_ext),
                                    mapping_dict)
+        if ('policy-space-name' in mapping_dict and
+                as_metadata_manager.is_common_unrouted_vrf(
+                    mapping_dict['domain-policy-space'],
+                    mapping_dict['domain-name'])):
+            mapping_dict['bridge-domain-policy-space'] = \
+                mapping_dict['policy-space-name']
+            mapping_dict['bridge-domain-name'] = 'net_%s' % port.net_uuid
+
         if has_eg_mapping_alias:
             mapping_dict.pop("policy-space-name", None)
             mapping_dict.pop("endpoint-group-name", None)
