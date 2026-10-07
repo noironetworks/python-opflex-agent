@@ -278,6 +278,79 @@ class TestEndpointFileManager(base.OpflexTestBase):
                 'EXT-1', '200.0.0.11', None, '200.0.0.2/8', None, None,
                 None, 'aa:bb:cc:00:11:44', mtu=9000)
 
+    def test_metadata_endpoint_writes_bridge_domain_scope_only_when_isolated(
+            self):
+        with mock.patch('neutron.agent.linux.ip_lib.IPDevice'):
+            mapping = self._get_gbp_details(
+                vrf_tenant='common', vrf_name='UnroutedVRF',
+                enable_metadata_optimization=True)
+            port = self._port()
+            self.manager._release_int_fip = mock.Mock()
+            self.manager.declare_endpoint(port, mapping)
+
+            ep_name = port.vif_id + '_' + mapping['mac_address']
+            endpoint = next(
+                call[0][1]
+                for call in self.manager._write_endpoint_file.call_args_list
+                if call[0][0] == ep_name)
+            self.assertEqual('apic_tenant',
+                             endpoint['bridge-domain-policy-space'])
+            self.assertEqual('net_%s' % port.net_uuid,
+                             endpoint['bridge-domain-name'])
+
+            self.manager._write_endpoint_file.reset_mock()
+            mapping['vrf_tenant'] = 'project-a'
+            mapping['vrf_name'] = 'routed-vrf'
+            port = self._port()
+            self.manager.declare_endpoint(port, mapping)
+
+            ep_name = port.vif_id + '_' + mapping['mac_address']
+            endpoint = next(
+                call[0][1]
+                for call in self.manager._write_endpoint_file.call_args_list
+                if call[0][0] == ep_name)
+            self.assertNotIn('bridge-domain-policy-space', endpoint)
+            self.assertNotIn('bridge-domain-name', endpoint)
+
+            mapping = self._get_gbp_details(
+                vrf_tenant='common', vrf_name='UnroutedVRF',
+                enable_metadata_optimization=True,
+                segmentation_labels=['zone=dmz'])
+            port = self._port()
+            self.manager._write_endpoint_file.reset_mock()
+            self.manager.declare_endpoint(port, mapping)
+
+            ep_name = port.vif_id + '_' + mapping['mac_address']
+            endpoint = next(
+                call[0][1]
+                for call in self.manager._write_endpoint_file.call_args_list
+                if call[0][0] == ep_name)
+            self.assertNotIn('policy-space-name', endpoint)
+            self.assertEqual('apic_tenant',
+                             endpoint['bridge-domain-policy-space'])
+            self.assertEqual('net_%s' % port.net_uuid,
+                             endpoint['bridge-domain-name'])
+
+            mapping = self._get_gbp_details(
+                vrf_tenant='common', vrf_name='UnroutedVRF',
+                enable_metadata_optimization=False)
+            port = self._port()
+            self.manager._write_endpoint_file.reset_mock()
+            self.manager.declare_endpoint(port, mapping)
+
+            ep_name = port.vif_id + '_' + mapping['mac_address']
+            endpoint = next(
+                call[0][1]
+                for call in self.manager._write_endpoint_file.call_args_list
+                if call[0][0] == ep_name)
+            self.assertFalse(endpoint['neutron-metadata-optimization'])
+            self.assertEqual(['192.168.0.2', '192.168.1.2'],
+                             endpoint['anycast-return-ip'])
+            self.assertEqual('apic_tenant',
+                             endpoint['bridge-domain-policy-space'])
+            self.assertEqual('net_%s' % port.net_uuid,
+                             endpoint['bridge-domain-name'])
+
     def test_port_segmentation_labels(self):
         mapping = self._get_gbp_details(
             segmentation_labels=['zone = dmz', ' linux '],
