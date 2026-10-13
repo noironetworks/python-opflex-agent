@@ -369,6 +369,50 @@ class TestEpWatcher(base.BaseTestCase):
             'project-a',
             service_by_bd['net_net-b']['bridge-domain-policy-space'])
 
+    @mock.patch('opflexagent.as_metadata_manager.write_jsonfile')
+    @mock.patch('opflexagent.as_metadata_manager.read_jsonfile')
+    @mock.patch('os.listdir', return_value=['net-a.ep', 'net-b.ep'])
+    def test_process_groups_networks_by_actual_bridge_domain(
+            self, listdir_patch, read_jsonfile_patch, write_jsonfile_patch):
+        watcher = as_metadata_manager.EpWatcher.__new__(
+            as_metadata_manager.EpWatcher)
+        watcher.svcfile = '/state/anycast_services.state'
+        watcher.netsfile = '/state/instance_networks.state'
+
+        endpoint = {
+            'neutron-metadata-optimization': True,
+            'bridge-domain-policy-space': 'project-a',
+            'bridge-domain-name': 'aci-containers-ocp2-node-bd',
+            'domain-name': 'UnroutedVRF',
+            'domain-policy-space': 'common',
+        }
+        endpoint_a = endpoint.copy()
+        endpoint_a.update({
+            'neutron-network': 'net-a',
+            'anycast-return-ip': ['192.0.2.10'],
+        })
+        endpoint_b = endpoint.copy()
+        endpoint_b.update({
+            'neutron-network': 'net-b',
+            'anycast-return-ip': ['192.0.2.11'],
+        })
+        read_jsonfile_patch.side_effect = [{}, endpoint_a, endpoint_b]
+
+        watcher.process('test')
+
+        calls = {call.args[0]: call.args[1]
+                 for call in write_jsonfile_patch.call_args_list}
+        services = calls[watcher.svcfile]
+        networks = calls[watcher.netsfile]
+        self.assertEqual(1, len(services))
+        domain_uuid = next(iter(services))
+        self.assertEqual(
+            {'192.0.2.10': 'net-a', '192.0.2.11': 'net-b'},
+            networks[domain_uuid])
+        self.assertEqual(
+            'aci-containers-ocp2-node-bd',
+            services[domain_uuid]['bridge-domain-name'])
+
 
 class TestAsMetadataManager(base.BaseTestCase):
 
