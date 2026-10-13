@@ -506,9 +506,14 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 as_metadata_manager.is_common_unrouted_vrf(
                     mapping_dict['domain-policy-space'],
                     mapping_dict['domain-name'])):
-            mapping_dict['bridge-domain-policy-space'] = \
-                mapping_dict['policy-space-name']
-            mapping_dict['bridge-domain-name'] = 'net_%s' % port.net_uuid
+            mapping_dict['bridge-domain-policy-space'] = (
+                mapping.get('bd_tenant') or
+                mapping.get('bridge_domain_tenant') or
+                mapping_dict['policy-space-name'])
+            mapping_dict['bridge-domain-name'] = (
+                mapping.get('bd_name') or
+                mapping.get('bridge_domain_name') or
+                ('net_%s' % port.net_uuid))
 
         if has_eg_mapping_alias:
             mapping_dict.pop("policy-space-name", None)
