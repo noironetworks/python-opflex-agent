@@ -371,13 +371,13 @@ class EpWatcher(FileWatcher):
         if self.is_common_unrouted_vrf(tenant, name):
             policy_space = (ep.get(BRIDGE_DOMAIN_POLICY_SPACE) or
                             ep.get('policy-space-name'))
-            network = ep.get('neutron-network')
-            if policy_space and network:
-                return self.gen_domain_uuid(policy_space, network,
-                                            tenant, name)
             bridge_domain = ep.get(BRIDGE_DOMAIN_NAME)
             if policy_space and bridge_domain:
                 return self.gen_domain_uuid(policy_space, bridge_domain,
+                                            tenant, name)
+            network = ep.get('neutron-network')
+            if policy_space and network:
+                return self.gen_domain_uuid(policy_space, network,
                                             tenant, name)
             if policy_space:
                 return self.gen_domain_uuid(policy_space, tenant, name)
