@@ -333,6 +333,25 @@ class TestEndpointFileManager(base.OpflexTestBase):
 
             mapping = self._get_gbp_details(
                 vrf_tenant='common', vrf_name='UnroutedVRF',
+                enable_metadata_optimization=True,
+                bd_name='aci-containers-ocp2-node-bd',
+                bd_tenant='custom_tenant')
+            port = self._port()
+            self.manager._write_endpoint_file.reset_mock()
+            self.manager.declare_endpoint(port, mapping)
+
+            ep_name = port.vif_id + '_' + mapping['mac_address']
+            endpoint = next(
+                call[0][1]
+                for call in self.manager._write_endpoint_file.call_args_list
+                if call[0][0] == ep_name)
+            self.assertEqual('custom_tenant',
+                             endpoint['bridge-domain-policy-space'])
+            self.assertEqual('aci-containers-ocp2-node-bd',
+                             endpoint['bridge-domain-name'])
+
+            mapping = self._get_gbp_details(
+                vrf_tenant='common', vrf_name='UnroutedVRF',
                 enable_metadata_optimization=False)
             port = self._port()
             self.manager._write_endpoint_file.reset_mock()
