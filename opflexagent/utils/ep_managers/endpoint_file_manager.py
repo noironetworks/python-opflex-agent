@@ -688,15 +688,16 @@ class EndpointFileManager(endpoint_manager_base.EndpointManagerBase):
                 routes.append(route)
 
         def get_dhcp_server_ip(sn, ip_version):
-            for ip_addr in sn.get('dhcp_server_ips', []) or []:
-                if netaddr.IPAddress(ip_addr).version == ip_version:
-                    return ip_addr, None
-
+            # Prefer port data so the server IP and MAC remain paired.
             for mac, ip_addrs in (
                     sn.get('dhcp_server_ports', {}) or {}).items():
                 for ip_addr in ip_addrs:
                     if netaddr.IPAddress(ip_addr).version == ip_version:
                         return ip_addr, mac
+
+            for ip_addr in sn.get('dhcp_server_ips', []) or []:
+                if netaddr.IPAddress(ip_addr).version == ip_version:
+                    return ip_addr, None
             return None, None
 
         subnets = mapping['subnets']
