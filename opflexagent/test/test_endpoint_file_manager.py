@@ -953,6 +953,29 @@ class TestEndpointFileManager(base.OpflexTestBase):
             manager.undeclare_endpoint('EXT-3.ep')
             self.assertNotIn('EXT-3.ep', manager.get_stale_endpoints())
 
+    def test_dhcp_server_ports_take_precedence_over_ips(self):
+        subnet = {'id': 'id1',
+                  'enable_dhcp': True,
+                  'ip_version': 4,
+                  'dns_nameservers': [],
+                  'cidr': '192.168.0.0/24',
+                  'dhcp_server_ips': ['192.168.0.3'],
+                  'dhcp_server_ports': {
+                      'fa:16:3e:a7:a3:aa': ['192.168.0.2']},
+                  'host_routes': []}
+        mapping = self._get_gbp_details(subnets=[subnet])
+        ep_file = {}
+        self.manager._map_dhcp_info(
+            [{'subnet_id': 'id1', 'ip_address': '192.168.0.10'}],
+            mapping, ep_file)
+        self.assertEqual('fa:16:3e:a7:a3:aa',
+                         ep_file['dhcp4']['server-mac'])
+        self.assertEqual('192.168.0.2', ep_file['dhcp4']['server-ip'])
+        self.assertEqual([{'dest': '169.254.169.254',
+                           'dest-prefix': 32,
+                           'next-hop': '192.168.0.2'}],
+                         ep_file['dhcp4']['static-routes'])
+
     def test_interface_mtu(self):
         mapping = self._get_gbp_details(enable_dhcp_optimization=False,
                                         interface_mtu=0)
